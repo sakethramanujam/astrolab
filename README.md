@@ -22,7 +22,14 @@ sudo mount -t cifs -o username=spiceman //<MASTER_IP>/shared /mnt/astro_data
 
 ## 🛠️ Getting Started
 ```bash
-python3 -m venv venv
+# Clone and enter the project
+git clone [repo_url] astro-compute-lab
+cd astro-compute-lab
+
+# Run the unified setup script (Installs dependencies and prepares the env)
+bash setup.sh
+
+# To start practicing in Jupyter:
 source venv/bin/activate
-pip install -r requirements.txt
+jupyter lab
 ```
