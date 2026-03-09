@@ -14,3 +14,6 @@ jupyterlab
 mkdocs
 mkdocs-material
 ipympl        # For interactive plots in Jupyter
+reproject     # For multimodal alignment
+pandas        # For data analysis
+sqlalchemy    # For database queries
