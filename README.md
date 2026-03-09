@@ -11,6 +11,14 @@ This lab focuses on learning how to process astronomical data (FITS images, ligh
 ## 📡 Network Compute Resources
 - **Master**: `<MASTER_HOSTNAME>` (<MASTER_IP>)
 - **Workers**: `<WORKER_HOSTNAME>` (<WORKER_IP>), `.32` (potential node)
+- **Shared Storage**: `//<MASTER_IP>/shared` (Mounted at `/media/nfs01` on Master)
+
+### Mounting Shared Storage on Workers
+To ensure all nodes see the same data at the same path:
+```bash
+sudo mkdir -p /mnt/astro_data
+sudo mount -t cifs -o username=spiceman //<MASTER_IP>/shared /mnt/astro_data
+```
 
 ## 🛠️ Getting Started
 ```bash

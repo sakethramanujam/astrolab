@@ -7,3 +7,10 @@ dask[complete]
 distributed
 photutils
 scikit-image
+cupy-cuda12x  # For NVIDIA GPUs
+tqdm
+h5py
+jupyterlab
+mkdocs
+mkdocs-material
+ipympl        # For interactive plots in Jupyter

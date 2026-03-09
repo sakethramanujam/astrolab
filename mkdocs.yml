@@ -1,0 +1,22 @@
+site_name: AstroCompute Lab 🌌
+theme:
+  name: material
+  palette:
+    scheme: slate # Dark mode for stargazing!
+    primary: indigo
+    accent: cyan
+  features:
+    - navigation.tabs
+    - content.code.copy
+
+nav:
+  - 🏠 Home: index.md
+  - 🛠️ Lab Setup:
+      - 📡 Networking Your Nodes: modules/setup_network.md
+      - 📦 Environment Setup: modules/setup_venv.md
+  - 🔭 Phase 1: The Basics:
+      - 🖼️ Module 1: Anatomy of a FITS File: modules/fits_intro.md
+      - 🌌 Module 2: Visualizing Deep Space: modules/visualization.md
+  - 🚀 Phase 2: Distributed Processing:
+      - 🐝 Module 3: Scaling with Dask: modules/dask_distributed.md
+      - ⚡ Module 4: GPU Acceleration: modules/gpu_compute.md
