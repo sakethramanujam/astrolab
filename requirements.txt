@@ -1,0 +1,9 @@
+astropy
+numpy
+scipy
+matplotlib
+astroquery
+dask[complete]
+distributed
+photutils
+scikit-image
