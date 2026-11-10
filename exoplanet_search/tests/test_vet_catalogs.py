@@ -70,3 +70,24 @@ def test_common_period_flag():
     out = vet.flag_common_periods(df)
     assert out.tail(15)["flags"].str.contains("common_period").all() and (out.tail(15).passed == 0).all()
     assert out.head(200)["flags"].str.contains("common_period").sum() < 10
+
+
+def test_catalog_cache_falls_back(tmp_path, monkeypatch):
+    import requests
+    from exosearch import config
+    monkeypatch.setattr(config, "CATALOG_DIR", tmp_path)
+
+    class R:
+        def __init__(self, body, code=200):
+            self.content, self.status_code = body, code
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise requests.HTTPError(str(self.status_code))
+    monkeypatch.setattr(requests, "get", lambda *a, **k: R(b"a,b\n1,2\n"))
+    assert len(catalogs._cached_csv("x.csv", "http://example/x", max_age_days=0)) == 1
+    monkeypatch.setattr(requests, "get", lambda *a, **k: R(b"<html>maintenance</html>", 503))
+    df = catalogs._cached_csv("x.csv", "http://example/x", max_age_days=0)   # stale + down -> cached copy
+    assert len(df) == 1
+    st = catalogs.catalog_status()["x.csv"]
+    assert st["rows"] == 1 and st["last_error"]

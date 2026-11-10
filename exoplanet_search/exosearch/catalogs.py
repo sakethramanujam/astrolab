@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import time
 import warnings
@@ -19,20 +20,50 @@ PS_URL = ("https://exoplanetarchive.ipac.caltech.edu/TAP/sync?query="
           "&format=csv")
 
 
+def _meta_path(name):
+    return config.CATALOG_DIR / (name + ".meta.json")
+
+
+def catalog_status():
+    """{name: {"fetched_at": iso, "rows": n, "source": url, "last_error": str|None}} for the site."""
+    out = {}
+    for m in sorted(config.CATALOG_DIR.glob("*.meta.json")):
+        try:
+            out[m.name[:-len(".meta.json")]] = json.loads(m.read_text())
+        except Exception:
+            pass
+    return out
+
+
 def _cached_csv(name, url, max_age_days=7):
+    """Local cache with refresh: use the cached copy while fresh; when stale try to refresh and
+    keep the last good copy if the service is down. Raises only if there is no copy at all."""
     config.CATALOG_DIR.mkdir(parents=True, exist_ok=True)
     path = config.CATALOG_DIR / name
+    meta_p = _meta_path(name)
+    meta = json.loads(meta_p.read_text()) if meta_p.exists() else {}
     fresh = path.exists() and (time.time() - path.stat().st_mtime) < max_age_days * 86400
     if not fresh:
         try:
             r = requests.get(url, timeout=180)
             r.raise_for_status()
+            if b"<html" in r.content[:500].lower():
+                raise IOError("got an HTML page (maintenance?) instead of CSV")
             tmp = path.with_suffix(".part")
             tmp.write_bytes(r.content)
+            df = pd.read_csv(tmp, comment="#", low_memory=False)   # validate before replacing
+            if df.empty:
+                raise IOError("empty table")
             os.replace(tmp, path)
-        except Exception:
+            meta = dict(fetched_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), rows=int(len(df)),
+                        source=url.split("?")[0], last_error=None)
+        except Exception as exc:
+            meta["last_error"] = f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}: {str(exc)[:200]}"
+            meta_p.write_text(json.dumps(meta))
             if not path.exists():
                 raise
+            warnings.warn(f"{name}: refresh failed, using cached copy from {meta.get('fetched_at')}")
+        meta_p.write_text(json.dumps(meta))
     return pd.read_csv(path, comment="#", low_memory=False)
 
 

@@ -13,7 +13,8 @@ function render(d){
   const t=d.totals;
   document.getElementById('updated').textContent=
     `last updated ${new Date(d.generated_at).toUTCString()} (${rel(d.generated_at)}) · pipeline v${d.pipeline_version}`+
-    (t.planet_archive_crossmatch?'':' · NASA Exoplanet Archive cross-match pending (archive was unavailable)');
+    (t.planet_archive_crossmatch?'':' · NASA Exoplanet Archive cross-match pending (archive unavailable, no cached copy yet)')+
+    Object.entries(d.catalogs||{}).map(([k,v])=>v.fetched_at?` · ${k.replace('.csv','')} ${v.fetched_at.slice(0,10)}`:'').join('');
   const rate=t.toi_hosts?100*t.toi_recovered/t.toi_hosts:0;
   const stats=[
     ['Stars searched',fmt(t.stars_searched),`${fmt(t.errors)} errors`,'acc'],

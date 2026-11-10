@@ -138,6 +138,7 @@ def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
                     submitted=int((ok.state == "submitted").sum()),
                     planet_archive_crossmatch=ps_ok),
         queue_next=sectorqueue.next_sectors(3),
+        catalogs=catalogs.catalog_status(),
         sectors=sectors,
         runs=[dict(sector=int(r.sector), started_at=r.started_at, finished_at=r.finished_at,
                    n_searched=int(r.n_searched or 0), n_errors=int(r.n_errors or 0),
