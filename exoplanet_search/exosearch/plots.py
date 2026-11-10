@@ -27,7 +27,7 @@ def _binned(x, y, nb=80, lo=None, hi=None):
     return c[m], s[m] / n[m]
 
 
-def diagnostic(path, row, out_png):
+def diagnostic(path, row, out_png, dpi=110):
     d = prepare(path)
     t, f, _ = d["raw"]
     tf, ff, ef = d["flat"]
@@ -76,6 +76,6 @@ def diagnostic(path, row, out_png):
     fig.text(0.01, 0.005, f"flags: {row.get('flags') or 'none'}   (screening output, not a validated planet)",
              fontsize=8)
     out_png.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_png, dpi=110, bbox_inches="tight")
+    fig.savefig(out_png, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     return out_png
