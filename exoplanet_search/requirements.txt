@@ -1,0 +1,14 @@
+# CPU pipeline (arrakis). Install into exoplanet_search/.venv
+numpy
+scipy
+pandas
+pyarrow
+astropy
+astroquery
+lightkurve
+wotan
+numba
+dask[distributed]
+matplotlib
+requests
+tqdm

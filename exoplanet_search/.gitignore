@@ -1,0 +1,18 @@
+# never commit envs, data, results, caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.fits
+*.fits.part
+*.part
+*.sqlite
+*.db
+*.parquet
+*.sh.cache
+data/
+results/
+dask-worker-space/
+*.log
+.env
