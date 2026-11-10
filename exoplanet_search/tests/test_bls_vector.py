@@ -40,3 +40,18 @@ def test_cuda_matches_numpy(synthetic_lc):
 def test_mlx_matches_numpy(synthetic_lc):
     t, f, e, _ = _prep(synthetic_lc)
     assert abs(bls.search(t, f, e, backend="mlx")["period"] / bls.search(t, f, e, backend="numpy")["period"] - 1) < 1e-3
+
+
+def test_cuda_code_path_with_numpy_shim(synthetic_lc, monkeypatch):
+    """Exercise the CuPy branch (asnumpy, bincount, take_along_axis, ...) with a NumPy stand-in.
+    This checks our CUDA-path code, not CuPy or the GPU."""
+    import sys
+    import types
+    shim = types.ModuleType("cupy")
+    shim.__getattr__ = lambda name: getattr(np, name)
+    shim.asnumpy = np.asarray
+    monkeypatch.setitem(sys.modules, "cupy", shim)
+    t, f, e, truth = _prep(synthetic_lc)
+    got = bls.search(t, f, e, backend="cuda")
+    ref = bls.search(t, f, e, backend="numpy")
+    assert got["period"] == ref["period"] and np.allclose(got["power"], ref["power"])

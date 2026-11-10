@@ -1,2 +1,3 @@
 # Apple Silicon worker (M-series Mac). On top of requirements.txt.
 mlx
+# Linux CPU-only build for testing the MLX code path: pip install "mlx[cpu]"
