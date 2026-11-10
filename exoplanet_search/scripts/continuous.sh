@@ -62,6 +62,6 @@ while :; do
   fi
   rc=$?
   if (( rc != 0 )); then log "sector $S exited $rc; pausing 10 min"; sleep 600; continue; fi
-  "${PY[@]}" -m exosearch.deepvet --sector "$S" || log "deep vetting failed for $S (continuing)"
+  "${PY[@]}" -m exosearch.deepvet --sector "$S" --only-review || log "deep vetting failed for $S (continuing)"
   if [[ "$PUBLISH" == 1 ]]; then nice -n 19 scripts/publish_site.sh || log "publish failed (continuing)"; fi
 done
