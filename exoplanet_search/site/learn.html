@@ -4,18 +4,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='22' fill='%23ffb86b'/%3E%3Ccircle cx='20' cy='30' r='7' fill='%2305070f'/%3E%3C/svg%3E"></head><body><canvas id="stars"></canvas>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='22' fill='%23ffb86b'/%3E%3Ccircle cx='20' cy='30' r='7' fill='%2305070f'/%3E%3C/svg%3E"></head><body><a class="skip" href="#main">Skip to content</a><canvas id="stars" aria-hidden="true"></canvas>
 <nav><div class="wrap"><a class="brand" href="./"><span class="orb"></span>Transit Hunt</a>
 <div class="links"><a href="./">Dashboard</a><a class="on" href="learn.html">Learn</a><a href="contribute.html">Run it yourself</a></div></div></nav>
 <header class="hero"><div class="wrap">
   <div class="eyebrow">Learn while it runs</div>
   <h1>How do you find a planet in a list of numbers?</h1>
-  <p class="lede">Each stage of the pipeline, in plain words, with figures from our own data. The example star is
+  <p class="lede">Each stage of the pipeline, in plain words, with figures from our own data and hands-on simulators you can drag. The example star is
     TIC 301289516, which hosts the known planet candidate TOI-4517.01. Our search re-found it blind.</p>
   <div class="toc"><a href="#tess">1 · TESS & light curves</a><a href="#detrend">2 · Detrending</a><a href="#bls">3 · BLS & SDE</a>
-    <a href="#vet">4 · Vetting</a><a href="#deep">4b · Blends & binaries</a><a href="#sys">5 · Systematics</a><a href="#xmatch">6 · Cross-matching</a><a href="#cs">7 · Citizen science</a></div>
+    <a href="#vet">4 · Vetting</a><a href="#deep">4b · Blends & binaries</a><a href="#sys">5 · Systematics</a><a href="#xmatch">6 · Cross-matching</a><a href="#cs">7 · Citizen science</a><a href="#quiz">8 · Quiz</a></div>
 </div></header>
-<main class="wrap">
+<main class="wrap" id="main" tabindex="-1">
 
 <section id="tess" class="card lesson">
   <h2>1 · TESS and light curves</h2>
@@ -28,6 +28,7 @@
     <figcaption>Grey: 2-minute brightness of one star. The gap in the middle is the spacecraft pointing at Earth to send data home. Orange: the slow trend we estimate next.</figcaption></figure>
   <p class="why"><b>Why it works:</b> if a planet's orbit is edge-on from our point of view, once per orbit it blocks a tiny fraction of the star:
     (planet radius / star radius)². An Earth in front of the Sun dims it by ~84 parts per million; a Jupiter by ~1%.</p>
+  <div class="widget" data-widget="transit"></div>
 </section>
 
 <section id="detrend" class="card lesson">
@@ -54,6 +55,7 @@
     of the periodogram, after removing its slow slope. Pure noise usually gives SDE ≈ 5–8; we require <b>SDE ≥ 9</b>.</p>
   <figure><img src="learn/04_fold.png" alt="phase folded transit" loading="lazy">
     <figcaption>Folding every transit on top of each other at the best period: a ~600 ppm dip lasting ~1 h, invisible in any single transit.</figcaption></figure>
+  <div class="widget" data-widget="bls"></div>
 </section>
 
 <section id="vet" class="card lesson">
@@ -73,6 +75,7 @@
     <figcaption>A real rejected signal from our run: odd and even dips have clearly different depths, and there's a dip halfway round the orbit. Almost certainly an eclipsing binary.</figcaption></figure>
   <p class="why"><b>What we can't check automatically yet:</b> whether the dip is on a <i>neighbouring</i> star whose light leaks into the same pixels
     (TESS pixels are 21″ wide). That needs pixel-level centroid analysis, and it's the first thing a human reviewer does.</p>
+  <div class="widget" data-widget="eb"></div>
 </section>
 
 <section id="deep" class="card lesson">
@@ -97,6 +100,7 @@
     <figcaption>Left: the star in the TESS pixel stamp. Right: where light was lost during transit. The cross marks the dip's centroid; the plus marks our star.</figcaption></figure>
   <p class="why"><b>Still not proof:</b> a clean result means "no evidence it's a blend or a binary at TESS resolution", not "it's a planet".
     Ground-based images and spectra are what settle it.</p>
+  <div class="widget" data-widget="centroid"></div>
 </section>
 
 <section id="sys" class="card lesson">
@@ -131,6 +135,13 @@
   </div>
   <p class="kbd" style="margin-top:14px">Status today: nothing submitted. Candidates move to "submitted" on the dashboard only after a human has done steps 1–3.</p>
 </section>
+
+<section id="quiz" class="card lesson">
+  <h2>8 · Check yourself</h2>
+  <p>Nine quick questions on everything above. Your answers stay in this browser only.</p>
+  <div data-widget="quiz"></div>
+</section>
+
 </main>
 <footer><div class="wrap">Figures on this page are made from our own runs on public NASA TESS data. Questions or corrections are welcome.</div></footer>
-<script src="assets/stars.js"></script></body></html>
+<script type="module" src="assets/learn.js"></script></body></html>

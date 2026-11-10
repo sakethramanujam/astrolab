@@ -172,3 +172,15 @@ details.more summary{cursor:pointer;color:var(--acc);margin:8px 0}
 .plotwrap{position:relative}
 nav .links a{white-space:nowrap}.brand{white-space:nowrap}
 @media (max-width:420px){nav .wrap{gap:10px}nav .links{gap:0}nav .links a{padding:6px 7px;font-size:12.5px}}
+/* learn widgets */
+.widget{margin-top:18px;padding-top:18px;border-top:1px dashed var(--line)}
+.wtitle{font-size:18px;margin:0 0 4px;color:var(--fg)}
+.wtitle::before{content:"◆ ";color:var(--acc2);font-size:13px}
+.quiz{display:grid;gap:14px;padding-left:22px}
+.quiz .q{margin:0 0 8px;font-weight:600}
+.opts{display:grid;gap:6px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.opt{text-align:left;border:1px solid var(--line);background:rgba(5,8,18,.5);color:#c3c9e3;border-radius:10px;padding:9px 12px;font:14px var(--font);cursor:pointer;min-height:40px}
+.opt:hover{border-color:rgba(124,196,255,.4)}
+.opt.right{border-color:var(--ok);color:var(--fg);background:rgba(94,234,212,.1)}
+.opt.wrong{border-color:var(--bad);background:rgba(248,113,113,.08)}
+.fb{margin:8px 0 0;color:#c3c9e3;font-size:14px}
