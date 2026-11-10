@@ -186,9 +186,10 @@ function blsDemo(root) {
       const b = box(S1); const { X, Y } = axes(ctx, b, { x: [0, 1], y: [-1800, 900], xlabel: 'phase (fraction of the trial period)', ylabel: 'ppm', fy: (v) => fmt(v) });
       ctx.save(); ctx.beginPath(); ctx.rect(b.x0, b.y0, b.w, b.h); ctx.clip();
       ctx.fillStyle = alpha(P.acc, 0.18);
-      for (let i = 0; i < t.length; i++) { const ph = (((t[i] - T0 + DUR / 2) / st.p) % 1 + 1) % 1; ctx.fillRect(X(ph), Y(flat[i]), 1.5, 1.5); }
+      const sh = Math.round(0.3 * f.nb);                                         // draw the stacked dip away from the edges
+      for (let i = 0; i < t.length; i++) { const ph = ((((t[i] - T0 + DUR / 2) / st.p) % 1 + 1) % 1 + sh / f.nb) % 1; ctx.fillRect(X(ph), Y(flat[i]), 1.5, 1.5); }
       ctx.strokeStyle = P.acc2; ctx.lineWidth = 2.4; ctx.beginPath();
-      for (let j = 0; j < f.nb; j++) { if (!f.cnt[j]) continue; const xx = X((j + 0.5) / f.nb), yy = Y(f.sum[j] / f.cnt[j]); j ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); }
+      for (let k = 0; k < f.nb; k++) { const j = (k - sh + f.nb) % f.nb; if (!f.cnt[j]) continue; const xx = X((k + 0.5) / f.nb), yy = Y(f.sum[j] / f.cnt[j]); k ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); }
       ctx.stroke(); ctx.restore();
     }
     { const { ctx, w, h } = S2; ctx.clearRect(0, 0, w, h);
