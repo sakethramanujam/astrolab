@@ -26,7 +26,21 @@ def connect(path=None):
     con = sqlite3.connect(path)
     cols = ", ".join(f"{k} {v}" for k, v in COLS.items())
     con.execute(f"CREATE TABLE IF NOT EXISTS results ({cols}, PRIMARY KEY (tic, sector))")
+    con.execute("""CREATE TABLE IF NOT EXISTS runs (
+        run_id INTEGER PRIMARY KEY AUTOINCREMENT, sector INTEGER, started_at TEXT, finished_at TEXT,
+        n_selected INTEGER, n_searched INTEGER, n_errors INTEGER, search_wall_s REAL,
+        median_star_s REAL, workers INTEGER, backend TEXT, code_version TEXT)""")
     return con
+
+
+def add_run(con, **row):
+    keys = ", ".join(row)
+    con.execute(f"INSERT INTO runs ({keys}) VALUES ({', '.join('?' for _ in row)})", list(row.values()))
+    con.commit()
+
+
+def runs(con):
+    return pd.read_sql_query("SELECT * FROM runs ORDER BY started_at", con)
 
 
 def upsert(con, row):

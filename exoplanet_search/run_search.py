@@ -51,7 +51,7 @@ def get_client(args):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sector", type=int, default=70)
-    ap.add_argument("--n-targets", type=int, default=500)
+    ap.add_argument("--n-targets", type=int, default=500, help="0 = every star in the sector")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--backend", choices=["auto", "cpu", "numpy", "cuda", "mlx"], default="auto",
                     help="auto = each worker picks by its resource tag (GPU=1 -> cuda, MLX=1 -> mlx, else cpu)")
@@ -65,11 +65,16 @@ def main():
     ap.add_argument("--redo", action="store_true", help="re-run stars already in the DB")
     ap.add_argument("--top", type=int, default=15)
     ap.add_argument("--plots", type=int, default=10)
+    ap.add_argument("--prune-fits", action="store_true",
+                    help="delete this sector's FITS after the run, keeping only the plotted top targets")
     args = ap.parse_args()
 
     t_all = time.perf_counter()
+    import datetime as _dt
+    started_at = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
+    n_searched = n_err = 0
     man = targets.fetch_manifest(args.sector)
-    sel = targets.select_targets(man, args.n_targets, args.seed)
+    sel = targets.select_targets(man, args.n_targets or len(man), args.seed)
     log(f"sector {args.sector}: {len(man)} SPOC 2-min targets, selected {len(sel)} (seed {args.seed})")
 
     t0 = time.perf_counter()
@@ -90,10 +95,10 @@ def main():
         futs = [client.submit(process_star, r.tic, args.sector, r.fname, r.url, args.backend,
                               key=f"star-{args.sector}-{r.tic}-{args.backend}", resources=res, pure=False)
                 for r in todo.itertuples()]
-        n_err = 0
         for i, fut in enumerate(as_completed(futs), 1):
             row = fut.result()
             n_err += row["status"] != "ok"
+            n_searched += 1
             store.upsert(con, row)
             if i % 25 == 0 or i == len(futs):
                 el = time.perf_counter() - t_search
@@ -102,6 +107,15 @@ def main():
         if cluster:
             cluster.close()
     search_wall = time.perf_counter() - t_search
+    if n_searched:
+        rts = [r for r in store.frame(con, args.sector).runtime_s if r == r]
+        import statistics
+        store.add_run(con, sector=args.sector, started_at=started_at,
+                      finished_at=_dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+                      n_selected=len(sel), n_searched=n_searched, n_errors=n_err,
+                      search_wall_s=search_wall, median_star_s=statistics.median(rts) if rts else None,
+                      workers=args.workers if not args.scheduler else None, backend=args.backend,
+                      code_version=__import__("exosearch").__version__)
 
     log("cross-matching against ExoFOP TOI/CTOI + NASA Exoplanet Archive")
     cats = catalogs.load_catalogs()
@@ -136,6 +150,15 @@ def main():
         if p.is_file():
             png = plots.diagnostic(p, row, config.plots_dir(args.sector) / f"TIC{r.tic}_s{args.sector:04d}.png")
             log(f"  plot {png}")
+
+    if args.prune_fits:
+        keep_f = set(sel[sel.tic.isin(top.head(args.plots).tic)].fname)
+        n_rm = 0
+        for p in config.lc_dir(args.sector).glob("*.fits"):
+            if p.name not in keep_f:
+                p.unlink()
+                n_rm += 1
+        log(f"pruned {n_rm} FITS files (kept {len(keep_f)} for plots)")
 
     rt = ok.runtime_s
     log(f"stars ok={len(ok)} errors={int((df.status!='ok').sum())}  per-star task time "
