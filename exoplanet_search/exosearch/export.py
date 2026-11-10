@@ -69,7 +69,7 @@ def _plot(r, site, dpi=80):
     return None
 
 
-def build(site=SITE, max_candidates=40, max_rejected=12, plots_on=True):
+def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
     con = store.connect()
     df = store.frame(con)
     runs = store.runs(con)
@@ -162,7 +162,7 @@ def build(site=SITE, max_candidates=40, max_rejected=12, plots_on=True):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--site", type=Path, default=SITE)
-    ap.add_argument("--max-candidates", type=int, default=40)
+    ap.add_argument("--max-candidates", type=int, default=80)
     ap.add_argument("--no-plots", action="store_true")
     a = ap.parse_args()
     out = build(a.site, a.max_candidates, plots_on=not a.no_plots)
