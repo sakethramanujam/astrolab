@@ -33,3 +33,8 @@ bash setup.sh
 source venv/bin/activate
 jupyter lab
 ```
+
+## 🪐 Exoplanet transit search
+`exoplanet_search/` is a CPU-first TESS transit-search pipeline (wotan + BLS fanned out with
+Dask, vetting, TOI/planet cross-match) with CUDA and Apple MLX worker backends. See
+[exoplanet_search/README.md](exoplanet_search/README.md).

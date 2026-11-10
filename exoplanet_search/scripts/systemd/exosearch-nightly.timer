@@ -1,0 +1,11 @@
+# Example only - not installed.
+[Unit]
+Description=Run the TESS transit search at 01:30 every night
+
+[Timer]
+OnCalendar=*-*-* 01:30
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target
