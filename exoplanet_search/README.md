@@ -131,11 +131,23 @@ the host, which keeps phase errors ~1e-6. It is an **untested stub**, so run
 
 ## Progress site
 
-`site/` is a static site (HTML/CSS/JS + Chart.js) that only reads `site/data/progress.json`:
-dashboard (stars and sectors searched, run history, known-TOI recovery rate, charts, candidate
-table with diagnostic sheets and a status per candidate: known / needs review / rejected /
-submitted), a **Learn** page explaining every stage with our own figures, and a
-**Run it yourself** page. Preview locally:
+`site/` is a static, buildless site (plain HTML/CSS + ES modules, Chart.js from a CDN) that reads
+`site/data/progress.json` and small per-candidate light-curve files in `site/data/lc/`:
+
+* **Dashboard**: a tile map of every TESS sector (done / in progress / queued, tap to filter),
+  charts, and a candidate table you can search, filter (status, sector, flag, period, radius,
+  Tmag, SDE) and sort; filter state lives in the URL hash, so a view can be shared.
+* **Candidate view** (`candidate.html#s70/<tic>`): fold, zoom and re-bin the light curve, split
+  odd/even transits, look at phase 0.5 and the whole sector, and read every check it passed or failed
+  with an explanation, plus ExoFOP/MAST links and the diagnostic PNG.
+* **Learn**: each pipeline stage with our own figures, plus live explorables (transit simulator,
+  fold-it-yourself BLS, planet vs eclipsing binary, difference-image blend explainer) and a quiz.
+* **Run it yourself**.
+
+`assets/ui.js` holds the shared widgets (sliders with live values, segmented controls, readouts,
+HiDPI canvases, an animation loop that respects reduced motion). `exosearch.export` writes the
+light-curve JSON (~15 kB per listed candidate); the publisher commits it with the rest of `site/data`.
+Preview locally:
 
 ```bash
 .venv/bin/python -m exosearch.export && .venv/bin/python -m exosearch.learn_figs
