@@ -1,0 +1,5 @@
+# GPU worker (spaceman1729, GTX 1050 Ti = Pascal sm_61). On top of requirements.txt.
+# NVIDIA driver >= 525 and CUDA 12.x runtime; cupy-cuda12x wheels still ship sm_61 kernels.
+cupy-cuda12x
+# optional alternative BLS implementation:
+# cuvarbase
