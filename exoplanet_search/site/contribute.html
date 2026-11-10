@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Run it yourself · Transit Hunt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css"></head><body><canvas id="stars"></canvas>
+<nav><div class="wrap"><a class="brand" href="./"><span class="orb"></span>Transit Hunt</a>
+<div class="links"><a href="./">Dashboard</a><a href="learn.html">Learn</a><a class="on" href="contribute.html">Run it yourself</a></div></div></nav>
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">Open pipeline</div>
+  <h1>Run it yourself, or lend us compute</h1>
+  <p class="lede">Every star is an independent job, so the search scales by simply adding machines: a laptop CPU, an old NVIDIA card or an
+    Apple Silicon Mac. Here's how to run the pipeline on your own and how a worker joins a shared scheduler.</p>
+</div></header>
+<main class="wrap">
+<section class="card">
+  <h2>Run a sector on your own machine</h2>
+<pre># Python 3.12, ~2 GB disk per 1,000 stars
+git clone &lt;repo-url&gt; astro-compute-lab &amp;&amp; cd astro-compute-lab/exoplanet_search
+python3 -m venv .venv &amp;&amp; .venv/bin/pip install -r requirements.txt
+export EXO_DATA_ROOT=$PWD/data            # where light curves and results go
+.venv/bin/python -m pytest -q tests        # injection-recovery and end-to-end checks
+
+# 500 random stars from sector 70 on 4 cores, low priority
+nice -n 19 .venv/bin/python run_search.py --sector 70 --n-targets 500 --workers 4
+.venv/bin/python -m exosearch.export       # writes site/data/progress.json + plots
+python3 -m http.server -d site 8000        # open http://localhost:8000</pre>
+  <p>Results land in <code>$EXO_DATA_ROOT/results/exosearch.sqlite</code> (one row per star) and a Parquet export. Re-running skips stars
+    already searched; <code>--n-targets 0</code> does the whole sector; <code>python -m exosearch.sectorqueue next --count 3</code> tells you what's next.</p>
+</section>
+
+<section class="card">
+  <h2>How the distributed search works</h2>
+  <div class="grid steps">
+    <div class="card step"><h3>Coordinator</h3>Downloads light curves, runs a <b>Dask scheduler</b>, stores results and publishes this site.</div>
+    <div class="card step"><h3>One star = one task</h3>Tasks are handed to whichever worker is free; slow or fast machines just take fewer or more stars.</div>
+    <div class="card step"><h3>Resource tags pick the engine</h3>A worker started with <code>--resources GPU=1</code> runs BLS with CuPy; <code>MLX=1</code> with Apple MLX; untagged workers use astropy on CPU.</div>
+    <div class="card step"><h3>Same answers</h3>Every engine's best period is re-scored on CPU with the same vetting, so results are comparable.</div>
+  </div>
+</section>
+
+<section class="grid two">
+  <div class="card"><h2>NVIDIA GPU worker</h2>
+  <p>Tested target: GTX 1050 Ti (Pascal, sm_61, 4 GB). Needs an NVIDIA driver ≥ 525 and the CUDA 12 runtime.</p>
+<pre>pip install -r requirements.txt -r requirements-cuda.txt   # cupy-cuda12x
+nvidia-smi
+pytest -q tests/test_bls_vector.py                         # CUDA vs numpy check
+SCHEDULER=tcp://&lt;scheduler-host&gt;:8786 scripts/start_worker_cuda.sh</pre>
+  <p class="kbd">One process with GPU=1, so the card is never shared by two tasks. The CUDA path is new: validate it with the test first.</p></div>
+  <div class="card"><h2>Apple Silicon worker (MLX)</h2>
+<pre>brew install python@3.12
+python3.12 -m venv .venv
+.venv/bin/pip install -r requirements.txt -r requirements-mlx.txt   # mlx
+.venv/bin/python -c "import mlx.core as mx; print(mx.default_device())"
+pytest -q tests/test_bls_vector.py
+SCHEDULER=tcp://&lt;scheduler-host&gt;:8786 scripts/start_worker_mlx.sh</pre>
+  <p class="kbd">MLX runs BLS on the Mac's GPU in float32. Add <code>scripts/start_worker_cpu.sh</code> alongside to use the CPU cores too.</p></div>
+</section>
+
+<section class="card">
+  <h2>Joining a scheduler safely</h2>
+  <ul>
+    <li>Dask's scheduler has <b>no authentication</b>. Only expose it on a private LAN or a mesh VPN such as Tailscale, never on the public internet.</li>
+    <li>Use the same Python minor version and the same <code>dask</code>/<code>distributed</code> versions as the coordinator.</li>
+    <li>Workers without the shared disk download light curves into their own <code>EXO_DATA_ROOT</code>; nothing else is needed.</li>
+    <li>Run workers with <code>nice -n 19</code> (the scripts do) so they stay out of the way of everything else on the machine.</li>
+  </ul>
+</section>
+
+<section class="card">
+  <h2>Ways to help without compute</h2>
+  <p>Look through the <a href="./#chips">needs-review</a> list, open a diagnostic sheet, and check the star on ExoFOP and in other sectors.
+    Spotted an eclipsing binary or a systematic we missed? That feedback improves the screens for everyone.</p>
+</section>
+</main>
+<footer><div class="wrap">Figures on this page are made from our own runs on public NASA TESS data. Questions or corrections are welcome.</div></footer>
+<script src="assets/stars.js"></script></body></html>

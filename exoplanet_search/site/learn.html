@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Learn · Transit Hunt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css"></head><body><canvas id="stars"></canvas>
+<nav><div class="wrap"><a class="brand" href="./"><span class="orb"></span>Transit Hunt</a>
+<div class="links"><a href="./">Dashboard</a><a class="on" href="learn.html">Learn</a><a href="contribute.html">Run it yourself</a></div></div></nav>
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">Learn while it runs</div>
+  <h1>How do you find a planet in a list of numbers?</h1>
+  <p class="lede">Each stage of the pipeline, in plain words, with figures from our own data. The example star is
+    TIC 301289516, which hosts the known planet candidate TOI-4517.01. Our search re-found it blind.</p>
+  <div class="toc"><a href="#tess">1 · TESS & light curves</a><a href="#detrend">2 · Detrending</a><a href="#bls">3 · BLS & SDE</a>
+    <a href="#vet">4 · Vetting</a><a href="#sys">5 · Systematics</a><a href="#xmatch">6 · Cross-matching</a><a href="#cs">7 · Citizen science</a></div>
+</div></header>
+<main class="wrap">
+
+<section id="tess" class="card lesson">
+  <h2>1 · TESS and light curves</h2>
+  <p>NASA's <b>Transiting Exoplanet Survey Satellite</b> stares at one 24°×96° strip of sky for about 27 days (a
+    <b>sector</b>), then moves on. For tens of thousands of pre-selected stars per sector it records brightness every
+    <b>2 minutes</b>. That series of brightness against time is a <b>light curve</b>. The mission's SPOC pipeline already removes
+    many instrument effects (the <i>PDCSAP</i> flux we use) and flags bad cadences (cosmic rays, pointing glitches,
+    momentum dumps), which we throw away.</p>
+  <figure><img src="learn/01_lightcurve.png" alt="raw light curve with trend" loading="lazy">
+    <figcaption>Grey: 2-minute brightness of one star. The gap in the middle is the spacecraft pointing at Earth to send data home. Orange: the slow trend we estimate next.</figcaption></figure>
+  <p class="why"><b>Why it works:</b> if a planet's orbit is edge-on from our point of view, once per orbit it blocks a tiny fraction of the star:
+    (planet radius / star radius)². An Earth in front of the Sun dims it by ~84 parts per million; a Jupiter by ~1%.</p>
+</section>
+
+<section id="detrend" class="card lesson">
+  <h2>2 · Detrending</h2>
+  <p>Stars spot, pulsate and flicker, and the spacecraft drifts. Those slow wiggles can be thousands of ppm, far bigger
+    than a small planet. We fit a <b>robust running average</b> (a Tukey <i>biweight</i> in a 0.75-day window, using the
+    <code>wotan</code> package) and divide it out. The biweight ignores outliers, so a 2-hour transit barely pulls on the
+    trend and survives. We also cut 0.3 days at the edges of every data gap, where ramps are common, clip upward flares,
+    and bin to 10 minutes to speed up the search.</p>
+  <figure><img src="learn/02_detrended.png" alt="detrended light curve" loading="lazy">
+    <figcaption>After dividing by the trend the curve is flat. Orange lines mark where the transits fall: hard to see one by one, obvious when stacked.</figcaption></figure>
+  <p class="why"><b>Trade-off:</b> a window that's too short eats long transits; too long leaves stellar variability in. 0.75 d is about three
+    times the longest transit we search for (6 h).</p>
+</section>
+
+<section id="bls" class="card lesson">
+  <h2>3 · Box Least Squares and what SDE means</h2>
+  <p>A transit looks like a flat-bottomed box. <b>BLS</b> tries thousands of trial periods (0.5 days to half the sector), phases and durations
+    (1–6 h). For each it asks: if I fold the light curve at this period, how much better does a box-shaped dip fit than a flat line?
+    That improvement is the <b>BLS power</b>; plotted against period it's a <b>periodogram</b>.</p>
+  <figure><img src="learn/03_periodogram.png" alt="BLS periodogram and SDE" loading="lazy">
+    <figcaption>Left: the periodogram, one clear spike. Smaller spikes are harmonics and noise. Right: the distribution of all power values; the peak sits far above the crowd.</figcaption></figure>
+  <p><b>SDE (Signal Detection Efficiency)</b> answers "how unusual is the highest peak?": <code>SDE = (peak − mean) / standard deviation</code>
+    of the periodogram, after removing its slow slope. Pure noise usually gives SDE ≈ 5–8; we require <b>SDE ≥ 9</b>.</p>
+  <figure><img src="learn/04_fold.png" alt="phase folded transit" loading="lazy">
+    <figcaption>Folding every transit on top of each other at the best period: a ~600 ppm dip lasting ~1 h, invisible in any single transit.</figcaption></figure>
+</section>
+
+<section id="vet" class="card lesson">
+  <h2>4 · Vetting: odd/even, secondary eclipse, shape and size</h2>
+  <p>Most strong BLS signals are not planets. The most common impostor is an <b>eclipsing binary</b>: two stars orbiting each other.
+    The automated screens we apply to every star:</p>
+  <ul>
+    <li><b>SNR ≥ 7</b>: is the dip depth large compared to its uncertainty?</li>
+    <li><b>≥ 3 transits</b>: two dips can be a coincidence or an artefact.</li>
+    <li><b>Odd vs even depth</b>: if the "planet" is really two unequal stars at twice the period, alternate dips differ.</li>
+    <li><b>Secondary eclipse</b>: a dip half an orbit later means the companion gives off light, so it's a star.</li>
+    <li><b>Duration vs. star size</b>: a transit can't last much longer than physics allows for that period and star.</li>
+    <li><b>Depth &lt; 5 % and radius &lt; ~2 Jupiter radii</b>: bigger is a star, not a planet.</li>
+    <li><b>Variable star</b>: brightening at phase 0.5 means a smooth wave, not a transit.</li>
+  </ul>
+  <figure><img src="learn/05_odd_even_secondary.png" alt="odd even and secondary checks on a rejected signal" loading="lazy">
+    <figcaption>A real rejected signal from our run: odd and even dips have clearly different depths, and there's a dip halfway round the orbit. Almost certainly an eclipsing binary.</figcaption></figure>
+  <p class="why"><b>What we can't check automatically yet:</b> whether the dip is on a <i>neighbouring</i> star whose light leaks into the same pixels
+    (TESS pixels are 21″ wide). That needs pixel-level centroid analysis, and it's the first thing a human reviewer does.</p>
+</section>
+
+<section id="sys" class="card lesson">
+  <h2>5 · Systematics: when the spacecraft fakes a planet</h2>
+  <p>If many unrelated stars "find" the same period, the cause is the telescope, not the stars: scattered light every orbit, momentum
+    dumps, the data-download gap. Our first run showed exactly this, so we now flag any period shared by an unusual number of stars in a sector.</p>
+  <figure><img src="learn/06_systematics.png" alt="period histogram with systematic pile-ups" loading="lazy">
+    <figcaption>Best period of every searched star. The excess near short periods is the search's natural bias; the bumps near ~6.4 d and ~12 d (dotted) are spacecraft systematics.</figcaption></figure>
+  <figure><img src="learn/07_sde.png" alt="SDE distribution" loading="lazy">
+    <figcaption>SDE for every star (log scale). Orange: the few that pass every screen.</figcaption></figure>
+</section>
+
+<section id="xmatch" class="card lesson">
+  <h2>6 · Cross-matching: is it already known?</h2>
+  <p>Every survivor is compared, by TIC ID <i>and</i> period (allowing for half/double/third/triple-period aliases within 1 %), with:</p>
+  <ul>
+    <li><b>TOIs</b> (TESS Objects of Interest), the mission's own candidate list on ExoFOP, with dispositions like PC (planet candidate), KP (known planet), CP (confirmed), FP (false positive);</li>
+    <li><b>CTOIs</b>, community candidates others have already submitted;</li>
+    <li><b>confirmed planets</b> in the NASA Exoplanet Archive.</li>
+  </ul>
+  <p>Re-finding known TOIs is how we <b>measure our own sensitivity</b> (the dashboard's recovery rate). A signal on a TOI host at a
+    <i>different</i> period is interesting: it could be a second planet. A survivor with no match is listed as <b>needs review</b>, never as a discovery.</p>
+</section>
+
+<section id="cs" class="card lesson">
+  <h2>7 · How citizen-science submission works</h2>
+  <div class="grid steps">
+    <div class="card step"><h3>Look by eye</h3>Open the diagnostic sheet. Check other TESS sectors for the same star, and the pixel data for a contaminating neighbour.</div>
+    <div class="card step"><h3>Planet Hunters TESS</h3>The <a href="https://www.zooniverse.org/projects/nora-dot-eisner/planet-hunters-tess">Zooniverse project</a>'s Talk boards are where volunteers and the science team discuss TIC IDs. Community finds have become CTOIs and published planets this way.</div>
+    <div class="card step"><h3>ExoFOP CTOI</h3>With an <a href="https://exofop.ipac.caltech.edu/tess/">ExoFOP</a> account you can submit a Community TOI: period, epoch, depth, duration, notes. It's public, so only after multi-sector and pixel-level checks.</div>
+    <div class="card step"><h3>Follow-up & publish</h3>Observers may take spectra or ground-based photometry. A well-vetted candidate, or a methods note, can become a short refereed paper in <a href="https://journals.aas.org/research-notes/">Research Notes of the AAS</a>.</div>
+  </div>
+  <p class="kbd" style="margin-top:14px">Status today: nothing submitted. Candidates move to "submitted" on the dashboard only after a human has done steps 1–3.</p>
+</section>
+</main>
+<footer><div class="wrap">Figures on this page are made from our own runs on public NASA TESS data. Questions or corrections are welcome.</div></footer>
+<script src="assets/stars.js"></script></body></html>
