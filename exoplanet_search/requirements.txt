@@ -1,4 +1,4 @@
-# CPU pipeline (arrakis). Install into exoplanet_search/.venv
+# CPU pipeline (coordinator). Install into exoplanet_search/.venv
 numpy
 scipy
 pandas

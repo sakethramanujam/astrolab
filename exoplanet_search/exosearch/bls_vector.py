@@ -9,7 +9,7 @@ cumsum differences. With y mean-subtracted and w normalised to sum 1:
 which matches astropy's "likelihood" objective up to a constant.
 
 numpy is the tested reference; cupy (cuda) and mlx paths share the same code but are
-UNTESTED here (no GPU / Apple Silicon on arrakis).
+UNTESTED here (no GPU / Apple Silicon on the CPU coordinator).
 """
 from __future__ import annotations
 

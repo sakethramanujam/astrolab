@@ -1,2 +1,2 @@
-# Apple Silicon worker (costlybatman, M5 Max). On top of requirements.txt.
+# Apple Silicon worker (M-series Mac). On top of requirements.txt.
 mlx

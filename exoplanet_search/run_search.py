@@ -2,7 +2,7 @@
 """TESS transit search: manifest -> download -> detrend+BLS per star (Dask) -> vet -> cross-match -> plots.
 
 Examples
-  # local CPU run on arrakis, 8 polite workers
+  # local CPU run, 8 polite workers
   nice -n 19 .venv/bin/python run_search.py --sector 70 --n-targets 500 --workers 8
   # use an external scheduler that CPU / CUDA / MLX workers have joined
   nice -n 19 .venv/bin/python run_search.py --sector 70 --n-targets 2000 --scheduler tcp://<scheduler-host>:8786
