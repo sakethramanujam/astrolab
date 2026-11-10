@@ -27,6 +27,10 @@ MAST manifest -> seeded target subset -> resumable download (FITS on the shared 
 | `exosearch/task.py` | `process_star`: one star = one Dask task, picks backend from worker tags |
 | `exosearch/store.py` | SQLite results (upsert on `tic, sector`, so reruns are resumable) |
 | `scripts/` | scheduler / worker launchers, nightly batch, example systemd user timer |
+| `exosearch/sectorqueue.py` | every TESS 2-min sector on MAST; next sectors to run, progress derived from the DB |
+| `exosearch/export.py` | writes `site/data/progress.json`, `candidates.csv` and small candidate PNGs (no hostnames/paths) |
+| `exosearch/learn_figs.py` | the Learn page figures, made from our own data |
+| `site/` | static GitHub Pages site: dashboard, Learn, Run-it-yourself |
 | `tests/` | pytest: injection-recovery, vetting, idempotent download, Dask end to end |
 
 Data lives outside the repo, under `EXO_DATA_ROOT` (default `/media/nfs01/astro_data/tess`):
@@ -123,17 +127,55 @@ the host, which keeps phase errors ~1e-6. It is an **untested stub**, so run
 `pytest tests/test_bls_vector.py` on the Mac first. To also give the Mac CPU-only tasks, run
 `scripts/start_worker_cpu.sh` beside the MLX worker.
 
-## Scheduling it (suggestion, not installed)
+## Progress site
 
-Nightly incremental batch at 01:30 at the lowest priority. Only new stars are processed:
+`site/` is a static site (HTML/CSS/JS + Chart.js) that only reads `site/data/progress.json`:
+dashboard (stars and sectors searched, run history, known-TOI recovery rate, charts, candidate
+table with diagnostic sheets and a status per candidate: known / needs review / rejected /
+submitted), a **Learn** page explaining every stage with our own figures, and a
+**Run it yourself** page. Preview locally:
 
 ```bash
-mkdir -p ~/.config/systemd/user
-cp scripts/systemd/exosearch-nightly.{service,timer} ~/.config/systemd/user/
-systemctl --user daemon-reload && systemctl --user enable --now exosearch-nightly.timer
+.venv/bin/python -m exosearch.export && .venv/bin/python -m exosearch.learn_figs
+python3 -m http.server -b 127.0.0.1 -d site 8000
 ```
 
-or with cron: `30 1 * * * cd ~/Documents/repos/astro-compute-lab/exoplanet_search && SECTORS="70 71" N_TARGETS=2000 scripts/nightly.sh >> /tmp/exosearch-nightly.log 2>&1`
+`.github/workflows/exoplanet-pages.yml` deploys `exoplanet_search/site` to GitHub Pages on every
+push to `exoplanet-search` that touches the site. To mark a candidate as submitted, add it to
+`submissions.json` (`{"<tic>": {"where": "PHT Talk / ExoFOP CTOI", "ref": "<link>", "date": "YYYY-MM-DD"}}`).
+
+`scripts/publish_site.sh` exports, runs a privacy guard (generic IP/path patterns plus an
+untracked `private_patterns.txt` next to the data with one regex per line for machine/user
+names), drops any PNG over 300 KB, then commits **only** `site/data` and `site/plots` and pushes
+over HTTPS with `gh` credentials (works from timers without an ssh-agent).
+
+## Sector queue and nightly runs
+
+```bash
+.venv/bin/python -m exosearch.sectorqueue status        # done / in-progress sectors
+.venv/bin/python -m exosearch.sectorqueue next --count 3
+```
+
+Order: sectors already started, then newest first. Progress comes from the results DB, so an
+interrupted night resumes exactly where it stopped. `scripts/nightly.sh` takes `MAX_SECTORS`
+sectors (default 2) from the queue, runs each whole sector with `--prune-fits` (FITS are deleted
+after the run, except the plotted targets; plots re-download on demand), stops starting new
+sectors after `DEADLINE` (06:00 local), then publishes the site. A lock file prevents overlap.
+
+Installed as a systemd **user** timer (lingering enabled, no root): 01:30 local time nightly,
+±10 min, `Nice=19`, `CPUWeight=20`, idle I/O, 8 workers.
+
+```bash
+cp scripts/systemd/exosearch-nightly.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now exosearch-nightly.timer
+systemctl --user list-timers exosearch-nightly.timer
+journalctl --user -u exosearch-nightly.service -n 100     # logs
+systemctl --user start exosearch-nightly.service          # run now
+```
+
+Rough cost per sector on 8 CPU workers: ~40 min download (~23 GB, pruned afterwards) + ~20 min search.
+Scaling: start `scripts/start_scheduler.sh` bound to a LAN/Tailscale address, join CPU / CUDA /
+MLX workers (above), and set `SCHEDULER=tcp://<scheduler-host>:8786` in the service.
 
 ## From signals to citizen science and publication (next steps, not done)
 

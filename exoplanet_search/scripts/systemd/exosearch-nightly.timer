@@ -1,4 +1,4 @@
-# Example only - not installed.
+# Installed with: cp to ~/.config/systemd/user/ && systemctl --user enable --now exosearch-nightly.timer
 [Unit]
 Description=Run the TESS transit search at 01:30 every night
 
