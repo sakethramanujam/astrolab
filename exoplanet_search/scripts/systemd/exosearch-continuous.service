@@ -1,0 +1,24 @@
+# Round-the-clock sector queue runner. Install (user unit, no root):
+#   cp scripts/systemd/exosearch-continuous.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now exosearch-continuous.service
+#   loginctl enable-linger   # keep running without a login session
+[Unit]
+Description=TESS transit search: continuous sector queue
+After=network-online.target
+
+[Service]
+Type=simple
+Nice=19
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle
+CPUWeight=20
+WorkingDirectory=%h/Documents/repos/astro-compute-lab/exoplanet_search
+Environment=DAY_WORKERS=8 NIGHT_WORKERS=12 MAX_LOAD=14 MIN_FREE_GB=100
+# Opt-in remote workers: Environment=EXO_LISTEN=<lan-or-tailscale-ip>
+ExecStart=%h/Documents/repos/astro-compute-lab/exoplanet_search/scripts/continuous.sh
+Restart=always
+RestartSec=600
+KillMode=control-group
+
+[Install]
+WantedBy=default.target

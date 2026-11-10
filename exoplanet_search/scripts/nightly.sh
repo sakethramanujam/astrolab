@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${MAX_SECTORS:=2}" "${WORKERS:=8}" "${DEADLINE:=6}"
-exec 9>/tmp/exosearch-nightly.lock
+exec 9>/tmp/exosearch-run.lock
 flock -n 9 || { echo "another run is active"; exit 0; }
 PY=(nice -n 19 ionice -c3 .venv/bin/python)
 for s in $(.venv/bin/python -m exosearch.sectorqueue next --count "$MAX_SECTORS"); do

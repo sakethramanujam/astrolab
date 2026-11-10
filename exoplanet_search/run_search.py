@@ -65,6 +65,7 @@ def main():
     ap.add_argument("--redo", action="store_true", help="re-run stars already in the DB")
     ap.add_argument("--top", type=int, default=15)
     ap.add_argument("--plots", type=int, default=10)
+    ap.add_argument("--download-only", action="store_true", help="fetch/cache the sector's FITS and exit (prefetch)")
     ap.add_argument("--prune-fits", action="store_true",
                     help="delete this sector's FITS after the run, keeping only the plotted top targets")
     args = ap.parse_args()
@@ -80,6 +81,8 @@ def main():
     t0 = time.perf_counter()
     dl = targets.download_many(sel, args.sector, threads=args.download_threads, log=log)
     log(f"download/cache check: {len(dl['ok'])} ok, {len(dl['failed'])} failed in {time.perf_counter()-t0:.0f}s")
+    if args.download_only:
+        return
 
     con = store.connect()
     done = set() if args.redo else store.done_tics(con, args.sector)

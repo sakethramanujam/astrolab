@@ -20,13 +20,14 @@ REPO="$(git rev-parse --show-toplevel)"
 cd "$REPO"
 [ "$(git branch --show-current)" = "$BRANCH" ] || { echo "not on $BRANCH; not publishing" >&2; exit 1; }
 git add -A -- exoplanet_search/site/data exoplanet_search/site/plots
-if git diff --cached --quiet; then echo "nothing new to publish"; exit 0; fi
+if git diff --cached --quiet -- exoplanet_search/site/data exoplanet_search/site/plots; then echo "nothing new to publish"; exit 0; fi
 if git diff --cached | grep -i -E "$PAT" >/dev/null; then echo "privacy guard tripped in diff" >&2; git reset -q; exit 1; fi
-git -c commit.gpgsign=false commit -q -m "data: site summary $(date -u +%Y-%m-%dT%H:%MZ)"
+# commit ONLY the site data paths, even if other work is staged in this checkout
+git -c commit.gpgsign=false commit -q -m "data: site summary $(date -u +%Y-%m-%dT%H:%MZ)" -- exoplanet_search/site/data exoplanet_search/site/plots
 
 # HTTPS + gh credentials work from timers without an ssh-agent
 URL="$(git remote get-url origin | sed -E 's#^git@github.com:#https://github.com/#')"
 CRED=(-c credential.helper= -c "credential.helper=!gh auth git-credential")
-git "${CRED[@]}" pull -q --rebase "$URL" "$BRANCH"
+git "${CRED[@]}" pull -q --rebase --autostash "$URL" "$BRANCH"
 git "${CRED[@]}" push -q "$URL" "HEAD:$BRANCH"
 echo "published $(git rev-parse --short HEAD)"
