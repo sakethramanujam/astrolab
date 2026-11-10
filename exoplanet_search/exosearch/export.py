@@ -95,7 +95,8 @@ def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
 
     ok["state"] = ok.apply(lambda r: _status(r, subs), axis=1)
     listed = pd.concat([
-        ok[ok.state.isin(["submitted", "needs_review", "known"])].sort_values("sde", ascending=False).head(max_candidates),
+        ok[ok.state.isin(["submitted", "needs_review"])].sort_values("sde", ascending=False),   # always all of these
+        ok[ok.state == "known"].sort_values("sde", ascending=False).head(max_candidates),
         # strongest rejects that still look physically plausible (skip broken photometry)
         ok[(ok.state == "rejected") & (ok.depth < 0.05) & (ok.depth > 0)]
         .sort_values("sde", ascending=False).head(max_rejected)])
