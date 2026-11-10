@@ -28,6 +28,8 @@ MAST manifest -> seeded target subset -> resumable download (FITS on the shared 
 | `exosearch/store.py` | SQLite results (upsert on `tic, sector`, so reruns are resumable) |
 | `scripts/` | scheduler / worker launchers, nightly batch, example systemd user timer |
 | `exosearch/sectorqueue.py` | every TESS 2-min sector on MAST; next sectors to run, progress derived from the DB |
+| `exosearch/deepvet.py` | candidate-only vetting: difference-image centroid, Gaia DR3 neighbours, TESS/Kepler EB match, V-shape, secondary scan, radius |
+| `exosearch/selftest.py` | backend self-test + benchmark against astropy on known TOIs |
 | `exosearch/export.py` | writes `site/data/progress.json`, `candidates.csv` and small candidate PNGs (no hostnames/paths) |
 | `exosearch/learn_figs.py` | the Learn page figures, made from our own data |
 | `site/` | static GitHub Pages site: dashboard, Learn, Run-it-yourself |
@@ -149,7 +151,7 @@ untracked `private_patterns.txt` next to the data with one regex per line for ma
 names), drops any PNG over 300 KB, then commits **only** `site/data` and `site/plots` and pushes
 over HTTPS with `gh` credentials (works from timers without an ssh-agent).
 
-## Sector queue and nightly runs
+## Sector queue and the continuous runner
 
 ```bash
 .venv/bin/python -m exosearch.sectorqueue status        # done / in-progress sectors
@@ -157,25 +159,50 @@ over HTTPS with `gh` credentials (works from timers without an ssh-agent).
 ```
 
 Order: sectors already started, then newest first. Progress comes from the results DB, so an
-interrupted night resumes exactly where it stopped. `scripts/nightly.sh` takes `MAX_SECTORS`
-sectors (default 2) from the queue, runs each whole sector with `--prune-fits` (FITS are deleted
-after the run, except the plotted targets; plots re-download on demand), stops starting new
-sectors after `DEADLINE` (06:00 local), then publishes the site. A lock file prevents overlap.
+interrupted run resumes exactly where it stopped.
 
-Installed as a systemd **user** timer (lingering enabled, no root): 01:30 local time nightly,
-±10 min, `Nice=19`, `CPUWeight=20`, idle I/O, 8 workers.
+`scripts/continuous.sh` works through the queue **back to back, around the clock**, as a systemd
+user service (`scripts/systemd/exosearch-continuous.service`, lingering enabled, no root):
+
+* one instance (lock file shared with `nightly.sh`); `Nice=19`, `CPUSchedulingPolicy=idle`, idle I/O;
+* 8 workers 07:00-23:00 local, 12 overnight when the 1-minute load is below 6;
+* before each sector it waits while the 1-minute load is above 14 or the data disk has < 100 GB free;
+* the next sector's FITS are prefetched while the current sector is searched;
+* after each sector: FITS pruned, candidate deep vetting (`exosearch.deepvet --only-review`), site published.
 
 ```bash
-cp scripts/systemd/exosearch-nightly.{service,timer} ~/.config/systemd/user/
-systemctl --user daemon-reload && systemctl --user enable --now exosearch-nightly.timer
-systemctl --user list-timers exosearch-nightly.timer
-journalctl --user -u exosearch-nightly.service -n 100     # logs
-systemctl --user start exosearch-nightly.service          # run now
+cp scripts/systemd/exosearch-continuous.service ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now exosearch-continuous.service
+journalctl --user -u exosearch-continuous -f
+systemctl --user stop exosearch-continuous     # pause (resumes where it left off)
 ```
 
-Rough cost per sector on 8 CPU workers: ~40 min download (~23 GB, pruned afterwards) + ~20 min search.
-Scaling: start `scripts/start_scheduler.sh` bound to a LAN/Tailscale address, join CPU / CUDA /
-MLX workers (above), and set `SCHEDULER=tcp://<scheduler-host>:8786` in the service.
+Remote workers are **opt-in**: set `Environment=EXO_LISTEN=<lan-or-tailscale-ip>` in the unit and the
+runner keeps a persistent scheduler on `EXO_LISTEN:8786` (dashboard :8797) with local CPU workers, which
+GPU/MLX/CPU workers elsewhere can join. Default is localhost only; never bind to a public interface.
+
+`scripts/nightly.sh` + `exosearch-nightly.timer` remain as a lighter alternative (01:30 nightly).
+
+## Deep vetting (candidates only)
+
+`python -m exosearch.deepvet --sector 70 [--only-review]` adds, per candidate:
+difference-image centroid offset from the SPOC target-pixel file (flag > 0.5 px and > 3σ, or darkest
+pixel > 1.5 px away), Gaia DR3 neighbours within 42" bright enough to cause the depth if fully eclipsed
+(unresolvable inside 10"), TESS EB (Prša et al. 2022) / Kepler EB matches, V-shape ratio, a
+secondary-eclipse scan over phases 0.15-0.85 and the companion radius from the TIC stellar radius
+(flag > 2 R_Jup). Rejecting flags move a "needs review" signal to "rejected" on the site.
+
+## One-command GPU / Mac workers
+
+```bash
+SCHEDULER=tcp://<scheduler-host>:8786 scripts/worker_cuda.sh       # NVIDIA (e.g. GTX 1050 Ti, sm_61)
+SCHEDULER=tcp://<scheduler-host>:8786 scripts/worker_mlx_mac.sh    # Apple Silicon
+```
+
+Each checks the hardware/driver, builds `.venv` with the coordinator's dask version, runs
+`exosearch.selftest` (backend vs astropy on known TOIs) and only joins if it passes. On Linux the MLX
+code path can be exercised with `pip install "mlx[cpu]"` (it matches astropy on the sector-70 TOIs but
+is ~6x slower than astropy on CPU, so it's for testing only).
 
 ## From signals to citizen science and publication (next steps, not done)
 

@@ -51,7 +51,7 @@ while :; do
   W=$(workers)
   log "=== sector $S with ${W} workers (prefetching ${N2:-none})"
   if [[ -n "$N2" && "$N2" != "$PREFETCH_SECTOR" ]]; then
-    "${PY[@]}" run_search.py --sector "$N2" --n-targets 0 --download-only --download-threads 6 \
+    "${PY[@]}" run_search.py --sector "$N2" --n-targets 0 --download-only --download-threads 12 \
       > "/tmp/exosearch-prefetch-s$N2.log" 2>&1 &
     PREFETCH_PID=$!; PREFETCH_SECTOR="$N2"
   fi
