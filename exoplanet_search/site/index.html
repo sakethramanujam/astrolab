@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Transit Hunt · searching TESS light curves for new worlds</title>
+<meta name="description" content="Open progress log of a citizen-science search for transiting exoplanets in NASA TESS data.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<canvas id="stars"></canvas>
+<nav><div class="wrap">
+  <a class="brand" href="./"><span class="orb"></span>Transit Hunt</a>
+  <div class="links"><a class="on" href="./">Dashboard</a><a href="learn.html">Learn</a><a href="contribute.html">Run it yourself</a></div>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">TESS · 2-minute cadence · Box Least Squares</div>
+  <h1>Searching starlight for passing planets</h1>
+  <p class="lede">We download NASA TESS light curves sector by sector, look for the tiny periodic dips a planet makes when it
+    crosses its star, throw out the usual impostors, and check everything against known planets. This page updates after every run.</p>
+  <div class="note"><span>⚠️</span><div><b>Nothing here is a discovery.</b> Every row below is a <i>threshold-crossing signal</i> produced by an automated
+    screen. A signal only becomes a planet candidate after human vetting, other sectors, pixel-level checks and follow-up
+    observations, and only becomes a planet after independent confirmation. "Known" means our search re-found something already catalogued.</div></div>
+  <div class="meta" id="updated">loading…</div>
+</div></header>
+
+<main class="wrap">
+<section>
+  <div class="grid stats" id="stats"></div>
+</section>
+
+<section class="grid two">
+  <div class="card">
+    <h2>Sector queue</h2>
+    <div class="bar" id="qbar"></div>
+    <div class="legend" id="qlegend"></div>
+    <div class="scroll" style="max-height:260px;margin-top:14px"><table id="sectors"></table></div>
+  </div>
+  <div class="card">
+    <h2>Known-planet recovery</h2>
+    <p class="kbd" style="margin-top:-6px">Of stars in our sample that already host a TESS Object of Interest, how often did we re-find it at its catalogued period and pass every screen? This is our honest sensitivity.</p>
+    <div class="chart" style="height:220px"><canvas id="cRecovery"></canvas></div>
+  </div>
+</section>
+
+<section class="grid two">
+  <div class="card"><h2>Signal strength (SDE) across all stars</h2><div class="chart"><canvas id="cSde"></canvas></div></div>
+  <div class="card"><h2>Best period across all stars</h2><div class="chart"><canvas id="cPeriod"></canvas></div></div>
+</section>
+
+<section class="grid two">
+  <div class="card"><h2>Why signals were rejected</h2><div class="chart"><canvas id="cFlags"></canvas></div></div>
+  <div class="card"><h2>Where we have looked</h2><div class="chart"><canvas id="cSky"></canvas></div>
+    <p class="kbd">RA / Dec of searched stars (sample of up to 4,000).</p></div>
+</section>
+
+<section class="card">
+  <h2>Candidates</h2>
+  <div class="chips" id="chips"></div>
+  <div class="scroll"><table id="cands"></table></div>
+  <div class="legend">
+    <span><span class="badge b-known">known</span> period matches a TOI, CTOI or confirmed planet</span>
+    <span><span class="badge b-needs_review">needs review</span> passed every screen, no catalogue match</span>
+    <span><span class="badge b-rejected">rejected</span> strong signal that failed a screen (shown for transparency)</span>
+    <span><span class="badge b-submitted">submitted</span> sent to Planet Hunters TESS / ExoFOP</span>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Run history</h2>
+  <div class="chart" style="height:200px"><canvas id="cRuns"></canvas></div>
+  <div class="scroll" style="max-height:300px;margin-top:12px"><table id="runs"></table></div>
+</section>
+</main>
+
+<dialog id="dlg"><div class="hd"><b id="dlgT"></b><button class="x" onclick="dlg.close()">×</button></div>
+<img id="dlgI" alt="diagnostic sheet"><div class="bd" id="dlgB"></div></dialog>
+
+<footer><div class="wrap">
+  Data: NASA <a href="https://tess.mit.edu/">TESS</a> via <a href="https://archive.stsci.edu/missions-and-data/tess">MAST</a>;
+  known objects from <a href="https://exofop.ipac.caltech.edu/tess/">ExoFOP-TESS</a> and the
+  <a href="https://exoplanetarchive.ipac.caltech.edu/">NASA Exoplanet Archive</a>. Pipeline: wotan + astropy BLS + Dask.
+  Raw summary: <a href="data/progress.json">progress.json</a> · <a href="data/candidates.csv">candidates.csv</a>.
+</div></footer>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="assets/stars.js"></script>
+<script src="assets/app.js"></script>
+</body></html>

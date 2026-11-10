@@ -1,0 +1,2 @@
+# root .gitignore ignores *.png; site figures are small and public
+!*.png
