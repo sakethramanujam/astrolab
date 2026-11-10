@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-10T23:15:51+00:00",
+ "generated_at": "2026-11-10T23:24:29+00:00",
  "pipeline_version": "0.1.0",
  "totals": {
   "sectors_with_results": 1,
@@ -20,6 +20,650 @@
   106,
   105
  ],
+ "queue": [
+  {
+   "sector": 1,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 2,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 3,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 4,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 5,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 6,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 7,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 8,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 9,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 10,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 11,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 12,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 13,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 14,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 15,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 16,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 17,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 18,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 19,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 20,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 21,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 22,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 23,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 24,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 25,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 26,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 27,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 28,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 29,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 30,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 31,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 32,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 33,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 34,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 35,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 36,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 37,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 38,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 39,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 40,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 41,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 42,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 43,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 44,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 45,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 46,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 47,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 48,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 49,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 50,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 51,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 52,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 53,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 54,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 55,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 56,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 57,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 58,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 59,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 60,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 61,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 62,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 63,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 64,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 65,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 66,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 67,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 68,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 69,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 70,
+   "status": "done",
+   "n_targets": 12797,
+   "n_searched": 12797
+  },
+  {
+   "sector": 71,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 72,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 73,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 74,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 75,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 76,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 77,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 78,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 79,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 80,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 81,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 82,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 83,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 84,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 85,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 86,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 87,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 88,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 89,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 90,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 91,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 92,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 93,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 94,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 95,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 96,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 97,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 98,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 99,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 100,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 101,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 102,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 103,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 104,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 105,
+   "status": "pending",
+   "n_targets": null,
+   "n_searched": 0
+  },
+  {
+   "sector": 106,
+   "status": "pending",
+   "n_targets": 12996,
+   "n_searched": 0
+  },
+  {
+   "sector": 107,
+   "status": "pending",
+   "n_targets": 12998,
+   "n_searched": 0
+  }
+ ],
  "deep_funnel": {
   "unmatched_passed": 34,
   "deep_vetted": 34,
@@ -30,6 +674,7 @@
   "by_flag": {
    "centroid_inconclusive": 0,
    "centroid_offset": 10,
+   "centroid_shift_minor": 12,
    "dip_off_target": 6,
    "known_eb": 0,
    "neighbour_could_mimic": 0,
@@ -47,7 +692,7 @@
    "last_error": null
   },
   "nasa_pscomppars.csv": {
-   "last_error": "2026-11-10T23:15:50Z: 503 Server Error: Service Unavailable for url: https://exoplanetarchive.ipac.caltech.edu/TAP/sync?query=select+pl_name,tic_id,pl_orbper,disc_facility+from+pscomppars+where+tic_id+is+not+null&format=cs"
+   "last_error": "2026-11-10T23:24:24Z: 503 Server Error: Service Unavailable for url: https://exoplanetarchive.ipac.caltech.edu/TAP/sync?query=select+pl_name,tic_id,pl_orbper,disc_facility+from+pscomppars+where+tic_id+is+not+null&format=cs"
   },
   "tess_ebs_prsa2022.csv": {
    "fetched_at": "2026-11-10T22:58:12Z",
@@ -125,6 +770,16 @@
    "sec_scan_sigma": 2.8,
    "rp_rjup": 1.16,
    "plot": "plots/s0070/TIC365003901_s0070.png",
+   "lc": "data/lc/s0070/TIC365003901_s0070.json",
+   "ra": 16.68835,
+   "dec": 3.40732,
+   "radius_rsun": 0.532,
+   "teff": 3579.0,
+   "t0_btjd": 3209.9585,
+   "sec_scan_phase": 0.347,
+   "diff_peak_dist_px": 0.28,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=365003901"
   },
   {
@@ -156,6 +811,16 @@
    "sec_scan_sigma": 2.3,
    "rp_rjup": 0.59,
    "plot": "plots/s0070/TIC242942524_s0070.png",
+   "lc": "data/lc/s0070/TIC242942524_s0070.json",
+   "ra": 58.43584,
+   "dec": 17.89888,
+   "radius_rsun": 0.97,
+   "teff": 5805.0,
+   "t0_btjd": 3209.59781,
+   "sec_scan_phase": 0.398,
+   "diff_peak_dist_px": 0.16,
+   "gaia_n_neighbours": 5,
+   "gaia_mimic_brightest_dm": 1.95,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=242942524"
   },
   {
@@ -187,6 +852,16 @@
    "sec_scan_sigma": 2.5,
    "rp_rjup": 1.01,
    "plot": "plots/s0070/TIC257558789_s0070.png",
+   "lc": "data/lc/s0070/TIC257558789_s0070.json",
+   "ra": 11.37015,
+   "dec": 2.99345,
+   "radius_rsun": 1.947,
+   "teff": 6641.0,
+   "t0_btjd": 3209.39643,
+   "sec_scan_phase": 0.584,
+   "diff_peak_dist_px": 0.12,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": 4.8,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=257558789"
   },
   {
@@ -218,6 +893,16 @@
    "sec_scan_sigma": 1.6,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC435880578_s0070.png",
+   "lc": "data/lc/s0070/TIC435880578_s0070.json",
+   "ra": 64.32526,
+   "dec": 13.80486,
+   "radius_rsun": null,
+   "teff": 5401.0,
+   "t0_btjd": 3209.66741,
+   "sec_scan_phase": 0.546,
+   "diff_peak_dist_px": 0.61,
+   "gaia_n_neighbours": 5,
+   "gaia_mimic_brightest_dm": 3.03,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=435880578"
   },
   {
@@ -249,6 +934,16 @@
    "sec_scan_sigma": 1.3,
    "rp_rjup": 0.16,
    "plot": "plots/s0070/TIC318707987_s0070.png",
+   "lc": "data/lc/s0070/TIC318707987_s0070.json",
+   "ra": 8.73968,
+   "dec": 4.38147,
+   "radius_rsun": 0.882,
+   "teff": 5284.0,
+   "t0_btjd": 3210.00514,
+   "sec_scan_phase": 0.275,
+   "diff_peak_dist_px": 0.35,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=318707987"
   },
   {
@@ -280,6 +975,16 @@
    "sec_scan_sigma": 1.1,
    "rp_rjup": 0.93,
    "plot": "plots/s0070/TIC22987989_s0070.png",
+   "lc": "data/lc/s0070/TIC22987989_s0070.json",
+   "ra": 60.0699,
+   "dec": 25.48,
+   "radius_rsun": 1.731,
+   "teff": 6281.0,
+   "t0_btjd": 3209.86131,
+   "sec_scan_phase": 0.746,
+   "diff_peak_dist_px": 1.19,
+   "gaia_n_neighbours": 4,
+   "gaia_mimic_brightest_dm": 1.88,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=22987989"
   },
   {
@@ -311,6 +1016,16 @@
    "sec_scan_sigma": 0.8,
    "rp_rjup": 0.35,
    "plot": "plots/s0070/TIC241486154_s0070.png",
+   "lc": "data/lc/s0070/TIC241486154_s0070.json",
+   "ra": 25.11238,
+   "dec": -1.60166,
+   "radius_rsun": 2.935,
+   "teff": 6708.0,
+   "t0_btjd": 3209.18418,
+   "sec_scan_phase": 0.849,
+   "diff_peak_dist_px": 0.76,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=241486154"
   },
   {
@@ -342,6 +1057,16 @@
    "sec_scan_sigma": 2.2,
    "rp_rjup": 0.32,
    "plot": "plots/s0070/TIC333606285_s0070.png",
+   "lc": "data/lc/s0070/TIC333606285_s0070.json",
+   "ra": 12.803,
+   "dec": -5.18343,
+   "radius_rsun": 2.408,
+   "teff": 6341.0,
+   "t0_btjd": 3210.30239,
+   "sec_scan_phase": 0.582,
+   "diff_peak_dist_px": 0.64,
+   "gaia_n_neighbours": 3,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=333606285"
   },
   {
@@ -373,6 +1098,16 @@
    "sec_scan_sigma": 2.9,
    "rp_rjup": 0.22,
    "plot": "plots/s0070/TIC333674399_s0070.png",
+   "lc": "data/lc/s0070/TIC333674399_s0070.json",
+   "ra": 49.30536,
+   "dec": 15.50215,
+   "radius_rsun": 1.001,
+   "teff": 5708.0,
+   "t0_btjd": 3214.78613,
+   "sec_scan_phase": 0.23,
+   "diff_peak_dist_px": 0.77,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": 4.91,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=333674399"
   },
   {
@@ -404,6 +1139,16 @@
    "sec_scan_sigma": 2.1,
    "rp_rjup": 0.25,
    "plot": "plots/s0070/TIC3837071_s0070.png",
+   "lc": "data/lc/s0070/TIC3837071_s0070.json",
+   "ra": 10.54805,
+   "dec": -6.24677,
+   "radius_rsun": 1.651,
+   "teff": 6481.0,
+   "t0_btjd": 3211.57444,
+   "sec_scan_phase": 0.56,
+   "diff_peak_dist_px": 0.26,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=3837071"
   },
   {
@@ -435,6 +1180,16 @@
    "sec_scan_sigma": 1.7,
    "rp_rjup": 0.38,
    "plot": "plots/s0070/TIC381110971_s0070.png",
+   "lc": "data/lc/s0070/TIC381110971_s0070.json",
+   "ra": 40.37518,
+   "dec": 9.38143,
+   "radius_rsun": 2.208,
+   "teff": 6718.0,
+   "t0_btjd": 3209.29029,
+   "sec_scan_phase": 0.15,
+   "diff_peak_dist_px": 0.75,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": 7.1,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=381110971"
   },
   {
@@ -466,6 +1221,16 @@
    "sec_scan_sigma": 2.7,
    "rp_rjup": 0.34,
    "plot": "plots/s0070/TIC365426860_s0070.png",
+   "lc": "data/lc/s0070/TIC365426860_s0070.json",
+   "ra": 48.38999,
+   "dec": 7.79875,
+   "radius_rsun": 2.485,
+   "teff": 7010.0,
+   "t0_btjd": 3209.80434,
+   "sec_scan_phase": 0.648,
+   "diff_peak_dist_px": 0.33,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=365426860"
   },
   {
@@ -497,6 +1262,16 @@
    "sec_scan_sigma": 2.5,
    "rp_rjup": 0.35,
    "plot": "plots/s0070/TIC435282167_s0070.png",
+   "lc": "data/lc/s0070/TIC435282167_s0070.json",
+   "ra": 52.68934,
+   "dec": 14.29615,
+   "radius_rsun": 2.0,
+   "teff": 5986.0,
+   "t0_btjd": 3214.11033,
+   "sec_scan_phase": 0.249,
+   "diff_peak_dist_px": 0.53,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=435282167"
   },
   {
@@ -528,6 +1303,16 @@
    "sec_scan_sigma": 2.0,
    "rp_rjup": 0.2,
    "plot": "plots/s0070/TIC422848910_s0070.png",
+   "lc": "data/lc/s0070/TIC422848910_s0070.json",
+   "ra": 37.18629,
+   "dec": 3.57278,
+   "radius_rsun": 1.794,
+   "teff": 6095.0,
+   "t0_btjd": 3209.41405,
+   "sec_scan_phase": 0.741,
+   "diff_peak_dist_px": 0.66,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=422848910"
   },
   {
@@ -559,6 +1344,16 @@
    "sec_scan_sigma": 2.6,
    "rp_rjup": 0.21,
    "plot": "plots/s0070/TIC435927648_s0070.png",
+   "lc": "data/lc/s0070/TIC435927648_s0070.json",
+   "ra": 65.85443,
+   "dec": 16.77727,
+   "radius_rsun": 2.029,
+   "teff": 7255.0,
+   "t0_btjd": 3212.25312,
+   "sec_scan_phase": 0.754,
+   "diff_peak_dist_px": 1.58,
+   "gaia_n_neighbours": 4,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=435927648"
   },
   {
@@ -590,6 +1385,16 @@
    "sec_scan_sigma": 2.0,
    "rp_rjup": 0.27,
    "plot": "plots/s0070/TIC372898369_s0070.png",
+   "lc": "data/lc/s0070/TIC372898369_s0070.json",
+   "ra": 65.74549,
+   "dec": 9.40318,
+   "radius_rsun": 2.94,
+   "teff": 5296.0,
+   "t0_btjd": 3209.83321,
+   "sec_scan_phase": 0.344,
+   "diff_peak_dist_px": 0.7,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": 8.47,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=372898369"
   },
   {
@@ -621,6 +1426,16 @@
    "sec_scan_sigma": 2.2,
    "rp_rjup": 0.4,
    "plot": "plots/s0070/TIC399619275_s0070.png",
+   "lc": "data/lc/s0070/TIC399619275_s0070.json",
+   "ra": 72.35674,
+   "dec": 11.49391,
+   "radius_rsun": 3.393,
+   "teff": 6010.0,
+   "t0_btjd": 3209.96258,
+   "sec_scan_phase": 0.15,
+   "diff_peak_dist_px": 0.47,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=399619275"
   },
   {
@@ -652,6 +1467,16 @@
    "sec_scan_sigma": 3.6,
    "rp_rjup": 0.38,
    "plot": "plots/s0070/TIC333625064_s0070.png",
+   "lc": "data/lc/s0070/TIC333625064_s0070.json",
+   "ra": 48.61378,
+   "dec": 13.07389,
+   "radius_rsun": 3.782,
+   "teff": 8495.0,
+   "t0_btjd": 3210.05667,
+   "sec_scan_phase": 0.15,
+   "diff_peak_dist_px": 0.32,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=333625064"
   },
   {
@@ -683,6 +1508,16 @@
    "sec_scan_sigma": 1.1,
    "rp_rjup": 0.31,
    "plot": "plots/s0070/TIC205783763_s0070.png",
+   "lc": "data/lc/s0070/TIC205783763_s0070.json",
+   "ra": 339.08214,
+   "dec": -5.60239,
+   "radius_rsun": 2.824,
+   "teff": 6621.0,
+   "t0_btjd": 3210.54139,
+   "sec_scan_phase": 0.246,
+   "diff_peak_dist_px": 0.81,
+   "gaia_n_neighbours": 3,
+   "gaia_mimic_brightest_dm": 8.55,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=205783763"
   },
   {
@@ -714,6 +1549,16 @@
    "sec_scan_sigma": 2.0,
    "rp_rjup": 0.09,
    "plot": "plots/s0070/TIC333606239_s0070.png",
+   "lc": "data/lc/s0070/TIC333606239_s0070.json",
+   "ra": 12.7952,
+   "dec": -5.03928,
+   "radius_rsun": 0.882,
+   "teff": 5668.0,
+   "t0_btjd": 3215.05839,
+   "sec_scan_phase": 0.395,
+   "diff_peak_dist_px": 0.89,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=333606239"
   },
   {
@@ -745,6 +1590,16 @@
    "sec_scan_sigma": 1.2,
    "rp_rjup": 0.35,
    "plot": "plots/s0070/TIC61140619_s0070.png",
+   "lc": "data/lc/s0070/TIC61140619_s0070.json",
+   "ra": 56.63048,
+   "dec": 22.30552,
+   "radius_rsun": 0.332,
+   "teff": 3100.0,
+   "t0_btjd": 3210.30999,
+   "sec_scan_phase": 0.294,
+   "diff_peak_dist_px": 0.05,
+   "gaia_n_neighbours": 5,
+   "gaia_mimic_brightest_dm": 1.19,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=61140619"
   },
   {
@@ -776,6 +1631,16 @@
    "sec_scan_sigma": 1.5,
    "rp_rjup": 0.3,
    "plot": "plots/s0070/TIC327952732_s0070.png",
+   "lc": "data/lc/s0070/TIC327952732_s0070.json",
+   "ra": 359.06427,
+   "dec": -13.51121,
+   "radius_rsun": 2.504,
+   "teff": 6673.0,
+   "t0_btjd": 3208.99725,
+   "sec_scan_phase": 0.84,
+   "diff_peak_dist_px": 1.17,
+   "gaia_n_neighbours": 4,
+   "gaia_mimic_brightest_dm": 6.89,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=327952732"
   },
   {
@@ -807,6 +1672,16 @@
    "sec_scan_sigma": 2.4,
    "rp_rjup": 0.27,
    "plot": "plots/s0070/TIC88847607_s0070.png",
+   "lc": "data/lc/s0070/TIC88847607_s0070.json",
+   "ra": 27.33753,
+   "dec": 12.16797,
+   "radius_rsun": 1.773,
+   "teff": 5547.0,
+   "t0_btjd": 3212.52056,
+   "sec_scan_phase": 0.559,
+   "diff_peak_dist_px": 1.0,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": 7.22,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=88847607"
   },
   {
@@ -838,6 +1713,16 @@
    "sec_scan_sigma": 2.0,
    "rp_rjup": 1.02,
    "plot": "plots/s0070/TIC337025682_s0070.png",
+   "lc": "data/lc/s0070/TIC337025682_s0070.json",
+   "ra": 32.24909,
+   "dec": 8.05731,
+   "radius_rsun": 0.811,
+   "teff": 4794.0,
+   "t0_btjd": 3211.70364,
+   "sec_scan_phase": 0.789,
+   "diff_peak_dist_px": 0.46,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=337025682"
   },
   {
@@ -869,6 +1754,16 @@
    "sec_scan_sigma": 3.2,
    "rp_rjup": 0.79,
    "plot": "plots/s0070/TIC126982221_s0070.png",
+   "lc": "data/lc/s0070/TIC126982221_s0070.json",
+   "ra": 24.29943,
+   "dec": 16.01908,
+   "radius_rsun": 0.427,
+   "teff": 3333.0,
+   "t0_btjd": 3209.77432,
+   "sec_scan_phase": 0.246,
+   "diff_peak_dist_px": 0.2,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": 1.91,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=126982221"
   },
   {
@@ -900,6 +1795,16 @@
    "sec_scan_sigma": 2.8,
    "rp_rjup": 1.01,
    "plot": "plots/s0070/TIC303502327_s0070.png",
+   "lc": "data/lc/s0070/TIC303502327_s0070.json",
+   "ra": 51.02913,
+   "dec": 12.43605,
+   "radius_rsun": 0.915,
+   "teff": 5377.0,
+   "t0_btjd": 3212.07238,
+   "sec_scan_phase": 0.246,
+   "diff_peak_dist_px": 0.17,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": 1.7,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=303502327"
   },
   {
@@ -931,6 +1836,16 @@
    "sec_scan_sigma": 1.6,
    "rp_rjup": 1.25,
    "plot": "plots/s0070/TIC47094691_s0070.png",
+   "lc": "data/lc/s0070/TIC47094691_s0070.json",
+   "ra": 23.44273,
+   "dec": 17.82663,
+   "radius_rsun": 1.146,
+   "teff": 5263.0,
+   "t0_btjd": 3209.40031,
+   "sec_scan_phase": 0.494,
+   "diff_peak_dist_px": 0.3,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=47094691"
   },
   {
@@ -962,6 +1877,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC171160885_s0070.png",
+   "lc": "data/lc/s0070/TIC171160885_s0070.json",
+   "ra": 67.9986,
+   "dec": 32.86943,
+   "radius_rsun": 0.892,
+   "teff": 4571.0,
+   "t0_btjd": 3211.30301,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=171160885"
   },
   {
@@ -993,6 +1918,16 @@
    "sec_scan_sigma": 2.7,
    "rp_rjup": 0.31,
    "plot": "plots/s0070/TIC251039147_s0070.png",
+   "lc": "data/lc/s0070/TIC251039147_s0070.json",
+   "ra": 340.59153,
+   "dec": -6.87113,
+   "radius_rsun": 1.074,
+   "teff": 5975.0,
+   "t0_btjd": 3210.41542,
+   "sec_scan_phase": 0.527,
+   "diff_peak_dist_px": 0.12,
+   "gaia_n_neighbours": 3,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=251039147"
   },
   {
@@ -1024,6 +1959,16 @@
    "sec_scan_sigma": 1.8,
    "rp_rjup": 1.16,
    "plot": "plots/s0070/TIC58825110_s0070.png",
+   "lc": "data/lc/s0070/TIC58825110_s0070.json",
+   "ra": 12.99078,
+   "dec": 13.07839,
+   "radius_rsun": 2.314,
+   "teff": 6418.0,
+   "t0_btjd": 3214.79152,
+   "sec_scan_phase": 0.417,
+   "diff_peak_dist_px": 0.37,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": 6.08,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=58825110"
   },
   {
@@ -1055,6 +2000,16 @@
    "sec_scan_sigma": 2.9,
    "rp_rjup": 1.26,
    "plot": "plots/s0070/TIC26017005_s0070.png",
+   "lc": "data/lc/s0070/TIC26017005_s0070.json",
+   "ra": 52.34198,
+   "dec": 22.29941,
+   "radius_rsun": 1.064,
+   "teff": 5198.0,
+   "t0_btjd": 3211.43415,
+   "sec_scan_phase": 0.531,
+   "diff_peak_dist_px": 1.35,
+   "gaia_n_neighbours": 5,
+   "gaia_mimic_brightest_dm": -0.44,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=26017005"
   },
   {
@@ -1086,6 +2041,16 @@
    "sec_scan_sigma": 2.8,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC422486295_s0070.png",
+   "lc": "data/lc/s0070/TIC422486295_s0070.json",
+   "ra": 351.46765,
+   "dec": 4.45494,
+   "radius_rsun": null,
+   "teff": 5463.0,
+   "t0_btjd": 3213.456,
+   "sec_scan_phase": 0.193,
+   "diff_peak_dist_px": 0.47,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": 0.17,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=422486295"
   },
   {
@@ -1117,6 +2082,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC4619242_s0070.png",
+   "lc": "data/lc/s0070/TIC4619242_s0070.json",
+   "ra": 349.28866,
+   "dec": -9.43508,
+   "radius_rsun": 0.583,
+   "teff": 3504.0,
+   "t0_btjd": 3211.83653,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=4619242"
   },
   {
@@ -1148,6 +2123,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC4464022_s0070.png",
+   "lc": "data/lc/s0070/TIC4464022_s0070.json",
+   "ra": 346.5926,
+   "dec": -9.20151,
+   "radius_rsun": 1.047,
+   "teff": 4781.0,
+   "t0_btjd": 3210.5536,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=4464022"
   },
   {
@@ -1179,6 +2164,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC422653398_s0070.png",
+   "lc": "data/lc/s0070/TIC422653398_s0070.json",
+   "ra": 29.00129,
+   "dec": 0.1799,
+   "radius_rsun": 1.667,
+   "teff": 5685.0,
+   "t0_btjd": 3211.29677,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=422653398"
   },
   {
@@ -1210,6 +2205,16 @@
    "sec_scan_sigma": 2.7,
    "rp_rjup": 1.3,
    "plot": "plots/s0070/TIC293457754_s0070.png",
+   "lc": "data/lc/s0070/TIC293457754_s0070.json",
+   "ra": 26.79325,
+   "dec": 3.13303,
+   "radius_rsun": 1.032,
+   "teff": 5887.0,
+   "t0_btjd": 3210.79809,
+   "sec_scan_phase": 0.705,
+   "diff_peak_dist_px": 0.25,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=293457754"
   },
   {
@@ -1241,6 +2246,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC125735470_s0070.png",
+   "lc": "data/lc/s0070/TIC125735470_s0070.json",
+   "ra": 56.66029,
+   "dec": 27.47161,
+   "radius_rsun": null,
+   "teff": 5718.0,
+   "t0_btjd": 3209.67586,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=125735470"
   },
   {
@@ -1272,6 +2287,16 @@
    "sec_scan_sigma": 2.4,
    "rp_rjup": 1.03,
    "plot": "plots/s0070/TIC376981340_s0070.png",
+   "lc": "data/lc/s0070/TIC376981340_s0070.json",
+   "ra": 19.6099,
+   "dec": 6.81688,
+   "radius_rsun": 0.77,
+   "teff": 4492.0,
+   "t0_btjd": 3212.83498,
+   "sec_scan_phase": 0.577,
+   "diff_peak_dist_px": 0.3,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": 2.13,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=376981340"
   },
   {
@@ -1303,6 +2328,16 @@
    "sec_scan_sigma": 2.7,
    "rp_rjup": 0.84,
    "plot": "plots/s0070/TIC26054627_s0070.png",
+   "lc": "data/lc/s0070/TIC26054627_s0070.json",
+   "ra": 52.7124,
+   "dec": 20.87971,
+   "radius_rsun": 0.586,
+   "teff": 3640.0,
+   "t0_btjd": 3211.94171,
+   "sec_scan_phase": 0.574,
+   "diff_peak_dist_px": 0.36,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": 3.23,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=26054627"
   },
   {
@@ -1334,6 +2369,16 @@
    "sec_scan_sigma": 2.5,
    "rp_rjup": 0.25,
    "plot": "plots/s0070/TIC212957629_s0070.png",
+   "lc": "data/lc/s0070/TIC212957629_s0070.json",
+   "ra": 8.80508,
+   "dec": -3.37064,
+   "radius_rsun": 0.197,
+   "teff": 3163.0,
+   "t0_btjd": 3211.27744,
+   "sec_scan_phase": 0.363,
+   "diff_peak_dist_px": 0.35,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=212957629"
   },
   {
@@ -1365,6 +2410,16 @@
    "sec_scan_sigma": 1.9,
    "rp_rjup": 1.15,
    "plot": "plots/s0070/TIC26018819_s0070.png",
+   "lc": "data/lc/s0070/TIC26018819_s0070.json",
+   "ra": 52.52303,
+   "dec": 20.80784,
+   "radius_rsun": 1.177,
+   "teff": 6441.0,
+   "t0_btjd": 3212.39928,
+   "sec_scan_phase": 0.7,
+   "diff_peak_dist_px": 0.26,
+   "gaia_n_neighbours": 4,
+   "gaia_mimic_brightest_dm": 3.3,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=26018819"
   },
   {
@@ -1396,6 +2451,16 @@
    "sec_scan_sigma": 3.4,
    "rp_rjup": 1.7,
    "plot": "plots/s0070/TIC58858008_s0070.png",
+   "lc": "data/lc/s0070/TIC58858008_s0070.json",
+   "ra": 20.63684,
+   "dec": 13.35221,
+   "radius_rsun": 1.419,
+   "teff": 5752.0,
+   "t0_btjd": 3209.3451,
+   "sec_scan_phase": 0.438,
+   "diff_peak_dist_px": 0.84,
+   "gaia_n_neighbours": 3,
+   "gaia_mimic_brightest_dm": 3.15,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=58858008"
   },
   {
@@ -1427,6 +2492,16 @@
    "sec_scan_sigma": 1.6,
    "rp_rjup": 1.12,
    "plot": "plots/s0070/TIC327952677_s0070.png",
+   "lc": "data/lc/s0070/TIC327952677_s0070.json",
+   "ra": 359.09178,
+   "dec": -13.27159,
+   "radius_rsun": 1.271,
+   "teff": 5864.0,
+   "t0_btjd": 3211.13264,
+   "sec_scan_phase": 0.701,
+   "diff_peak_dist_px": 0.11,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=327952677"
   },
   {
@@ -1458,6 +2533,16 @@
    "sec_scan_sigma": 2.4,
    "rp_rjup": 0.97,
    "plot": "plots/s0070/TIC408643099_s0070.png",
+   "lc": "data/lc/s0070/TIC408643099_s0070.json",
+   "ra": 35.91114,
+   "dec": 15.48303,
+   "radius_rsun": 0.75,
+   "teff": 4738.0,
+   "t0_btjd": 3212.3588,
+   "sec_scan_phase": 0.247,
+   "diff_peak_dist_px": 0.16,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=408643099"
   },
   {
@@ -1489,6 +2574,16 @@
    "sec_scan_sigma": 2.0,
    "rp_rjup": 0.24,
    "plot": "plots/s0070/TIC467651916_s0070.png",
+   "lc": "data/lc/s0070/TIC467651916_s0070.json",
+   "ra": 60.60091,
+   "dec": 31.33066,
+   "radius_rsun": 1.157,
+   "teff": 6012.0,
+   "t0_btjd": 3209.29162,
+   "sec_scan_phase": 0.408,
+   "diff_peak_dist_px": 0.59,
+   "gaia_n_neighbours": 7,
+   "gaia_mimic_brightest_dm": 8.24,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=467651916"
   },
   {
@@ -1520,6 +2615,16 @@
    "sec_scan_sigma": 2.3,
    "rp_rjup": 1.26,
    "plot": "plots/s0070/TIC408743161_s0070.png",
+   "lc": "data/lc/s0070/TIC408743161_s0070.json",
+   "ra": 36.58172,
+   "dec": 15.89045,
+   "radius_rsun": 1.371,
+   "teff": 5921.0,
+   "t0_btjd": 3210.50274,
+   "sec_scan_phase": 0.262,
+   "diff_peak_dist_px": 0.27,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": 2.76,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=408743161"
   },
   {
@@ -1551,6 +2656,16 @@
    "sec_scan_sigma": 2.8,
    "rp_rjup": 0.2,
    "plot": "plots/s0070/TIC58542531_s0070.png",
+   "lc": "data/lc/s0070/TIC58542531_s0070.json",
+   "ra": 65.97973,
+   "dec": 27.82255,
+   "radius_rsun": 0.695,
+   "teff": 4402.0,
+   "t0_btjd": 3210.64466,
+   "sec_scan_phase": 0.422,
+   "diff_peak_dist_px": 0.28,
+   "gaia_n_neighbours": 4,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=58542531"
   },
   {
@@ -1582,6 +2697,16 @@
    "sec_scan_sigma": 3.0,
    "rp_rjup": 1.08,
    "plot": "plots/s0070/TIC250111245_s0070.png",
+   "lc": "data/lc/s0070/TIC250111245_s0070.json",
+   "ra": 355.82875,
+   "dec": -2.0451,
+   "radius_rsun": 0.502,
+   "teff": 3692.0,
+   "t0_btjd": 3210.78522,
+   "sec_scan_phase": 0.514,
+   "diff_peak_dist_px": 0.27,
+   "gaia_n_neighbours": 3,
+   "gaia_mimic_brightest_dm": 2.92,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=250111245"
   },
   {
@@ -1613,6 +2738,16 @@
    "sec_scan_sigma": 2.4,
    "rp_rjup": 0.21,
    "plot": "plots/s0070/TIC468880077_s0070.png",
+   "lc": "data/lc/s0070/TIC468880077_s0070.json",
+   "ra": 56.50425,
+   "dec": 9.99038,
+   "radius_rsun": 0.797,
+   "teff": 5211.0,
+   "t0_btjd": 3213.81408,
+   "sec_scan_phase": 0.378,
+   "diff_peak_dist_px": 0.29,
+   "gaia_n_neighbours": 3,
+   "gaia_mimic_brightest_dm": 2.19,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=468880077"
   },
   {
@@ -1644,6 +2779,16 @@
    "sec_scan_sigma": 3.2,
    "rp_rjup": 0.23,
    "plot": "plots/s0070/TIC407966340_s0070.png",
+   "lc": "data/lc/s0070/TIC407966340_s0070.json",
+   "ra": 60.74795,
+   "dec": 9.20848,
+   "radius_rsun": 1.427,
+   "teff": 6338.0,
+   "t0_btjd": 3211.94772,
+   "sec_scan_phase": 0.765,
+   "diff_peak_dist_px": 0.56,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=407966340"
   },
   {
@@ -1675,6 +2820,16 @@
    "sec_scan_sigma": 2.4,
    "rp_rjup": 0.29,
    "plot": "plots/s0070/TIC246965431_s0070.png",
+   "lc": "data/lc/s0070/TIC246965431_s0070.json",
+   "ra": 35.21336,
+   "dec": 23.52081,
+   "radius_rsun": 0.485,
+   "teff": 3580.0,
+   "t0_btjd": 3210.33244,
+   "sec_scan_phase": 0.844,
+   "diff_peak_dist_px": 0.02,
+   "gaia_n_neighbours": 4,
+   "gaia_mimic_brightest_dm": 1.46,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=246965431"
   },
   {
@@ -1706,6 +2861,16 @@
    "sec_scan_sigma": 2.3,
    "rp_rjup": 1.12,
    "plot": "plots/s0070/TIC56399553_s0070.png",
+   "lc": "data/lc/s0070/TIC56399553_s0070.json",
+   "ra": 62.67034,
+   "dec": 24.40175,
+   "radius_rsun": 0.817,
+   "teff": 5387.0,
+   "t0_btjd": 3212.45967,
+   "sec_scan_phase": 0.322,
+   "diff_peak_dist_px": 0.08,
+   "gaia_n_neighbours": 6,
+   "gaia_mimic_brightest_dm": 1.81,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=56399553"
   },
   {
@@ -1737,6 +2902,16 @@
    "sec_scan_sigma": 2.3,
    "rp_rjup": 0.6,
    "plot": "plots/s0070/TIC29017001_s0070.png",
+   "lc": "data/lc/s0070/TIC29017001_s0070.json",
+   "ra": 50.7871,
+   "dec": 24.69007,
+   "radius_rsun": 1.758,
+   "teff": 6011.0,
+   "t0_btjd": 3210.51431,
+   "sec_scan_phase": 0.547,
+   "diff_peak_dist_px": 0.93,
+   "gaia_n_neighbours": 3,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=29017001"
   },
   {
@@ -1768,6 +2943,16 @@
    "sec_scan_sigma": 3.0,
    "rp_rjup": 0.79,
    "plot": "plots/s0070/TIC311086350_s0070.png",
+   "lc": "data/lc/s0070/TIC311086350_s0070.json",
+   "ra": 352.2328,
+   "dec": -14.21004,
+   "radius_rsun": 0.648,
+   "teff": 3913.0,
+   "t0_btjd": 3209.33837,
+   "sec_scan_phase": 0.231,
+   "diff_peak_dist_px": 0.23,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=311086350"
   },
   {
@@ -1799,6 +2984,16 @@
    "sec_scan_sigma": 2.3,
    "rp_rjup": 1.45,
    "plot": "plots/s0070/TIC94609570_s0070.png",
+   "lc": "data/lc/s0070/TIC94609570_s0070.json",
+   "ra": 59.64362,
+   "dec": 30.86638,
+   "radius_rsun": 1.503,
+   "teff": 6230.0,
+   "t0_btjd": 3209.69132,
+   "sec_scan_phase": 0.272,
+   "diff_peak_dist_px": 0.24,
+   "gaia_n_neighbours": 12,
+   "gaia_mimic_brightest_dm": 4.03,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=94609570"
   },
   {
@@ -1830,6 +3025,16 @@
    "sec_scan_sigma": 2.0,
    "rp_rjup": 0.59,
    "plot": "plots/s0070/TIC270380593_s0070.png",
+   "lc": "data/lc/s0070/TIC270380593_s0070.json",
+   "ra": 32.78177,
+   "dec": 2.41802,
+   "radius_rsun": 0.847,
+   "teff": 4936.0,
+   "t0_btjd": 3209.46105,
+   "sec_scan_phase": 0.382,
+   "diff_peak_dist_px": 0.26,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=270380593"
   },
   {
@@ -1861,6 +3066,16 @@
    "sec_scan_sigma": 1.8,
    "rp_rjup": 1.17,
    "plot": "plots/s0070/TIC34781378_s0070.png",
+   "lc": "data/lc/s0070/TIC34781378_s0070.json",
+   "ra": 46.33069,
+   "dec": 28.18583,
+   "radius_rsun": 1.407,
+   "teff": 5850.0,
+   "t0_btjd": 3211.33057,
+   "sec_scan_phase": 0.334,
+   "diff_peak_dist_px": 0.78,
+   "gaia_n_neighbours": 4,
+   "gaia_mimic_brightest_dm": 5.3,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=34781378"
   },
   {
@@ -1892,6 +3107,16 @@
    "sec_scan_sigma": 2.4,
    "rp_rjup": 1.48,
    "plot": "plots/s0070/TIC422457210_s0070.png",
+   "lc": "data/lc/s0070/TIC422457210_s0070.json",
+   "ra": 351.13358,
+   "dec": 4.60474,
+   "radius_rsun": 1.003,
+   "teff": 5472.0,
+   "t0_btjd": 3212.33199,
+   "sec_scan_phase": 0.817,
+   "diff_peak_dist_px": 0.29,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=422457210"
   },
   {
@@ -1923,6 +3148,16 @@
    "sec_scan_sigma": 1.5,
    "rp_rjup": 1.22,
    "plot": "plots/s0070/TIC262662119_s0070.png",
+   "lc": "data/lc/s0070/TIC262662119_s0070.json",
+   "ra": 349.06347,
+   "dec": 0.30673,
+   "radius_rsun": 1.197,
+   "teff": 5846.0,
+   "t0_btjd": 3211.74787,
+   "sec_scan_phase": 0.348,
+   "diff_peak_dist_px": 0.24,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=262662119"
   },
   {
@@ -1954,6 +3189,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC349582831_s0070.png",
+   "lc": "data/lc/s0070/TIC349582831_s0070.json",
+   "ra": 66.93498,
+   "dec": 33.08633,
+   "radius_rsun": 1.323,
+   "teff": 6028.0,
+   "t0_btjd": 3212.05359,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=349582831"
   },
   {
@@ -1985,6 +3230,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC408824640_s0070.png",
+   "lc": "data/lc/s0070/TIC408824640_s0070.json",
+   "ra": 39.06499,
+   "dec": 13.50423,
+   "radius_rsun": 1.31,
+   "teff": 5981.0,
+   "t0_btjd": 3217.00592,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=408824640"
   },
   {
@@ -2016,6 +3271,16 @@
    "sec_scan_sigma": 2.5,
    "rp_rjup": 1.06,
    "plot": "plots/s0070/TIC347469901_s0070.png",
+   "lc": "data/lc/s0070/TIC347469901_s0070.json",
+   "ra": 28.72152,
+   "dec": 8.85769,
+   "radius_rsun": 1.038,
+   "teff": 5443.0,
+   "t0_btjd": 3212.20838,
+   "sec_scan_phase": 0.555,
+   "diff_peak_dist_px": 0.83,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": 0.89,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=347469901"
   },
   {
@@ -2047,6 +3312,16 @@
    "sec_scan_sigma": 3.8,
    "rp_rjup": 1.0,
    "plot": "plots/s0070/TIC245793479_s0070.png",
+   "lc": "data/lc/s0070/TIC245793479_s0070.json",
+   "ra": 67.15779,
+   "dec": 14.53332,
+   "radius_rsun": 1.144,
+   "teff": 5851.0,
+   "t0_btjd": 3211.6217,
+   "sec_scan_phase": 0.842,
+   "diff_peak_dist_px": 0.14,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=245793479"
   },
   {
@@ -2078,6 +3353,16 @@
    "sec_scan_sigma": 1.8,
    "rp_rjup": 1.12,
    "plot": "plots/s0070/TIC36592530_s0070.png",
+   "lc": "data/lc/s0070/TIC36592530_s0070.json",
+   "ra": 342.3857,
+   "dec": -10.67554,
+   "radius_rsun": 1.276,
+   "teff": 6089.0,
+   "t0_btjd": 3209.59387,
+   "sec_scan_phase": 0.496,
+   "diff_peak_dist_px": 0.5,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=36592530"
   },
   {
@@ -2109,6 +3394,16 @@
    "sec_scan_sigma": 1.9,
    "rp_rjup": 1.42,
    "plot": "plots/s0070/TIC336691874_s0070.png",
+   "lc": "data/lc/s0070/TIC336691874_s0070.json",
+   "ra": 6.52938,
+   "dec": 14.3364,
+   "radius_rsun": 1.427,
+   "teff": 5790.0,
+   "t0_btjd": 3214.24501,
+   "sec_scan_phase": 0.642,
+   "diff_peak_dist_px": 0.82,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=336691874"
   },
   {
@@ -2140,6 +3435,16 @@
    "sec_scan_sigma": 3.2,
    "rp_rjup": 0.34,
    "plot": "plots/s0070/TIC369477998_s0070.png",
+   "lc": "data/lc/s0070/TIC369477998_s0070.json",
+   "ra": 15.88637,
+   "dec": 9.914,
+   "radius_rsun": 0.623,
+   "teff": 4031.0,
+   "t0_btjd": 3211.49533,
+   "sec_scan_phase": 0.279,
+   "diff_peak_dist_px": 0.31,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": 5.79,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=369477998"
   },
   {
@@ -2171,6 +3476,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC402319411_s0070.png",
+   "lc": "data/lc/s0070/TIC402319411_s0070.json",
+   "ra": 353.54001,
+   "dec": -14.85995,
+   "radius_rsun": 0.948,
+   "teff": 5391.0,
+   "t0_btjd": 3211.16836,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=402319411"
   },
   {
@@ -2202,6 +3517,16 @@
    "sec_scan_sigma": 2.6,
    "rp_rjup": 1.1,
    "plot": "plots/s0070/TIC422423972_s0070.png",
+   "lc": "data/lc/s0070/TIC422423972_s0070.json",
+   "ra": 339.80223,
+   "dec": 1.6883,
+   "radius_rsun": 1.527,
+   "teff": 6312.0,
+   "t0_btjd": 3211.30942,
+   "sec_scan_phase": 0.707,
+   "diff_peak_dist_px": 0.36,
+   "gaia_n_neighbours": 4,
+   "gaia_mimic_brightest_dm": 2.51,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=422423972"
   },
   {
@@ -2233,6 +3558,16 @@
    "sec_scan_sigma": 2.7,
    "rp_rjup": 0.88,
    "plot": "plots/s0070/TIC301035553_s0070.png",
+   "lc": "data/lc/s0070/TIC301035553_s0070.json",
+   "ra": 3.03513,
+   "dec": -4.61299,
+   "radius_rsun": 0.901,
+   "teff": 5735.0,
+   "t0_btjd": 3211.20927,
+   "sec_scan_phase": 0.226,
+   "diff_peak_dist_px": 0.71,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": 3.82,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=301035553"
   },
   {
@@ -2264,6 +3599,16 @@
    "sec_scan_sigma": 2.6,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC387401076_s0070.png",
+   "lc": "data/lc/s0070/TIC387401076_s0070.json",
+   "ra": 41.50666,
+   "dec": 6.46178,
+   "radius_rsun": null,
+   "teff": 6254.0,
+   "t0_btjd": 3212.57436,
+   "sec_scan_phase": 0.647,
+   "diff_peak_dist_px": 0.77,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": 0.78,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=387401076"
   },
   {
@@ -2295,6 +3640,16 @@
    "sec_scan_sigma": 1.9,
    "rp_rjup": 1.58,
    "plot": "plots/s0070/TIC467783290_s0070.png",
+   "lc": "data/lc/s0070/TIC467783290_s0070.json",
+   "ra": 62.6186,
+   "dec": 32.30679,
+   "radius_rsun": 1.954,
+   "teff": 6630.0,
+   "t0_btjd": 3211.41745,
+   "sec_scan_phase": 0.649,
+   "diff_peak_dist_px": 0.06,
+   "gaia_n_neighbours": 8,
+   "gaia_mimic_brightest_dm": 3.4,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=467783290"
   },
   {
@@ -2326,6 +3681,16 @@
    "sec_scan_sigma": 1.9,
    "rp_rjup": 1.52,
    "plot": "plots/s0070/TIC18373995_s0070.png",
+   "lc": "data/lc/s0070/TIC18373995_s0070.json",
+   "ra": 71.02261,
+   "dec": 22.56766,
+   "radius_rsun": 1.22,
+   "teff": 5752.0,
+   "t0_btjd": 3210.36431,
+   "sec_scan_phase": 0.824,
+   "diff_peak_dist_px": 0.23,
+   "gaia_n_neighbours": 8,
+   "gaia_mimic_brightest_dm": 0.09,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=18373995"
   },
   {
@@ -2357,6 +3722,16 @@
    "sec_scan_sigma": 2.0,
    "rp_rjup": 1.12,
    "plot": "plots/s0070/TIC33397739_s0070.png",
+   "lc": "data/lc/s0070/TIC33397739_s0070.json",
+   "ra": 344.2224,
+   "dec": -8.11972,
+   "radius_rsun": 0.586,
+   "teff": 3767.0,
+   "t0_btjd": 3209.4522,
+   "sec_scan_phase": 0.403,
+   "diff_peak_dist_px": 0.24,
+   "gaia_n_neighbours": 4,
+   "gaia_mimic_brightest_dm": 2.59,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=33397739"
   },
   {
@@ -2388,6 +3763,16 @@
    "sec_scan_sigma": 1.7,
    "rp_rjup": 1.17,
    "plot": "plots/s0070/TIC302202317_s0070.png",
+   "lc": "data/lc/s0070/TIC302202317_s0070.json",
+   "ra": 9.33986,
+   "dec": 13.85914,
+   "radius_rsun": 1.055,
+   "teff": 6143.0,
+   "t0_btjd": 3209.39758,
+   "sec_scan_phase": 0.283,
+   "diff_peak_dist_px": 0.24,
+   "gaia_n_neighbours": 3,
+   "gaia_mimic_brightest_dm": 2.18,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=302202317"
   },
   {
@@ -2419,6 +3804,16 @@
    "sec_scan_sigma": 2.8,
    "rp_rjup": 1.18,
    "plot": "plots/s0070/TIC35022727_s0070.png",
+   "lc": "data/lc/s0070/TIC35022727_s0070.json",
+   "ra": 48.43541,
+   "dec": 25.19741,
+   "radius_rsun": 0.908,
+   "teff": 5610.0,
+   "t0_btjd": 3210.4338,
+   "sec_scan_phase": 0.409,
+   "diff_peak_dist_px": 0.87,
+   "gaia_n_neighbours": 3,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=35022727"
   },
   {
@@ -2450,6 +3845,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC150006846_s0070.png",
+   "lc": "data/lc/s0070/TIC150006846_s0070.json",
+   "ra": 69.8411,
+   "dec": 27.28813,
+   "radius_rsun": 1.055,
+   "teff": 5504.0,
+   "t0_btjd": 3212.06696,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=150006846"
   },
   {
@@ -2481,6 +3886,16 @@
    "sec_scan_sigma": 1.6,
    "rp_rjup": 1.64,
    "plot": "plots/s0070/TIC176220787_s0070.png",
+   "lc": "data/lc/s0070/TIC176220787_s0070.json",
+   "ra": 0.32575,
+   "dec": -8.92629,
+   "radius_rsun": 2.39,
+   "teff": 6067.0,
+   "t0_btjd": 3213.83124,
+   "sec_scan_phase": 0.164,
+   "diff_peak_dist_px": 0.79,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=176220787"
   },
   {
@@ -2512,6 +3927,16 @@
    "sec_scan_sigma": 1.5,
    "rp_rjup": 1.25,
    "plot": "plots/s0070/TIC369474541_s0070.png",
+   "lc": "data/lc/s0070/TIC369474541_s0070.json",
+   "ra": 15.45308,
+   "dec": 9.79858,
+   "radius_rsun": 1.727,
+   "teff": 6281.0,
+   "t0_btjd": 3210.09535,
+   "sec_scan_phase": 0.421,
+   "diff_peak_dist_px": 0.7,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=369474541"
   },
   {
@@ -2543,6 +3968,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC435336785_s0070.png",
+   "lc": "data/lc/s0070/TIC435336785_s0070.json",
+   "ra": 55.1408,
+   "dec": 13.55277,
+   "radius_rsun": null,
+   "teff": 5047.0,
+   "t0_btjd": 3212.24815,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=435336785"
   },
   {
@@ -2574,6 +4009,16 @@
    "sec_scan_sigma": 1.2,
    "rp_rjup": 1.1,
    "plot": "plots/s0070/TIC268125683_s0070.png",
+   "lc": "data/lc/s0070/TIC268125683_s0070.json",
+   "ra": 32.62249,
+   "dec": 2.64334,
+   "radius_rsun": 2.186,
+   "teff": 7955.0,
+   "t0_btjd": 3209.27384,
+   "sec_scan_phase": 0.205,
+   "diff_peak_dist_px": 0.35,
+   "gaia_n_neighbours": 4,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=268125683"
   },
   {
@@ -2605,6 +4050,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC22843856_s0070.png",
+   "lc": "data/lc/s0070/TIC22843856_s0070.json",
+   "ra": 39.0065,
+   "dec": 25.58853,
+   "radius_rsun": 1.236,
+   "teff": 6019.0,
+   "t0_btjd": 3209.71032,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=22843856"
   },
   {
@@ -2636,6 +4091,16 @@
    "sec_scan_sigma": 2.2,
    "rp_rjup": 0.11,
    "plot": "plots/s0070/TIC354173595_s0070.png",
+   "lc": "data/lc/s0070/TIC354173595_s0070.json",
+   "ra": 349.76537,
+   "dec": 7.91615,
+   "radius_rsun": 0.372,
+   "teff": 3487.0,
+   "t0_btjd": 3209.38204,
+   "sec_scan_phase": 0.555,
+   "diff_peak_dist_px": 0.28,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=354173595"
   },
   {
@@ -2667,6 +4132,16 @@
    "sec_scan_sigma": 2.3,
    "rp_rjup": 1.28,
    "plot": "plots/s0070/TIC427740976_s0070.png",
+   "lc": "data/lc/s0070/TIC427740976_s0070.json",
+   "ra": 59.6472,
+   "dec": 25.38861,
+   "radius_rsun": 1.507,
+   "teff": 7418.0,
+   "t0_btjd": 3211.38107,
+   "sec_scan_phase": 0.593,
+   "diff_peak_dist_px": 0.25,
+   "gaia_n_neighbours": 9,
+   "gaia_mimic_brightest_dm": 2.24,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=427740976"
   },
   {
@@ -2698,6 +4173,16 @@
    "sec_scan_sigma": 2.6,
    "rp_rjup": 0.23,
    "plot": "plots/s0070/TIC118709972_s0070.png",
+   "lc": "data/lc/s0070/TIC118709972_s0070.json",
+   "ra": 69.98793,
+   "dec": 23.13788,
+   "radius_rsun": 0.752,
+   "teff": 3935.0,
+   "t0_btjd": 3211.23501,
+   "sec_scan_phase": 0.68,
+   "diff_peak_dist_px": 0.05,
+   "gaia_n_neighbours": 6,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=118709972"
   },
   {
@@ -2729,6 +4214,16 @@
    "sec_scan_sigma": 2.3,
    "rp_rjup": 1.27,
    "plot": "plots/s0070/TIC56457123_s0070.png",
+   "lc": "data/lc/s0070/TIC56457123_s0070.json",
+   "ra": 62.89364,
+   "dec": 28.17863,
+   "radius_rsun": 1.6,
+   "teff": 7977.0,
+   "t0_btjd": 3210.11063,
+   "sec_scan_phase": 0.482,
+   "diff_peak_dist_px": 0.43,
+   "gaia_n_neighbours": 3,
+   "gaia_mimic_brightest_dm": 3.69,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=56457123"
   },
   {
@@ -2760,6 +4255,16 @@
    "sec_scan_sigma": 2.3,
    "rp_rjup": 0.16,
    "plot": "plots/s0070/TIC384888319_s0070.png",
+   "lc": "data/lc/s0070/TIC384888319_s0070.json",
+   "ra": 16.96763,
+   "dec": 12.88105,
+   "radius_rsun": 0.493,
+   "teff": 3611.0,
+   "t0_btjd": 3212.85274,
+   "sec_scan_phase": 0.274,
+   "diff_peak_dist_px": 0.43,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": 6.76,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=384888319"
   },
   {
@@ -2791,6 +4296,16 @@
    "sec_scan_sigma": 2.6,
    "rp_rjup": 0.79,
    "plot": "plots/s0070/TIC61145589_s0070.png",
+   "lc": "data/lc/s0070/TIC61145589_s0070.json",
+   "ra": 56.6545,
+   "dec": 22.87287,
+   "radius_rsun": 1.213,
+   "teff": 5892.0,
+   "t0_btjd": 3210.16396,
+   "sec_scan_phase": 0.408,
+   "diff_peak_dist_px": 0.48,
+   "gaia_n_neighbours": 3,
+   "gaia_mimic_brightest_dm": 2.74,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=61145589"
   },
   {
@@ -2822,6 +4337,16 @@
    "sec_scan_sigma": 1.9,
    "rp_rjup": 0.16,
    "plot": "plots/s0070/TIC301289516_s0070.png",
+   "lc": "data/lc/s0070/TIC301289516_s0070.json",
+   "ra": 351.77016,
+   "dec": -1.28627,
+   "radius_rsun": 0.634,
+   "teff": 4199.0,
+   "t0_btjd": 3209.97013,
+   "sec_scan_phase": 0.56,
+   "diff_peak_dist_px": 0.34,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": 7.11,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=301289516"
   },
   {
@@ -2853,6 +4378,16 @@
    "sec_scan_sigma": 3.5,
    "rp_rjup": 1.26,
    "plot": "plots/s0070/TIC247409676_s0070.png",
+   "lc": "data/lc/s0070/TIC247409676_s0070.json",
+   "ra": 42.17626,
+   "dec": 20.80943,
+   "radius_rsun": 1.407,
+   "teff": 5957.0,
+   "t0_btjd": 3211.05699,
+   "sec_scan_phase": 0.459,
+   "diff_peak_dist_px": 0.1,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": 2.07,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=247409676"
   },
   {
@@ -2884,6 +4419,16 @@
    "sec_scan_sigma": 2.0,
    "rp_rjup": 1.37,
    "plot": "plots/s0070/TIC118820486_s0070.png",
+   "lc": "data/lc/s0070/TIC118820486_s0070.json",
+   "ra": 70.37421,
+   "dec": 21.25776,
+   "radius_rsun": 1.679,
+   "teff": 7461.0,
+   "t0_btjd": 3210.60178,
+   "sec_scan_phase": 0.657,
+   "diff_peak_dist_px": 0.36,
+   "gaia_n_neighbours": 6,
+   "gaia_mimic_brightest_dm": 0.03,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=118820486"
   },
   {
@@ -2915,6 +4460,16 @@
    "sec_scan_sigma": 2.2,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC21119973_s0070.png",
+   "lc": "data/lc/s0070/TIC21119973_s0070.json",
+   "ra": 36.13668,
+   "dec": 24.10164,
+   "radius_rsun": null,
+   "teff": 4621.0,
+   "t0_btjd": 3210.03587,
+   "sec_scan_phase": 0.275,
+   "diff_peak_dist_px": 0.38,
+   "gaia_n_neighbours": 3,
+   "gaia_mimic_brightest_dm": 0.88,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=21119973"
   },
   {
@@ -2946,6 +4501,16 @@
    "sec_scan_sigma": 4.3,
    "rp_rjup": 1.0,
    "plot": "plots/s0070/TIC267215820_s0070.png",
+   "lc": "data/lc/s0070/TIC267215820_s0070.json",
+   "ra": 356.48107,
+   "dec": 0.45899,
+   "radius_rsun": 0.735,
+   "teff": 4219.0,
+   "t0_btjd": 3210.15841,
+   "sec_scan_phase": 0.414,
+   "diff_peak_dist_px": 0.34,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=267215820"
   },
   {
@@ -2977,6 +4542,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC408809625_s0070.png",
+   "lc": "data/lc/s0070/TIC408809625_s0070.json",
+   "ra": 38.15352,
+   "dec": 16.33752,
+   "radius_rsun": 0.877,
+   "teff": 4226.0,
+   "t0_btjd": 3209.46464,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=408809625"
   },
   {
@@ -3008,6 +4583,16 @@
    "sec_scan_sigma": 2.2,
    "rp_rjup": 0.99,
    "plot": "plots/s0070/TIC376939759_s0070.png",
+   "lc": "data/lc/s0070/TIC376939759_s0070.json",
+   "ra": 19.44929,
+   "dec": 6.8689,
+   "radius_rsun": 1.22,
+   "teff": 5633.0,
+   "t0_btjd": 3214.42604,
+   "sec_scan_phase": 0.38,
+   "diff_peak_dist_px": 0.31,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=376939759"
   },
   {
@@ -3039,6 +4624,16 @@
    "sec_scan_sigma": 1.9,
    "rp_rjup": 1.12,
    "plot": "plots/s0070/TIC9032367_s0070.png",
+   "lc": "data/lc/s0070/TIC9032367_s0070.json",
+   "ra": 355.91168,
+   "dec": -11.27257,
+   "radius_rsun": 0.805,
+   "teff": 4778.0,
+   "t0_btjd": 3209.86158,
+   "sec_scan_phase": 0.32,
+   "diff_peak_dist_px": 0.55,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": -1.29,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=9032367"
   },
   {
@@ -3070,6 +4665,16 @@
    "sec_scan_sigma": 2.1,
    "rp_rjup": 1.24,
    "plot": "plots/s0070/TIC284173938_s0070.png",
+   "lc": "data/lc/s0070/TIC284173938_s0070.json",
+   "ra": 68.62903,
+   "dec": 32.47666,
+   "radius_rsun": 1.198,
+   "teff": 6401.0,
+   "t0_btjd": 3211.19636,
+   "sec_scan_phase": 0.472,
+   "diff_peak_dist_px": 0.69,
+   "gaia_n_neighbours": 6,
+   "gaia_mimic_brightest_dm": 0.8,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=284173938"
   },
   {
@@ -3101,6 +4706,16 @@
    "sec_scan_sigma": 2.3,
    "rp_rjup": 1.54,
    "plot": "plots/s0070/TIC436652523_s0070.png",
+   "lc": "data/lc/s0070/TIC436652523_s0070.json",
+   "ra": 72.63361,
+   "dec": 13.61347,
+   "radius_rsun": 2.396,
+   "teff": 6965.0,
+   "t0_btjd": 3210.09843,
+   "sec_scan_phase": 0.76,
+   "diff_peak_dist_px": 0.39,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": 5.12,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=436652523"
   },
   {
@@ -3132,6 +4747,16 @@
    "sec_scan_sigma": 2.3,
    "rp_rjup": 0.48,
    "plot": "plots/s0070/TIC21130820_s0070.png",
+   "lc": "data/lc/s0070/TIC21130820_s0070.json",
+   "ra": 36.34117,
+   "dec": 25.53069,
+   "radius_rsun": 1.592,
+   "teff": 5971.0,
+   "t0_btjd": 3211.43848,
+   "sec_scan_phase": 0.791,
+   "diff_peak_dist_px": 0.86,
+   "gaia_n_neighbours": 2,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=21130820"
   },
   {
@@ -3163,6 +4788,16 @@
    "sec_scan_sigma": 3.0,
    "rp_rjup": 1.13,
    "plot": "plots/s0070/TIC37718056_s0070.png",
+   "lc": "data/lc/s0070/TIC37718056_s0070.json",
+   "ra": 4.14634,
+   "dec": -10.97642,
+   "radius_rsun": 1.534,
+   "teff": 6239.0,
+   "t0_btjd": 3212.25457,
+   "sec_scan_phase": 0.477,
+   "diff_peak_dist_px": 0.15,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=37718056"
   },
   {
@@ -3194,6 +4829,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC9727392_s0070.png",
+   "lc": "data/lc/s0070/TIC9727392_s0070.json",
+   "ra": 358.44473,
+   "dec": -10.88497,
+   "radius_rsun": 1.7,
+   "teff": 6422.0,
+   "t0_btjd": 3209.96814,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=9727392"
   },
   {
@@ -3225,6 +4870,16 @@
    "sec_scan_sigma": 2.9,
    "rp_rjup": 0.91,
    "plot": "plots/s0070/TIC9725627_s0070.png",
+   "lc": "data/lc/s0070/TIC9725627_s0070.json",
+   "ra": 358.40856,
+   "dec": -10.11808,
+   "radius_rsun": 1.388,
+   "teff": 6362.0,
+   "t0_btjd": 3210.88793,
+   "sec_scan_phase": 0.174,
+   "diff_peak_dist_px": 0.41,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=9725627"
   },
   {
@@ -3256,6 +4911,16 @@
    "sec_scan_sigma": 2.2,
    "rp_rjup": 1.47,
    "plot": "plots/s0070/TIC380907135_s0070.png",
+   "lc": "data/lc/s0070/TIC380907135_s0070.json",
+   "ra": 19.55058,
+   "dec": 2.70285,
+   "radius_rsun": 1.811,
+   "teff": 6404.0,
+   "t0_btjd": 3210.78296,
+   "sec_scan_phase": 0.779,
+   "diff_peak_dist_px": 0.15,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=380907135"
   },
   {
@@ -3287,6 +4952,16 @@
    "sec_scan_sigma": 1.7,
    "rp_rjup": 1.28,
    "plot": "plots/s0070/TIC435259601_s0070.png",
+   "lc": "data/lc/s0070/TIC435259601_s0070.json",
+   "ra": 51.9998,
+   "dec": 12.52353,
+   "radius_rsun": 0.839,
+   "teff": 4674.0,
+   "t0_btjd": 3209.69636,
+   "sec_scan_phase": 0.32,
+   "diff_peak_dist_px": 0.25,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": 0.04,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=435259601"
   },
   {
@@ -3318,6 +4993,16 @@
    "sec_scan_sigma": 2.8,
    "rp_rjup": 2.27,
    "plot": "plots/s0070/TIC434165964_s0070.png",
+   "lc": "data/lc/s0070/TIC434165964_s0070.json",
+   "ra": 56.86872,
+   "dec": 16.94163,
+   "radius_rsun": 2.278,
+   "teff": 6477.0,
+   "t0_btjd": 3211.05995,
+   "sec_scan_phase": 0.426,
+   "diff_peak_dist_px": 0.18,
+   "gaia_n_neighbours": 5,
+   "gaia_mimic_brightest_dm": 3.12,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=434165964"
   },
   {
@@ -3349,6 +5034,16 @@
    "sec_scan_sigma": 2.1,
    "rp_rjup": 0.28,
    "plot": "plots/s0070/TIC33400605_s0070.png",
+   "lc": "data/lc/s0070/TIC33400605_s0070.json",
+   "ra": 344.49083,
+   "dec": -6.22533,
+   "radius_rsun": 0.406,
+   "teff": 3396.0,
+   "t0_btjd": 3211.25542,
+   "sec_scan_phase": 0.39,
+   "diff_peak_dist_px": 2.87,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": 2.45,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=33400605"
   },
   {
@@ -3380,6 +5075,16 @@
    "sec_scan_sigma": 2.0,
    "rp_rjup": 0.38,
    "plot": "plots/s0070/TIC247398074_s0070.png",
+   "lc": "data/lc/s0070/TIC247398074_s0070.json",
+   "ra": 41.25595,
+   "dec": 20.12899,
+   "radius_rsun": 1.817,
+   "teff": 5667.0,
+   "t0_btjd": 3209.34924,
+   "sec_scan_phase": 0.408,
+   "diff_peak_dist_px": 1.79,
+   "gaia_n_neighbours": 4,
+   "gaia_mimic_brightest_dm": 2.64,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=247398074"
   },
   {
@@ -3411,6 +5116,16 @@
    "sec_scan_sigma": 2.1,
    "rp_rjup": 0.49,
    "plot": "plots/s0070/TIC376879348_s0070.png",
+   "lc": "data/lc/s0070/TIC376879348_s0070.json",
+   "ra": 18.34538,
+   "dec": 8.69941,
+   "radius_rsun": 0.58,
+   "teff": 3917.0,
+   "t0_btjd": 3209.16989,
+   "sec_scan_phase": 0.433,
+   "diff_peak_dist_px": 5.65,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=376879348"
   },
   {
@@ -3442,6 +5157,16 @@
    "sec_scan_sigma": 1.8,
    "rp_rjup": 0.42,
    "plot": "plots/s0070/TIC257523138_s0070.png",
+   "lc": "data/lc/s0070/TIC257523138_s0070.json",
+   "ra": 0.94988,
+   "dec": 3.94206,
+   "radius_rsun": 1.036,
+   "teff": 5446.0,
+   "t0_btjd": 3214.44324,
+   "sec_scan_phase": 0.398,
+   "diff_peak_dist_px": 5.8,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": -0.84,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=257523138"
   },
   {
@@ -3473,6 +5198,16 @@
    "sec_scan_sigma": 2.0,
    "rp_rjup": 1.06,
    "plot": "plots/s0070/TIC113675415_s0070.png",
+   "lc": "data/lc/s0070/TIC113675415_s0070.json",
+   "ra": 25.31022,
+   "dec": 22.45565,
+   "radius_rsun": 2.746,
+   "teff": 5871.0,
+   "t0_btjd": 3211.54002,
+   "sec_scan_phase": 0.568,
+   "diff_peak_dist_px": 2.12,
+   "gaia_n_neighbours": 1,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=113675415"
   },
   {
@@ -3504,6 +5239,16 @@
    "sec_scan_sigma": 1.6,
    "rp_rjup": 0.94,
    "plot": "plots/s0070/TIC25907936_s0070.png",
+   "lc": "data/lc/s0070/TIC25907936_s0070.json",
+   "ra": 51.1066,
+   "dec": 19.11832,
+   "radius_rsun": 2.907,
+   "teff": 5724.0,
+   "t0_btjd": 3210.01193,
+   "sec_scan_phase": 0.319,
+   "diff_peak_dist_px": 1.39,
+   "gaia_n_neighbours": 6,
+   "gaia_mimic_brightest_dm": 2.93,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=25907936"
   },
   {
@@ -3535,6 +5280,16 @@
    "sec_scan_sigma": 3.0,
    "rp_rjup": 0.42,
    "plot": "plots/s0070/TIC266074269_s0070.png",
+   "lc": "data/lc/s0070/TIC266074269_s0070.json",
+   "ra": 14.62597,
+   "dec": 7.05726,
+   "radius_rsun": 1.346,
+   "teff": 5721.0,
+   "t0_btjd": 3209.67341,
+   "sec_scan_phase": 0.552,
+   "diff_peak_dist_px": 3.07,
+   "gaia_n_neighbours": 0,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=266074269"
   },
   {
@@ -3566,6 +5321,16 @@
    "sec_scan_sigma": 4.2,
    "rp_rjup": 0.27,
    "plot": "plots/s0070/TIC436640815_s0070.png",
+   "lc": "data/lc/s0070/TIC436640815_s0070.json",
+   "ra": 72.21534,
+   "dec": 15.94754,
+   "radius_rsun": 0.846,
+   "teff": 5224.0,
+   "t0_btjd": 3210.94655,
+   "sec_scan_phase": 0.641,
+   "diff_peak_dist_px": 1.62,
+   "gaia_n_neighbours": 5,
+   "gaia_mimic_brightest_dm": 7.24,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=436640815"
   },
   {
@@ -3597,6 +5362,16 @@
    "sec_scan_sigma": 1.0,
    "rp_rjup": 0.17,
    "plot": "plots/s0070/TIC385553003_s0070.png",
+   "lc": "data/lc/s0070/TIC385553003_s0070.json",
+   "ra": 56.43802,
+   "dec": 25.59579,
+   "radius_rsun": 1.264,
+   "teff": 6259.0,
+   "t0_btjd": 3209.60859,
+   "sec_scan_phase": 0.572,
+   "diff_peak_dist_px": 2.13,
+   "gaia_n_neighbours": 6,
+   "gaia_mimic_brightest_dm": 6.09,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=385553003"
   },
   {
@@ -3628,6 +5403,16 @@
    "sec_scan_sigma": 3.3,
    "rp_rjup": 0.23,
    "plot": "plots/s0070/TIC429052519_s0070.png",
+   "lc": "data/lc/s0070/TIC429052519_s0070.json",
+   "ra": 15.67767,
+   "dec": 9.13296,
+   "radius_rsun": 1.848,
+   "teff": 6360.0,
+   "t0_btjd": 3211.04535,
+   "sec_scan_phase": 0.304,
+   "diff_peak_dist_px": 1.06,
+   "gaia_n_neighbours": 4,
+   "gaia_mimic_brightest_dm": 6.28,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=429052519"
   },
   {
@@ -3659,6 +5444,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC218352806_s0070.png",
+   "lc": "data/lc/s0070/TIC218352806_s0070.json",
+   "ra": 42.69951,
+   "dec": 14.5275,
+   "radius_rsun": 1.912,
+   "teff": 6217.0,
+   "t0_btjd": 3211.55665,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=218352806"
   },
   {
@@ -3690,6 +5485,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC33425112_s0070.png",
+   "lc": "data/lc/s0070/TIC33425112_s0070.json",
+   "ra": 345.03862,
+   "dec": -6.07944,
+   "radius_rsun": 1.093,
+   "teff": 6005.0,
+   "t0_btjd": 3214.66049,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=33425112"
   },
   {
@@ -3721,6 +5526,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC269504659_s0070.png",
+   "lc": "data/lc/s0070/TIC269504659_s0070.json",
+   "ra": 13.80721,
+   "dec": -0.13169,
+   "radius_rsun": 1.793,
+   "teff": 5839.0,
+   "t0_btjd": 3210.12238,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=269504659"
   },
   {
@@ -3752,6 +5567,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC251039947_s0070.png",
+   "lc": "data/lc/s0070/TIC251039947_s0070.json",
+   "ra": 340.75699,
+   "dec": -7.77341,
+   "radius_rsun": 0.937,
+   "teff": 4896.0,
+   "t0_btjd": 3216.28919,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=251039947"
   },
   {
@@ -3783,6 +5608,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC346876228_s0070.png",
+   "lc": "data/lc/s0070/TIC346876228_s0070.json",
+   "ra": 23.89556,
+   "dec": 10.72901,
+   "radius_rsun": 0.957,
+   "teff": 5312.0,
+   "t0_btjd": 3214.73107,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=346876228"
   },
   {
@@ -3814,6 +5649,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC399967279_s0070.png",
+   "lc": "data/lc/s0070/TIC399967279_s0070.json",
+   "ra": 54.38813,
+   "dec": 10.0579,
+   "radius_rsun": 1.014,
+   "teff": 4654.0,
+   "t0_btjd": 3214.63948,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=399967279"
   },
   {
@@ -3845,6 +5690,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC405374935_s0070.png",
+   "lc": "data/lc/s0070/TIC405374935_s0070.json",
+   "ra": 23.97815,
+   "dec": 17.43384,
+   "radius_rsun": 2.23,
+   "teff": 7447.0,
+   "t0_btjd": 3209.61224,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=405374935"
   },
   {
@@ -3876,6 +5731,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC322212770_s0070.png",
+   "lc": "data/lc/s0070/TIC322212770_s0070.json",
+   "ra": 28.36849,
+   "dec": -0.44589,
+   "radius_rsun": 0.928,
+   "teff": 5134.0,
+   "t0_btjd": 3214.59892,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=322212770"
   },
   {
@@ -3907,6 +5772,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC136823191_s0070.png",
+   "lc": "data/lc/s0070/TIC136823191_s0070.json",
+   "ra": 354.49153,
+   "dec": -1.42282,
+   "radius_rsun": 1.988,
+   "teff": 6342.0,
+   "t0_btjd": 3214.68632,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=136823191"
   },
   {
@@ -3938,6 +5813,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC250105427_s0070.png",
+   "lc": "data/lc/s0070/TIC250105427_s0070.json",
+   "ra": 355.21732,
+   "dec": -0.95182,
+   "radius_rsun": 1.789,
+   "teff": 6257.0,
+   "t0_btjd": 3214.72466,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=250105427"
   },
   {
@@ -3969,6 +5854,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC61226071_s0070.png",
+   "lc": "data/lc/s0070/TIC61226071_s0070.json",
+   "ra": 65.78577,
+   "dec": 18.92778,
+   "radius_rsun": 0.272,
+   "teff": 3478.0,
+   "t0_btjd": 3216.67543,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=61226071"
   },
   {
@@ -4000,6 +5895,16 @@
    "sec_scan_sigma": null,
    "rp_rjup": null,
    "plot": "plots/s0070/TIC405483203_s0070.png",
+   "lc": "data/lc/s0070/TIC405483203_s0070.json",
+   "ra": 56.02124,
+   "dec": 25.48383,
+   "radius_rsun": 0.745,
+   "teff": 4734.0,
+   "t0_btjd": 3218.39763,
+   "sec_scan_phase": null,
+   "diff_peak_dist_px": null,
+   "gaia_n_neighbours": null,
+   "gaia_mimic_brightest_dm": null,
    "exofop": "https://exofop.ipac.caltech.edu/tess/target.php?id=405483203"
   }
  ],

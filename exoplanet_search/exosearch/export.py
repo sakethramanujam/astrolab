@@ -74,6 +74,69 @@ def _plot(r, site, dpi=80):
     return None
 
 
+LC_VERSION = 2
+
+
+def _bin(x, y, edges):
+    idx = np.digitize(x, edges) - 1
+    ok = (idx >= 0) & (idx < len(edges) - 1)
+    sums = np.bincount(idx[ok], weights=y[ok], minlength=len(edges) - 1)
+    cnt = np.bincount(idx[ok], minlength=len(edges) - 1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.where(cnt > 0, sums / cnt, np.nan)
+
+
+def _lcjson(r, site):
+    """Small light-curve JSON for the interactive candidate view (folded windows + a coarse time series)."""
+    rel = Path("data") / "lc" / f"s{int(r.sector):04d}" / f"TIC{int(r.tic)}_s{int(r.sector):04d}.json"
+    out = site / rel
+    if out.exists():
+        try:
+            if json.loads(out.read_text()).get("v") == LC_VERSION:
+                return str(rel)
+        except ValueError:
+            pass
+    try:
+        from .task import prepare
+        man = targets.fetch_manifest(int(r.sector)).set_index("tic")
+        m = man.loc[int(r.tic)]
+        path = targets.download_one(m.fname, m.url, config.lc_dir(int(r.sector)))
+        t, f, _ = prepare(path)["binned"]
+        good = np.isfinite(t) & np.isfinite(f)
+        t, f = t[good], f[good]
+        P, t0, dur = float(r.period), float(r.t0), float(r.duration)
+        ph = ((t - t0 + 0.5 * P) % P) - 0.5 * P                      # days from mid-transit
+        ph2 = ((t - t0) % P) - 0.5 * P                               # days from phase 0.5
+        epoch = np.round((t - t0) / P).astype(int)
+        win = min(max(3 * dur, 0.125), 0.25 * P)
+        rng = np.random.default_rng(int(r.tic) % 2**32)
+
+        def cap(mask, n=700):                                        # keep the JSON small (~15 kB)
+            i = np.flatnonzero(mask)
+            return np.sort(rng.choice(i, n, replace=False)) if len(i) > n else i
+        a, b = cap(np.abs(ph) < win), cap(np.abs(ph2) < win, 400)
+        ppm = (f - 1.0) * 1e6
+        edges = np.linspace(-0.5, 0.5, 201)
+        tb_edges = np.arange(t.min(), t.max() + 1 / 24, 1 / 24)        # 1-hour bins
+        ts = _bin(t, ppm, tb_edges)
+        tc = 0.5 * (tb_edges[1:] + tb_edges[:-1])
+        keep = np.isfinite(ts)
+        r2 = lambda x, n: [None if not np.isfinite(v) else round(float(v), n) for v in x]
+        d = dict(v=LC_VERSION, tic=int(r.tic), sector=int(r.sector), period=P, duration_h=dur * 24,
+                 depth_ppm=float(r.depth) * 1e6,
+                 t0_offset=round(float(t0 - t.min()), 5),
+                 near=dict(h=r2(ph[a] * 24, 3), ppm=r2(ppm[a], 0), e=epoch[a].tolist()),
+                 sec=dict(h=r2(ph2[b] * 24, 3), ppm=r2(ppm[b], 0)),
+                 fold=dict(phase=r2(0.5 * (edges[1:] + edges[:-1]), 4), ppm=r2(_bin(ph / P, ppm, edges), 1)),
+                 series=dict(t=r2(tc[keep] - t.min(), 4), ppm=r2(ts[keep], 0)))
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(d, separators=(",", ":")))
+        return str(rel)
+    except Exception as exc:
+        print(f"lc json failed for TIC {r.tic}: {exc}")
+    return None
+
+
 def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
     con = store.connect()
     df = store.frame(con)
@@ -129,6 +192,11 @@ def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
             gaia_mimic_min_sep=_f(r.gaia_mimic_min_sep, 1), eb_match=r.eb_match if isinstance(r.eb_match, str) else None,
             v_ratio=_f(r.v_ratio, 2), sec_scan_sigma=_f(r.sec_scan_sigma, 1), rp_rjup=_f(r.rp_rjup, 2),
             plot=_plot(r, site) if plots_on else None,
+            lc=_lcjson(r, site) if plots_on else None,
+            ra=_f(r.ra, 5), dec=_f(r.dec, 5), radius_rsun=_f(r.radius, 3), teff=_f(r.teff, 0),
+            t0_btjd=_f(r.t0, 5), sec_scan_phase=_f(r.sec_scan_phase, 3), diff_peak_dist_px=_f(r.diff_peak_dist_px, 2),
+            gaia_n_neighbours=None if r.gaia_n_neighbours != r.gaia_n_neighbours or r.gaia_n_neighbours is None else int(r.gaia_n_neighbours),
+            gaia_mimic_brightest_dm=_f(r.gaia_mimic_brightest_dm, 2),
             exofop=f"https://exofop.ipac.caltech.edu/tess/target.php?id={int(r.tic)}"))
 
     # deep-vetting funnel over signals that passed the per-star screens with no catalogue match
@@ -169,6 +237,8 @@ def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
                     submitted=int((ok.state == "submitted").sum()),
                     planet_archive_crossmatch=ps_ok),
         queue_next=sectorqueue.next_sectors(3),
+        queue=[dict(sector=s_, status=r_["status"], n_targets=r_["n_targets"], n_searched=r_["n_searched"])
+               for s_, r_ in sorted(q.items())],
         deep_funnel=funnel,
         catalogs=catalogs.catalog_status(),
         sectors=sectors,
@@ -183,8 +253,8 @@ def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
                     flags=flags,
                     sky=[[round(a, 2), round(b, 2)] for a, b in sky.itertuples(index=False)]),
     )
-    keep = {c["plot"] for c in cands if c["plot"]}
-    for png in (site / "plots").glob("s*/*.png"):        # drop plots no longer listed
+    keep = {c["plot"] for c in cands if c["plot"]} | {c["lc"] for c in cands if c.get("lc")}
+    for png in [*(site / "plots").glob("s*/*.png"), *(site / "data" / "lc").glob("s*/*.json")]:   # drop files no longer listed
         if str(png.relative_to(site)) not in keep:
             png.unlink()
     (site / "data").mkdir(parents=True, exist_ok=True)

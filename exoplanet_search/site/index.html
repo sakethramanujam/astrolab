@@ -7,9 +7,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='22' fill='%23ffb86b'/%3E%3Ccircle cx='20' cy='30' r='7' fill='%2305070f'/%3E%3C/svg%3E">
 </head>
 <body>
-<canvas id="stars"></canvas>
+<a class="skip" href="#main">Skip to content</a>
+<canvas id="stars" aria-hidden="true"></canvas>
 <nav><div class="wrap">
   <a class="brand" href="./"><span class="orb"></span>Transit Hunt</a>
   <div class="links"><a class="on" href="./">Dashboard</a><a href="learn.html">Learn</a><a href="contribute.html">Run it yourself</a></div>
@@ -26,22 +28,27 @@
   <div class="meta" id="updated">loading…</div>
 </div></header>
 
-<main class="wrap">
+<main class="wrap" id="main" tabindex="-1">
 <section>
   <div class="grid stats" id="stats"></div>
 </section>
 
+<section class="card" aria-labelledby="h-map">
+  <div class="cap"><h2 id="h-map" style="margin:0">Every TESS sector</h2><div class="legend" id="qlegend" style="margin:0"></div></div>
+  <p class="kbd" style="margin-top:0">One tile per 27-day sector, grouped by mission year. Tap a searched sector to filter the candidates below.</p>
+  <div id="smap" class="smap"></div>
+  <div id="sinfo" class="readout" style="margin-top:12px"></div>
+</section>
+
 <section class="grid two">
-  <div class="card">
-    <h2>Sector queue</h2>
-    <div class="bar" id="qbar"></div>
-    <div class="legend" id="qlegend"></div>
-    <div class="scroll" style="max-height:260px;margin-top:14px"><table id="sectors"></table></div>
-  </div>
   <div class="card">
     <h2>Known-planet recovery</h2>
     <p class="kbd" style="margin-top:-6px">Of stars in our sample that already host a TESS Object of Interest, how often did we re-find it at its catalogued period and pass every screen? This is our honest sensitivity.</p>
-    <div class="chart" style="height:220px"><canvas id="cRecovery"></canvas></div>
+    <div class="chart" style="height:220px"><canvas id="cRecovery" role="img" aria-label="Known-planet recovery chart"></canvas></div>
+  </div>
+  <div class="card">
+    <h2>Searched sectors</h2>
+    <div class="scroll" style="max-height:260px"><table id="sectors"></table></div>
   </div>
 </section>
 
@@ -49,25 +56,26 @@
   <div class="card"><h2>Deep vetting of unmatched signals</h2>
     <p class="kbd" style="margin-top:-6px">Signals that passed every per-star screen and match nothing known get pixel-level and
       binary-star checks: does the dip sit on our star, could a neighbour cause it, does it look like an eclipsing binary?</p>
-    <div class="chart" style="height:230px"><canvas id="cFunnel"></canvas></div></div>
-  <div class="card"><h2>What deep vetting found</h2><div class="chart" style="height:270px"><canvas id="cDeep"></canvas></div></div>
+    <div class="chart" style="height:230px"><canvas id="cFunnel" role="img" aria-label="chart"></canvas></div></div>
+  <div class="card"><h2>What deep vetting found</h2><div class="chart" style="height:270px"><canvas id="cDeep" role="img" aria-label="chart"></canvas></div></div>
 </section>
 
 <section class="grid two">
-  <div class="card"><h2>Signal strength (SDE) across all stars</h2><div class="chart"><canvas id="cSde"></canvas></div></div>
-  <div class="card"><h2>Best period across all stars</h2><div class="chart"><canvas id="cPeriod"></canvas></div></div>
+  <div class="card"><h2>Signal strength (SDE) across all stars</h2><div class="chart"><canvas id="cSde" role="img" aria-label="chart"></canvas></div></div>
+  <div class="card"><h2>Best period across all stars</h2><div class="chart"><canvas id="cPeriod" role="img" aria-label="chart"></canvas></div></div>
 </section>
 
 <section class="grid two">
-  <div class="card"><h2>Why signals were rejected</h2><div class="chart"><canvas id="cFlags"></canvas></div></div>
-  <div class="card"><h2>Where we have looked</h2><div class="chart"><canvas id="cSky"></canvas></div>
+  <div class="card"><h2>Why signals were rejected</h2><div class="chart"><canvas id="cFlags" role="img" aria-label="chart"></canvas></div></div>
+  <div class="card"><h2>Where we have looked</h2><div class="chart"><canvas id="cSky" role="img" aria-label="chart"></canvas></div>
     <p class="kbd">RA / Dec of searched stars (sample of up to 4,000).</p></div>
 </section>
 
-<section class="card">
-  <h2>Candidates</h2>
-  <div class="chips" id="chips"></div>
-  <div class="scroll"><table id="cands"></table></div>
+<section class="card" id="candidates" aria-labelledby="h-cands">
+  <div class="cap"><h2 id="h-cands" style="margin:0">Candidates</h2><span class="kbd" id="ccount" role="status" aria-live="polite"></span></div>
+  <div class="filters" id="filters"></div>
+  <div class="chips" id="chips" role="group" aria-label="Filter by status"></div>
+  <div class="scroll"><table id="cands"><caption class="sr">Candidate signals. Column headers sort; the TIC opens the detail view.</caption></table></div>
   <div class="legend">
     <span><span class="badge b-known">known</span> period matches a TOI, CTOI or confirmed planet</span>
     <span><span class="badge b-needs_review">needs review</span> passed every screen, no catalogue match</span>
@@ -78,13 +86,11 @@
 
 <section class="card">
   <h2>Run history</h2>
-  <div class="chart" style="height:200px"><canvas id="cRuns"></canvas></div>
+  <div class="chart" style="height:200px"><canvas id="cRuns" role="img" aria-label="chart"></canvas></div>
   <div class="scroll" style="max-height:300px;margin-top:12px"><table id="runs"></table></div>
 </section>
 </main>
 
-<dialog id="dlg"><div class="hd"><b id="dlgT"></b><button class="x" onclick="dlg.close()">×</button></div>
-<img id="dlgI" alt="diagnostic sheet"><div class="bd" id="dlgB"></div></dialog>
 
 <footer><div class="wrap">
   Data: NASA <a href="https://tess.mit.edu/">TESS</a> via <a href="https://archive.stsci.edu/missions-and-data/tess">MAST</a>;
@@ -93,6 +99,5 @@
   Raw summary: <a href="data/progress.json">progress.json</a> · <a href="data/candidates.csv">candidates.csv</a>.
 </div></footer>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script src="assets/stars.js"></script>
-<script src="assets/app.js"></script>
+<script type="module" src="assets/app.js"></script>
 </body></html>
