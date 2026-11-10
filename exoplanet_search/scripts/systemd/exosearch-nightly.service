@@ -1,6 +1,6 @@
-# Example only - not installed. Copy to ~/.config/systemd/user/ to use.
+# Copy to ~/.config/systemd/user/ (see README).
 [Unit]
-Description=TESS transit search nightly batch
+Description=TESS transit search nightly batch + site publish
 
 [Service]
 Type=oneshot
@@ -8,5 +8,6 @@ Nice=19
 CPUWeight=20
 IOSchedulingClass=idle
 WorkingDirectory=%h/Documents/repos/astro-compute-lab/exoplanet_search
-Environment=SECTORS=70 N_TARGETS=2000 WORKERS=8
+Environment=MAX_SECTORS=2 WORKERS=8 DEADLINE=6
 ExecStart=%h/Documents/repos/astro-compute-lab/exoplanet_search/scripts/nightly.sh
+TimeoutStartSec=6h
