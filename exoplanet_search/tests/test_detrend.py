@@ -13,3 +13,10 @@ def test_detrend_removes_variability_keeps_transit(synthetic_lc):
     assert 0.6 * truth["depth"] < depth < 1.4 * truth["depth"]
     tb, fb, eb = lightcurve.bin_lc(tf, ff, ef, minutes=10)
     assert len(tb) < len(tf) / 4 and np.all(eb > 0)
+
+
+def test_gap_edges_trimmed():
+    t = np.r_[np.arange(0, 10, 0.01), np.arange(11, 20, 0.01)]
+    k = lightcurve.gap_edge_mask(t, trim=0.3)
+    assert not k[t < 0.29].any() and not k[(t > 9.71) & (t < 10)].any() and not k[(t >= 11) & (t < 11.29)].any()
+    assert k[(t > 1) & (t < 9)].all()

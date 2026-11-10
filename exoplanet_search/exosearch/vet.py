@@ -5,8 +5,9 @@ import numpy as np
 
 R_EARTH_PER_RSUN = 109.1
 
-THRESH = dict(sde=9.0, snr=7.0, min_transits=2, odd_even_sigma=3.0, secondary_sigma=3.0,
-              max_depth=0.05, max_dur_ratio=1.5)
+THRESH = dict(sde=9.0, snr=7.0, min_transits=3, odd_even_sigma=3.0, secondary_sigma=3.0,
+              max_depth=0.05, max_dur_ratio=1.5, max_rp_earth=25.0, variable_sigma=5.0,
+              common_period_tol=0.005, common_period_min=4)
 
 
 def expected_duration(period_d, radius_rsun):
@@ -47,9 +48,36 @@ def vet(st, bls_out, meta, t, f):
         flags.append("too_deep")
     if dur_ratio == dur_ratio and dur_ratio > THRESH["max_dur_ratio"]:
         flags.append("too_long")
+    if sec_sig < -THRESH["variable_sigma"]:
+        flags.append("variable")            # brightening at phase 0.5: sinusoidal/rotational
+    if rp == rp and rp > THRESH["max_rp_earth"]:
+        flags.append("rp_too_large")        # > ~2.2 R_Jup: stellar companion or giant host
     if depth <= 0:
         flags.append("no_dip")
     return dict(depth=depth, depth_err=depth_err, snr=float(snr), odd_even_sigma=float(oe),
                 depth_odd=d_odd, depth_even=d_even, secondary_depth=d_sec, secondary_sigma=float(sec_sig),
                 n_transits=n_tr, dur_expected=float(t_exp), dur_ratio=float(dur_ratio),
                 rp_earth=float(rp), flags=",".join(flags), passed=int(not flags))
+
+
+def flag_common_periods(df):
+    """Flag periods shared by many unrelated stars in a sector (spacecraft systematics, e.g.
+    momentum dumps / orbit-gap aliases). Returns a copy with 'common_period' added to flags."""
+    import pandas as pd  # noqa: F401
+    df = df.copy()
+    ok = df.status == "ok"
+    P = df.loc[ok, "period"].to_numpy()
+    if len(P) < 50:
+        return df
+    tol = THRESH["common_period_tol"]
+    near = np.array([(np.abs(P / p - 1) < tol).sum() - 1 for p in P])
+    broad = np.array([(np.abs(P / p - 1) < 20 * tol).sum() - 1 for p in P])
+    expected = (broad - near) / 19.0             # background rate from the surrounding 20x window
+    lim = np.maximum(THRESH["common_period_min"], 4 * expected + 3)
+    hit = df.index[ok][near >= lim]
+    for i in hit:
+        f = df.at[i, "flags"] or ""
+        if "common_period" not in f:
+            df.at[i, "flags"] = ",".join(x for x in (f, "common_period") if x)
+        df.at[i, "passed"] = 0
+    return df

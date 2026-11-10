@@ -22,7 +22,7 @@ for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMBA_
     os.environ.setdefault(_v, "1")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from exosearch import catalogs, config, plots, store, targets  # noqa: E402
+from exosearch import catalogs, config, plots, store, targets, vet  # noqa: E402
 from exosearch.task import process_star  # noqa: E402
 
 RESOURCES = {"cuda": {"GPU": 1}, "mlx": {"MLX": 1}}
@@ -111,7 +111,11 @@ def main():
         row.pop("Index", None)
         row.update(catalogs.crossmatch(r.tic, r.period, cats))
         store.upsert(con, row)
-    df = store.frame(con, args.sector)
+    df = vet.flag_common_periods(store.frame(con, args.sector))
+    for r in df.itertuples():
+        row = r._asdict()
+        row.pop("Index", None)
+        store.upsert(con, row)
     out_dir = config.RESULTS_DIR
     df.to_parquet(out_dir / f"results_s{args.sector:04d}.parquet", index=False)
 

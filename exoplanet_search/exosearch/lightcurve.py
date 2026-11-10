@@ -25,11 +25,25 @@ def load_spoc(path):
     return t, f / med, e / med, meta
 
 
-def detrend(t, f, e, window=0.75, clip_sigma=4.0):
-    """wotan biweight; drop NaN edges and upward outliers (flares). Returns t, flat, e, trend, mask."""
+def gap_edge_mask(t, gap=0.5, trim=0.3):
+    """False within `trim` days after/before every gap > `gap` days and at both ends.
+    Thermal ramps and scattered light after orbit gaps / downlinks mimic transit-like dips."""
+    keep = np.ones(t.size, bool)
+    starts = np.r_[0, np.where(np.diff(t) > gap)[0] + 1]
+    ends = np.r_[starts[1:] - 1, t.size - 1]
+    for a, b in zip(starts, ends):
+        keep &= ~((t >= t[a]) & (t < t[a] + trim))
+        keep &= ~((t <= t[b]) & (t > t[b] - trim))
+    return keep
+
+
+def detrend(t, f, e, window=0.75, clip_sigma=4.0, gap_trim=0.3):
+    """wotan biweight; drop gap edges, NaNs and upward outliers (flares). Returns t, flat, e, trend, mask."""
     flat, trend = flatten(t, f, method="biweight", window_length=window,
                           edge_cutoff=0.0, break_tolerance=0.5, return_trend=True)
     m = np.isfinite(flat)
+    if gap_trim:
+        m &= gap_edge_mask(t, trim=gap_trim)
     resid = flat[m] - np.median(flat[m])
     mad = 1.4826 * np.median(np.abs(resid))
     m &= flat < 1.0 + clip_sigma * max(mad, 1e-6)

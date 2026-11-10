@@ -60,3 +60,13 @@ def test_crossmatch_known_planet():
         m = catalogs.crossmatch(int(row.tic), float(row.pl_orbper), cats)
         assert m["known_planet"] and m["planet_period_match"] == 1
     assert catalogs.crossmatch(1, 3.0, cats)["known_toi"] is None
+
+
+def test_common_period_flag():
+    import pandas as pd
+    rng = np.random.default_rng(0)
+    P = np.r_[rng.uniform(0.5, 13, 200), np.full(15, 6.40) * (1 + rng.normal(0, 1e-3, 15))]
+    df = pd.DataFrame(dict(status="ok", period=P, flags="", passed=1))
+    out = vet.flag_common_periods(df)
+    assert out.tail(15)["flags"].str.contains("common_period").all() and (out.tail(15).passed == 0).all()
+    assert out.head(200)["flags"].str.contains("common_period").sum() < 10
