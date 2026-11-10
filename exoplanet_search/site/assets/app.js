@@ -13,6 +13,7 @@ const FLAG_TXT = {
   neighbour_could_mimic: 'neighbour could mimic', centroid_inconclusive: 'centroid inconclusive', centroid_shift_minor: 'small centroid shift (warning)',
   known_eb: 'known eclipsing binary', v_shape: 'V-shaped', secondary_scan: 'secondary eclipse found', rp_gt_2rjup: 'too big (> 2 R_J)',
 };
+const REJ = new Set(['centroid_offset', 'dip_off_target', 'known_eb', 'v_shape', 'secondary_scan', 'rp_gt_2rjup', 'low_sde', 'low_snr', 'few_transits', 'odd_even', 'secondary', 'too_deep', 'too_long', 'variable', 'rp_too_large', 'common_period']);
 starfield();
 if (window.Chart) {
   Chart.defaults.color = '#c3c9e3'; Chart.defaults.font.family = 'Inter,system-ui,sans-serif'; Chart.defaults.borderColor = C.grid;
@@ -100,15 +101,22 @@ function sectorMap(d, table) {
   if (latest) show(latest);
 }
 
+const short = (n) => (n == null ? '–' : n >= 1e4 ? `${(n / 1e3).toFixed(1)}k` : fmt(n));
+/** Build a responsive table: real table semantics on desktop, label/value cards below 720 px. */
+function rtable(table, cols, rows) {
+  table.classList.add('rt');
+  table.setAttribute('role', 'table');
+  const thead = el('thead', { role: 'rowgroup' }, el('tr', { role: 'row' }, cols.map(([, l, cls]) => el('th', { scope: 'col', role: 'columnheader', class: cls || '' }, l))));
+  const tbody = el('tbody', { role: 'rowgroup' }, rows.map((r) => el('tr', { role: 'row' }, cols.map(([k, l, cls], i) =>
+    el('td', { role: 'cell', class: cls || '', 'data-label': l, html: `<span class="v">${r[i] ?? '–'}</span>` })))));
+  table.replaceChildren(...[...table.querySelectorAll('caption')], thead, tbody);
+}
+
 function sectorTable(d) {
-  const st = document.getElementById('sectors');
-  st.innerHTML = '<thead><tr><th>Sector</th><th>Status</th><th class="num">Searched</th><th class="num">Passed</th><th class="num">TOIs re-found</th><th class="num">Review</th></tr></thead>';
-  const tb = el('tbody');
-  for (const s of [...d.sectors].sort((a, b) => b.sector - a.sector)) {
-    const pct = s.n_targets ? ` <span class="kbd">/ ${fmt(s.n_targets)}</span>` : '';
-    tb.append(el('tr', { html: `<td>S${s.sector}</td><td>${s.status === 'done' ? '✅ done' : '⏳ in progress'}</td><td class="num">${fmt(s.n_searched)}${pct}</td><td class="num">${s.n_passed}</td><td class="num">${s.toi_recovered} / ${s.toi_hosts}</td><td class="num">${s.needs_review}</td>` }));
-  }
-  st.append(tb);
+  rtable(document.getElementById('sectors'),
+    [['s', 'Sector'], ['st', 'Status'], ['n', 'Searched', 'num'], ['p', 'Passed', 'num'], ['t', 'TOIs found', 'num'], ['r', 'Review', 'num']],
+    [...d.sectors].sort((a, b) => b.sector - a.sector).map((x) => [`S${x.sector}`, x.status === 'done' ? '✅ done' : '⏳ running',
+      `${short(x.n_searched)}${x.n_targets && x.n_targets !== x.n_searched ? ` / ${short(x.n_targets)}` : ''}`, fmt(x.n_passed), `${x.toi_recovered} / ${x.toi_hosts}`, fmt(x.needs_review)]));
 }
 
 /* ───── candidate explorer: search, filter, sort; state lives in the URL hash ───── */
@@ -173,20 +181,56 @@ function candidates(d) {
   const chipsSync = () => chipBtns.forEach((b) => { const on = b.dataset.s === st.status; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
   chipsSync();
 
-  const cols = [['tic', 'TIC'], ['sector', 'Sector', 0], ['status', 'Status'], ['known', 'Match'], ['period', 'Period (d)', 4], ['duration_h', 'Dur (h)', 1],
-    ['depth_ppm', 'Depth (ppm)', 0], ['sde', 'SDE', 1], ['snr', 'SNR', 1], ['n_transits', 'Transits', 0], ['rp_earth', 'Rp (R⊕)', 1], ['tmag', 'Tmag', 1], ['allflags', 'Flags']];
+  // Key columns only; everything else lives in an expandable detail row (and on the candidate page).
+  const pct = (v) => (v == null ? '–' : v >= 10000 ? `${(v / 1e4).toFixed(v >= 1e5 ? 0 : 1)}%` : `${fmt(v)} ppm`);
+  const per = (v) => (v == null ? '–' : v >= 10 ? v.toFixed(2) : v.toFixed(3));
+  const flagChips = (c) => {
+    const f = c.allflags ? c.allflags.split(',') : [];
+    if (!f.length) return c.status === 'needs_review' && !c.deep_vetted ? '<span class="fchip">deep vetting pending</span>' : '<span class="kbd">none</span>';
+    return f.map((x) => `<span class="fchip${REJ.has(x) ? ' bad' : ''}">${FLAG_TXT[x] || x.replace(/_/g, ' ')}</span>`).join('');
+  };
+  const cols = [
+    ['tic', 'TIC', 'c-tic'], ['status', 'Status', 'c-st'], ['period', 'Period (d)', 'num c-p'], ['depth_ppm', 'Depth', 'num c-d'],
+    ['rp_earth', 'Radius (R⊕)', 'num c-r'], ['sde', 'SDE', 'num c-s'], ['allflags', 'Flags', 'c-f'],
+  ];
   const tab = document.getElementById('cands');
-  const thead = el('thead'), tbody = el('tbody');
-  const htr = el('tr');
-  const ths = cols.map(([k, l, dg]) => {
+  tab.classList.add('rt', 'cands');
+  tab.setAttribute('role', 'table');
+  const thead = el('thead', { role: 'rowgroup' }), tbody = el('tbody', { role: 'rowgroup' });
+  const htr = el('tr', { role: 'row' }, el('th', { class: 'c-x', role: 'columnheader' }, el('span', { class: 'sr' }, 'Details')));
+  const ths = cols.map(([k, l, cls]) => {
     const b = el('button', { type: 'button' }, l);
-    const th = el('th', { class: dg != null ? 'num' : '', scope: 'col', 'aria-sort': 'none' }, b);
-    b.addEventListener('click', () => { st.dir = st.key === k ? -st.dir : (k === 'tmag' || k === 'tic' || k === 'period' ? 1 : -1); st.key = k; draw(); });
+    const th = el('th', { class: cls, scope: 'col', role: 'columnheader', 'aria-sort': 'none' }, b);
+    b.addEventListener('click', () => { st.dir = st.key === k ? -st.dir : (k === 'tic' || k === 'period' ? 1 : -1); st.key = k; sortSel.value = st.key + ':' + st.dir; draw(); });
     htr.append(th);
     return [k, th];
   });
   thead.append(htr); tab.append(thead, tbody);
   const count = document.getElementById('ccount');
+  const more = el('button', { type: 'button', class: 'btn', style: 'margin-top:12px' }, 'Show more');
+  tab.after(more);
+  let limit = 60;
+  more.addEventListener('click', () => { limit += 60; draw(); });
+
+  // sort dropdown (shown in card mode, where there are no column headers)
+  const SORTS = [['rank:-1', 'Most interesting first'], ['sde:-1', 'SDE, high → low'], ['period:1', 'Period, short → long'], ['period:-1', 'Period, long → short'],
+    ['depth_ppm:-1', 'Depth, deep → shallow'], ['depth_ppm:1', 'Depth, shallow → deep'], ['rp_earth:1', 'Radius, small → large'], ['tmag:1', 'Brightest star first'], ['tic:1', 'TIC number']];
+  const sortSel = el('select', { 'aria-label': 'Sort candidates by' }, SORTS.map(([v, l]) => el('option', { value: v }, l)));
+  sortSel.value = `${st.key}:${st.dir}`;
+  if (!sortSel.value) sortSel.value = 'rank:-1';
+  sortSel.addEventListener('change', () => { const [k, dd] = sortSel.value.split(':'); st.key = k; st.dir = +dd; draw(); });
+  F.prepend(el('div', { class: 'ctl sortctl' }, el('span', { class: 'lbl' }, 'Sort'), sortSel));
+
+  const open = new Set();
+  const detail = (c) => {
+    const kv = [['Sector', c.sector], ['Match', c.known || (c.toi_host ? `TOI ${c.toi_host} host, other period` : 'none')], ['Duration', `${fmt(c.duration_h, 1)} h`],
+      ['SNR', fmt(c.snr, 1)], ['Transits', c.n_transits], ['Tmag', fmt(c.tmag, 1)], ['Odd/even', `${fmt(c.odd_even_sigma, 1)}σ`], ['Phase 0.5', `${fmt(c.secondary_sigma, 1)}σ`],
+      ['Exact period', `${fmt(c.period, 5)} d`], ['Exact depth', `${fmt(c.depth_ppm)} ppm`]];
+    if (c.deep_vetted) kv.push(['Centroid offset', `${fmt(c.centroid_offset_px, 2)} px`], ['V-ratio', fmt(c.v_ratio, 2)], ['Size', `${fmt(c.rp_rjup, 2)} R_J`]);
+    return el('div', { class: 'det' }, el('dl', {}, kv.map(([k, v]) => el('div', {}, el('dt', {}, k), el('dd', {}, String(v ?? '–'))))),
+      el('a', { class: 'btn primary', href: `candidate.html#s${c.sector}/${c.tic}` }, 'Open light curve & checks →'),
+      el('a', { class: 'btn', href: c.exofop, target: '_blank', rel: 'noopener' }, 'ExoFOP ↗'));
+  };
 
   function draw() {
     const rows = all.filter((c) => (st.status === 'all' || c.status === st.status) && (!st.q || c.search.includes(st.q)) &&
@@ -195,22 +239,25 @@ function candidates(d) {
       (st.tmax >= 17 || c.tmag == null || c.tmag <= st.tmax) && (c.sde ?? 0) >= st.sdemin)
       .sort((a, b) => { const x = a[st.key], y = b[st.key]; return (x == null) - (y == null) || (x > y ? 1 : x < y ? -1 : 0) * st.dir; });
     ths.forEach(([k, th]) => th.setAttribute('aria-sort', k === st.key ? (st.dir > 0 ? 'ascending' : 'descending') : 'none'));
-    tbody.replaceChildren(...rows.map((c) => {
-      const href = `candidate.html#s${c.sector}/${c.tic}`;
-      const r = el('tr', { class: 'click' });
-      r.addEventListener('click', (e) => { if (!e.target.closest('a')) location.href = href; });
-      for (const [k, , dg] of cols) {
-        let v = c[k];
-        if (k === 'status') v = `<span class="badge b-${v}">${LABEL[v] || v}</span>`;
-        else if (k === 'known') v = v || (c.toi_host ? `<span class="kbd">TOI ${c.toi_host} host, other period</span>` : '–');
-        else if (k === 'allflags') v = `<span class="flags">${v ? v.split(',').map((f) => FLAG_TXT[f] || f).join(', ') : '—'}${c.status === 'needs_review' && !c.deep_vetted ? ' (deep vetting pending)' : ''}</span>`;
-        else if (k === 'tic') v = `<a href="${href}" aria-label="Open TIC ${v}, sector ${c.sector}">${v}</a>`;
-        else if (dg != null) v = fmt(v, dg);
-        r.append(el('td', { class: dg != null ? 'num' : '', html: String(v ?? '–') }));
-      }
-      return r;
-    }));
-    count.textContent = `showing ${rows.length} of ${all.length}`;
+    const out = [];
+    for (const c of rows.slice(0, limit)) {
+      const id = `${c.sector}-${c.tic}`, isOpen = open.has(id), did = `det-${id}`;
+      const btn = el('button', { type: 'button', class: 'xbtn', 'aria-expanded': String(isOpen), 'aria-controls': did, 'aria-label': `More about TIC ${c.tic}` }, isOpen ? '−' : '+');
+      btn.addEventListener('click', () => { isOpen ? open.delete(id) : open.add(id); draw(); });
+      const cells = {
+        tic: `<a href="candidate.html#s${c.sector}/${c.tic}">${c.tic}</a><small>S${c.sector}${c.known ? ' · ' + c.known : ''}</small>`,
+        status: `<span class="badge b-${c.status}">${LABEL[c.status] || c.status}</span>`,
+        period: per(c.period), depth_ppm: pct(c.depth_ppm), rp_earth: c.rp_earth == null ? '–' : c.rp_earth >= 10 ? fmt(c.rp_earth, 0) : fmt(c.rp_earth, 1),
+        sde: fmt(c.sde, 1), allflags: flagChips(c),
+      };
+      out.push(el('tr', { role: 'row', class: isOpen ? 'open' : '' }, el('td', { role: 'cell', class: 'c-x' }, btn),
+        cols.map(([k, l, cls]) => el('td', { role: 'cell', class: cls, 'data-label': l, html: `<span class="v">${cells[k]}</span>` }))));
+      if (isOpen) out.push(el('tr', { role: 'row', class: 'detrow', id: did }, el('td', { role: 'cell', colspan: cols.length + 1 }, detail(c))));
+    }
+    tbody.replaceChildren(...out);
+    more.hidden = rows.length <= limit;
+    more.textContent = `Show more (${rows.length - Math.min(limit, rows.length)} left)`;
+    count.textContent = `showing ${Math.min(limit, rows.length)} of ${rows.length} matching · ${all.length} listed`;
     save();
   }
   draw();
@@ -253,9 +300,8 @@ function charts(d) {
 }
 
 function runs(d) {
-  const rt = document.getElementById('runs');
-  rt.innerHTML = '<thead><tr><th>Started (UTC)</th><th>Sector</th><th class="num">Stars</th><th class="num">Errors</th><th class="num">Wall</th><th class="num">s / star</th><th>Backend</th></tr></thead>';
-  const rb = el('tbody');
-  for (const r of [...d.runs].reverse()) rb.append(el('tr', { html: `<td>${r.started_at.replace('T', ' ').replace('+00:00', '')}</td><td>S${r.sector}</td><td class="num">${fmt(r.n_searched)}</td><td class="num">${r.n_errors}</td><td class="num">${fmt(r.search_wall_s / 60, 1)} min</td><td class="num">${fmt(r.median_star_s, 2)}</td><td>${r.backend}${r.workers ? ` ×${r.workers}` : ''}</td>` }));
-  rt.append(rb);
+  rtable(document.getElementById('runs'),
+    [['a', 'Started (UTC)'], ['s', 'Sector'], ['n', 'Stars', 'num'], ['e', 'Errors', 'num'], ['w', 'Search', 'num'], ['m', 's / star', 'num'], ['b', 'Backend']],
+    [...d.runs].reverse().map((r) => [r.started_at.slice(5, 16).replace('T', ' '), `S${r.sector}`, short(r.n_searched), r.n_errors,
+      `${fmt(r.search_wall_s / 60, 0)} min`, fmt(r.median_star_s, 2), `${r.backend}${r.workers ? ` ×${r.workers}` : ''}`]));
 }

@@ -48,7 +48,7 @@
   </div>
   <div class="card">
     <h2>Searched sectors</h2>
-    <div class="scroll" style="max-height:260px"><table id="sectors"></table></div>
+    <div class="vscroll" style="max-height:300px"><table id="sectors"><caption class="sr">Searched sectors</caption></table></div>
   </div>
 </section>
 
@@ -75,7 +75,7 @@
   <div class="cap"><h2 id="h-cands" style="margin:0">Candidates</h2><span class="kbd" id="ccount" role="status" aria-live="polite"></span></div>
   <div class="filters" id="filters"></div>
   <div class="chips" id="chips" role="group" aria-label="Filter by status"></div>
-  <div class="scroll"><table id="cands"><caption class="sr">Candidate signals. Column headers sort; the TIC opens the detail view.</caption></table></div>
+  <div><table id="cands"><caption class="sr">Candidate signals. Column headers sort; the plus button shows more fields; the TIC opens the detail view.</caption></table></div>
   <div class="legend">
     <span><span class="badge b-known">known</span> period matches a TOI, CTOI or confirmed planet</span>
     <span><span class="badge b-needs_review">needs review</span> passed every screen, no catalogue match</span>
@@ -87,7 +87,7 @@
 <section class="card">
   <h2>Run history</h2>
   <div class="chart" style="height:200px"><canvas id="cRuns" role="img" aria-label="chart"></canvas></div>
-  <div class="scroll" style="max-height:300px;margin-top:12px"><table id="runs"></table></div>
+  <div class="vscroll" style="max-height:320px;margin-top:12px"><table id="runs"><caption class="sr">Run history</caption></table></div>
 </section>
 </main>
 
