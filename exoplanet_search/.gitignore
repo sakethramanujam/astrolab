@@ -11,8 +11,8 @@ __pycache__/
 *.db
 *.parquet
 *.sh.cache
-data/
-results/
+/data/
+/results/
 dask-worker-space/
 *.log
 .env
