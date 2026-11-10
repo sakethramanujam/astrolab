@@ -42,3 +42,10 @@ def test_mimic_threshold():
     fl = deepvet.flags_for(dict(diff_peak_snr=10, centroid_offset_px=0.1, centroid_offset_sigma=1,
                                 diff_peak_dist_px=0.2, gaia_n_can_mimic=1, gaia_mimic_min_sep=3.0))
     assert fl == ["unresolved_neighbour"]
+
+
+def test_eb_flags_and_harmonics():
+    assert deepvet._harmonic(2.0, 4.0) and not deepvet._harmonic(2.0, 3.1)
+    fl = deepvet.flags_for(dict(eb_match="TESS-EB TIC 1", v_ratio=0.3, v_sigma=20, sec_scan_sigma=6, rp_rjup=2.5))
+    assert set(fl) >= {"known_eb", "v_shape", "secondary_scan", "rp_gt_2rjup"}
+    assert deepvet.flags_for(dict(v_ratio=0.9, v_sigma=20, sec_scan_sigma=1, rp_rjup=0.3)) == []

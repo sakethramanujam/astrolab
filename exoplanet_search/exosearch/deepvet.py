@@ -1,5 +1,14 @@
 """Deeper vetting, run only on candidates (stars that passed the per-star screens).
 
+Eclipsing-binary checks
+  * cross-match the TESS EB catalogue (Prsa et al. 2022, VizieR J/ApJS/258/16) by TIC and by position
+    (an EB on a neighbour with the same period is a blend source), and the Kepler EB catalogue
+    (Kirk et al. 2016, J/AJ/151/68) by position where the fields overlap;
+  * transit shape: depth in the central third vs. the outer two thirds (V-shape vs flat bottom),
+    on a finer duration grid at the BLS period;
+  * secondary-eclipse scan over all phases 0.15-0.85, not only 0.5 (eccentric binaries);
+  * radius sanity: implied companion radius from the TIC stellar radius, flag > 2 R_Jup.
+
 Blend checks
   * difference-image centroid test on the SPOC target-pixel file: average (out-of-transit minus
     in-transit) image over all transits, locate where the light was lost, and compare with the
@@ -31,9 +40,14 @@ COLS = {
     "tic": "INTEGER", "sector": "INTEGER", "n_epochs": "INTEGER", "diff_peak_snr": "REAL",
     "centroid_offset_px": "REAL", "centroid_offset_sigma": "REAL", "diff_peak_dist_px": "REAL",
     "gaia_n_neighbours": "INTEGER", "gaia_n_can_mimic": "INTEGER", "gaia_mimic_min_sep": "REAL",
-    "gaia_mimic_brightest_dm": "REAL", "deep_flags": "TEXT", "deep_notes": "TEXT", "updated_at": "TEXT",
+    "gaia_mimic_brightest_dm": "REAL", "eb_match": "TEXT", "v_ratio": "REAL", "v_sigma": "REAL",
+    "duration_fine": "REAL", "sec_scan_sigma": "REAL", "sec_scan_phase": "REAL", "rp_rjup": "REAL",
+    "deep_flags": "TEXT", "deep_notes": "TEXT", "updated_at": "TEXT",
 }
-THRESH = dict(centroid_px=0.5, centroid_sigma=3.0, diff_dist_px=1.5, diff_snr=3.0, gaia_radius_px=2.0,
+R_JUP_RSUN = 0.10045
+VIZIER = ["https://vizier.cds.unistra.fr/viz-bin/asu-tsv", "https://vizier.cfa.harvard.edu/viz-bin/asu-tsv"]
+THRESH = dict(v_ratio=0.45, v_sigma=5.0, sec_scan_sigma=4.0, max_rp_rjup=2.0, eb_match_arcsec=42.0,
+              centroid_px=0.5, centroid_sigma=3.0, diff_dist_px=1.5, diff_snr=3.0, gaia_radius_px=2.0,
               unresolved_arcsec=10.0)
 
 
@@ -188,6 +202,126 @@ def gaia_test(ra, dec, tmag, depth):
                 gaia_mimic_brightest_dm=float(mimic.dm.min()) if len(mimic) else None)
 
 
+# ---------------------------------------------------------------- eclipsing binaries
+def _vizier(source, cols, name):
+    from . import catalogs
+    last = None
+    for base in VIZIER:
+        url = f"{base}?-source={source}&-out={','.join(cols)}&-out.max=unlimited"
+        try:
+            path = config.CATALOG_DIR / name
+            meta = config.CATALOG_DIR / (name + ".meta.json")
+            if path.exists() and meta.exists():
+                return catalogs._cached_csv(name, url, max_age_days=90)
+            r = requests.get(url, timeout=300)
+            r.raise_for_status()
+            lines = [ln for ln in r.text.splitlines() if not ln.startswith("#")]
+            while lines and not lines[0].strip():
+                lines.pop(0)
+            hdr, body = lines[0], []
+            for ln in lines[3:]:                 # first table only: stop at the blank separator
+                if not ln.strip():
+                    break
+                if not ln.startswith("-"):
+                    body.append(ln)
+            df = pd.read_csv(io.StringIO("\n".join([hdr] + body)), sep="\t")
+            if df.empty:
+                raise IOError("empty")
+            config.CATALOG_DIR.mkdir(parents=True, exist_ok=True)
+            df.to_csv(path, index=False)
+            meta.write_text(json.dumps(dict(fetched_at=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                            rows=int(len(df)), source=base + f"?-source={source}", last_error=None)))
+            return df
+        except Exception as exc:
+            last = exc
+    raise RuntimeError(f"VizieR {source} unavailable: {last}")
+
+
+_EB = {}
+
+
+def eb_catalogs():
+    if not _EB:
+        try:
+            t = _vizier("J/ApJS/258/16/tess-ebs", ["TIC", "RAJ2000", "DEJ2000", "Per", "Morph"], "tess_ebs_prsa2022.csv")
+            _EB["tess"] = t.rename(columns={"RAJ2000": "ra", "DEJ2000": "dec"})
+        except Exception as exc:
+            warnings.warn(str(exc))
+            _EB["tess"] = pd.DataFrame(columns=["TIC", "ra", "dec", "Per", "Morph"])
+        try:
+            k = _vizier("J/AJ/151/68", ["KIC", "Per", "_RA", "_DE", "Morph"], "kepler_ebs_kirk2016.csv")
+            _EB["kepler"] = k.rename(columns={"_RA": "ra", "_DE": "dec"})
+        except Exception as exc:
+            warnings.warn(str(exc))
+            _EB["kepler"] = pd.DataFrame(columns=["KIC", "ra", "dec", "Per", "Morph"])
+    return _EB
+
+
+def _harmonic(p, q, tol=0.01):
+    return any(abs(p * k / q - 1) < tol for k in (1, 2, 0.5, 3, 1 / 3))
+
+
+def eb_match(tic, ra, dec, period):
+    out = []
+    for name, cat in eb_catalogs().items():
+        if cat.empty:
+            continue
+        idcol = "TIC" if name == "tess" else "KIC"
+        if name == "tess":
+            same = cat[pd.to_numeric(cat.TIC, errors="coerce") == tic]
+            for r in same.itertuples():
+                out.append(f"TESS-EB TIC {tic} P={r.Per}")
+        if ra == ra and dec == dec:
+            cosd = np.cos(np.radians(dec))
+            sep = 3600 * np.hypot((pd.to_numeric(cat.ra, errors="coerce") - ra) * cosd,
+                                  pd.to_numeric(cat.dec, errors="coerce") - dec)
+            near = cat[(sep < THRESH["eb_match_arcsec"]) & (sep > (1.0 if name == "tess" else -1))]
+            for r, sp in zip(near.itertuples(), sep[near.index]):
+                per = pd.to_numeric(getattr(r, "Per"), errors="coerce")
+                if name == "tess" and int(getattr(r, idcol)) == tic:
+                    continue
+                if per == per and _harmonic(period, per):
+                    out.append(f"{'TESS' if name == 'tess' else 'Kepler'}-EB {idcol} {getattr(r, idcol)} "
+                               f"{sp:.0f}\" away, P={per}")
+    return "; ".join(out) or None
+
+
+def shape_and_secondary(row, lc_path):
+    from astropy.timeseries import BoxLeastSquares
+    from .task import prepare
+    d = prepare(lc_path)
+    t, f, e = d["flat"]
+    P, t0 = float(row.period), float(row.t0)
+    durs = np.linspace(0.02, min(0.3, 0.2 * P), 40)
+    bls = BoxLeastSquares(t, f, dy=e)
+    pw = bls.power([P], durs, objective="likelihood")
+    j = int(np.nanargmax(pw.power))
+    dur, t0 = float(pw.duration[j]), float(pw.transit_time[j])
+    x = (((t - t0 + 0.5 * P) % P) - 0.5 * P) / dur          # in units of the duration
+    c = np.abs(x) < 1 / 6
+    o = (np.abs(x) >= 1 / 6) & (np.abs(x) < 0.5)
+    oot = (np.abs(x) > 1.0) & (np.abs(x) < 3.0)
+    base = np.median(f[oot]) if oot.sum() > 10 else 1.0
+    dc, do = base - np.mean(f[c]), base - np.mean(f[o])
+    sc = np.std(f[oot]) / np.sqrt(max(c.sum(), 1)) if oot.sum() > 10 else np.nan
+    res = dict(duration_fine=dur, v_ratio=float(do / dc) if dc > 0 else None,
+               v_sigma=float(dc / sc) if sc and sc > 0 else None)
+    # secondary scan: box of the same duration at every phase away from the primary
+    ph = ((t - t0) / P) % 1.0
+    sd = np.std(f[oot]) if oot.sum() > 10 else np.std(f)
+    best = (0.0, None)
+    w = dur / P
+    for p0 in np.arange(0.15, 0.85, max(w / 3, 0.002)):
+        m = np.abs(ph - p0) < w / 2
+        if m.sum() < 5:
+            continue
+        sig = (base - np.mean(f[m])) / (sd / np.sqrt(m.sum()))
+        if sig > best[0]:
+            best = (float(sig), float(p0))
+    res.update(sec_scan_sigma=best[0], sec_scan_phase=best[1])
+    return res
+
+
 # ---------------------------------------------------------------- driver
 def flags_for(r):
     f = []
@@ -199,6 +333,14 @@ def flags_for(r):
             f.append("dip_off_target")
     elif r.get("n_epochs", 0) >= 2:
         f.append("centroid_inconclusive")
+    if r.get("eb_match"):
+        f.append("known_eb")
+    if r.get("v_ratio") is not None and (r.get("v_sigma") or 0) >= THRESH["v_sigma"] and r["v_ratio"] < THRESH["v_ratio"]:
+        f.append("v_shape")
+    if (r.get("sec_scan_sigma") or 0) > THRESH["sec_scan_sigma"]:
+        f.append("secondary_scan")
+    if (r.get("rp_rjup") or 0) > THRESH["max_rp_rjup"]:
+        f.append("rp_gt_2rjup")
     if r.get("gaia_n_can_mimic"):
         if (r.get("gaia_mimic_min_sep") or 99) < THRESH["unresolved_arcsec"]:
             f.append("unresolved_neighbour")      # too close for the centroid test to rule out
@@ -220,6 +362,19 @@ def vet_star(row, fname):
             out.update(gaia_test(row.ra, row.dec, row.tmag, row.depth))
     except Exception as exc:
         notes.append(f"gaia failed: {type(exc).__name__}: {exc}"[:160])
+    try:
+        out["eb_match"] = eb_match(int(row.tic), row.ra, row.dec, float(row.period))
+    except Exception as exc:
+        notes.append(f"eb match failed: {exc}"[:160])
+    try:
+        lc = targets.download_one(fname, MAST_FILE + fname, config.lc_dir(int(row.sector)))
+        out.update(shape_and_secondary(row, lc))
+    except Exception as exc:
+        notes.append(f"shape failed: {type(exc).__name__}: {exc}"[:160])
+    if row.radius == row.radius and row.radius and row.depth > 0:
+        out["rp_rjup"] = float(np.sqrt(row.depth) * row.radius / R_JUP_RSUN)
+    else:
+        notes.append("no TIC stellar radius")
     if out.get("deep_notes"):
         notes.append(out["deep_notes"])
     out["deep_flags"] = ",".join(flags_for(out))
