@@ -199,12 +199,12 @@ table.cands tr.open td{border-bottom-color:transparent;background:rgba(124,196,2
 .fchip{display:inline-block;margin:2px 4px 2px 0;padding:1px 8px;border-radius:999px;font:11.5px/1.6 var(--font);color:#c3c9e3;background:rgba(124,196,255,.08);border:1px solid var(--line)}
 .fchip.bad{color:#ffc4c4;border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.07)}
 tr.detrow td{background:rgba(124,196,255,.05)}
-.det{display:grid;gap:12px}
+.det{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .det dl{margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(120px,100%),1fr));gap:8px 16px}
 .det dt{color:var(--muted);font:600 10.5px var(--mono);letter-spacing:1px;text-transform:uppercase}
 .det dd{margin:0;font:13px var(--mono)}
 .det .btn{justify-self:start;margin-right:8px;display:inline-flex}
-.det{grid-template-columns:1fr}
+.det dl{flex:1 1 100%}
 .sortctl{display:none}
 @media (max-width:1100px){table.cands .c-st{width:112px} table.cands .c-p,table.cands .c-d,table.cands .c-r{width:76px}}
 @media (max-width:720px){
