@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from . import __version__, catalogs, config, plots, sectorqueue, store, targets
+from . import __version__, catalogs, config, deepvet, plots, sectorqueue, store, targets
 
 SITE = Path(__file__).resolve().parents[1] / "site"
 SUBMISSIONS = Path(__file__).resolve().parents[1] / "submissions.json"   # manual: {"<tic>": {"where": "...", "ref": "...", "date": "..."}}
@@ -34,13 +34,18 @@ def _label(r):
     return None
 
 
+def _deep(r):
+    f = getattr(r, "deep_flags", None)
+    return set(filter(None, f.split(","))) if isinstance(f, str) else set()
+
+
 def _status(r, subs):
     if str(r.tic) in subs:
         return "submitted"
     if _known(r):
         return "known"
     if r.passed == 1:
-        return "needs_review"
+        return "rejected" if _deep(r) & deepvet.REJECT else "needs_review"
     return "rejected"
 
 
@@ -74,6 +79,13 @@ def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
     df = store.frame(con)
     runs = store.runs(con)
     subs = json.loads(SUBMISSIONS.read_text()) if SUBMISSIONS.exists() else {}
+    dv = deepvet.frame(deepvet.connect())
+    if len(dv):
+        df = df.merge(dv.drop(columns=["updated_at"]), on=["tic", "sector"], how="left")
+    else:
+        for k in deepvet.COLS:
+            if k not in ("tic", "sector", "updated_at"):
+                df[k] = None
     ok = df[df.status == "ok"].copy()
     try:
         ps_ok = bool(catalogs.load_catalogs().get("ps_ok"))
@@ -98,7 +110,8 @@ def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
         ok[ok.state.isin(["submitted", "needs_review"])].sort_values("sde", ascending=False),   # always all of these
         ok[ok.state == "known"].sort_values("sde", ascending=False).head(max_candidates),
         # strongest rejects that still look physically plausible (skip broken photometry)
-        ok[(ok.state == "rejected") & (ok.depth < 0.05) & (ok.depth > 0)]
+        ok[(ok.state == "rejected") & (ok.passed == 1)].sort_values("sde", ascending=False),  # failed deep vetting
+        ok[(ok.state == "rejected") & (ok.passed == 0) & (ok.depth < 0.05) & (ok.depth > 0)]
         .sort_values("sde", ascending=False).head(max_rejected)])
     cands = []
     for r in listed.itertuples():
@@ -110,8 +123,26 @@ def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
             odd_even_sigma=_f(r.odd_even_sigma, 2), secondary_sigma=_f(r.secondary_sigma, 2),
             n_transits=int(r.n_transits or 0), rp_earth=_f(r.rp_earth, 2), flags=r.flags or "",
             submission=subs.get(str(r.tic)),
+            deep_vetted=bool(isinstance(r.deep_flags, str)), deep_flags=r.deep_flags if isinstance(r.deep_flags, str) else None,
+            centroid_offset_px=_f(r.centroid_offset_px, 2), centroid_offset_sigma=_f(r.centroid_offset_sigma, 1),
+            gaia_n_can_mimic=None if r.gaia_n_can_mimic != r.gaia_n_can_mimic or r.gaia_n_can_mimic is None else int(r.gaia_n_can_mimic),
+            gaia_mimic_min_sep=_f(r.gaia_mimic_min_sep, 1), eb_match=r.eb_match if isinstance(r.eb_match, str) else None,
+            v_ratio=_f(r.v_ratio, 2), sec_scan_sigma=_f(r.sec_scan_sigma, 1), rp_rjup=_f(r.rp_rjup, 2),
             plot=_plot(r, site) if plots_on else None,
             exofop=f"https://exofop.ipac.caltech.edu/tess/target.php?id={int(r.tic)}"))
+
+    # deep-vetting funnel over signals that passed the per-star screens with no catalogue match
+    rev = ok[(ok.passed == 1) & ~ok.apply(_known, axis=1) & ~ok.tic.astype(str).isin(subs)]
+    vet_ = rev[rev.deep_flags.apply(lambda x: isinstance(x, str))]
+    fl = vet_.apply(_deep, axis=1) if len(vet_) else pd.Series(dtype=object)
+    funnel = dict(
+        unmatched_passed=int(len(rev)), deep_vetted=int(len(vet_)),
+        survive_blend=int(sum(not (x & deepvet.BLEND) for x in fl)),
+        survive_eb=int(sum(not (x & deepvet.EB) for x in fl)),
+        survive_reject_checks=int(sum(not (x & deepvet.REJECT) for x in fl)),
+        survive_all=int(sum(not (x & (deepvet.REJECT | deepvet.BLEND)) for x in fl)),
+        by_flag={k: int(sum(k in x for x in fl)) for k in sorted(deepvet.REJECT | deepvet.BLEND |
+                                                                {"neighbour_could_mimic", "centroid_inconclusive", "centroid_shift_minor"})})
 
     toi = ok[ok.known_toi.notna()]
     sde_hist, sde_edges = np.histogram(ok.sde.clip(0, 40), bins=40, range=(0, 40))
@@ -138,6 +169,7 @@ def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
                     submitted=int((ok.state == "submitted").sum()),
                     planet_archive_crossmatch=ps_ok),
         queue_next=sectorqueue.next_sectors(3),
+        deep_funnel=funnel,
         catalogs=catalogs.catalog_status(),
         sectors=sectors,
         runs=[dict(sector=int(r.sector), started_at=r.started_at, finished_at=r.finished_at,

@@ -12,7 +12,7 @@
   <p class="lede">Each stage of the pipeline, in plain words, with figures from our own data. The example star is
     TIC 301289516, which hosts the known planet candidate TOI-4517.01. Our search re-found it blind.</p>
   <div class="toc"><a href="#tess">1 · TESS & light curves</a><a href="#detrend">2 · Detrending</a><a href="#bls">3 · BLS & SDE</a>
-    <a href="#vet">4 · Vetting</a><a href="#sys">5 · Systematics</a><a href="#xmatch">6 · Cross-matching</a><a href="#cs">7 · Citizen science</a></div>
+    <a href="#vet">4 · Vetting</a><a href="#deep">4b · Blends & binaries</a><a href="#sys">5 · Systematics</a><a href="#xmatch">6 · Cross-matching</a><a href="#cs">7 · Citizen science</a></div>
 </div></header>
 <main class="wrap">
 
@@ -72,6 +72,30 @@
     <figcaption>A real rejected signal from our run: odd and even dips have clearly different depths, and there's a dip halfway round the orbit. Almost certainly an eclipsing binary.</figcaption></figure>
   <p class="why"><b>What we can't check automatically yet:</b> whether the dip is on a <i>neighbouring</i> star whose light leaks into the same pixels
     (TESS pixels are 21″ wide). That needs pixel-level centroid analysis, and it's the first thing a human reviewer does.</p>
+</section>
+
+<section id="deep" class="card lesson">
+  <h2>4b · Deep vetting: blends and binaries</h2>
+  <p>Signals that survive the per-star screens and match nothing known get slower, pixel-level checks.</p>
+  <ul>
+    <li><b>Difference image.</b> From the 11×11-pixel stamp TESS stores around each star, we average the images taken just
+      <i>before and after</i> each transit and subtract the images taken <i>during</i> it. What's left is a picture of where the light went missing.
+      If that spot sits on a neighbouring pixel instead of on our star (measured to a fraction of a pixel, with a bootstrap over transits for the
+      uncertainty), the dip belongs to someone else.</li>
+    <li><b>Gaia neighbours.</b> We list every Gaia DR3 star within two TESS pixels (42″). A neighbour <i>N</i> magnitudes fainter dims
+      the total light by at most 10<sup>−N/2.5</sup> even if it vanished completely, so only neighbours brighter than that limit can fake the depth. Ones closer
+      than ~10″ are too close for the difference image to separate: those stay flagged as an <b>unresolved neighbour</b>.</li>
+    <li><b>Known eclipsing binaries.</b> We cross-match the TESS eclipsing-binary catalogue (Prša et al. 2022) by TIC number and by position,
+      because a binary on the star next door with the same period is a classic blend, plus the Kepler EB catalogue where the fields overlap.</li>
+    <li><b>Shape.</b> A planet's transit has a flat bottom once the planet is fully in front of the star; two grazing stars give a V.
+      We compare the depth in the central third with the outer two thirds (V-ratio; a box is 1, a V is about 0.4).</li>
+    <li><b>A secondary anywhere.</b> Eccentric binaries don't put the secondary eclipse at phase 0.5, so we scan every phase from 0.15 to 0.85.</li>
+    <li><b>Size.</b> Depth × the star's TIC radius gives the companion's radius. Above about 2 Jupiter radii it's a star, not a planet.</li>
+  </ul>
+  <figure><img src="learn/08_difference_image.png" alt="out-of-transit and difference images" loading="lazy">
+    <figcaption>Left: the star in the TESS pixel stamp. Right: where light was lost during transit. The cross marks the dip's centroid; the plus marks our star.</figcaption></figure>
+  <p class="why"><b>Still not proof:</b> a clean result means "no evidence it's a blend or a binary at TESS resolution", not "it's a planet".
+    Ground-based images and spectra are what settle it.</p>
 </section>
 
 <section id="sys" class="card lesson">

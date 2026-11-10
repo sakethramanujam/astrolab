@@ -154,6 +154,44 @@ def sector_figures(df):
     _save(fig, "07_sde.png")
 
 
+def diff_image_figure(sector, df):
+    """08: out-of-transit image vs difference image for an on-target and an off-target signal."""
+    from . import deepvet
+    dv = deepvet.frame(deepvet.connect(), sector)
+    if dv.empty:
+        return
+    m = df.merge(dv, on=["tic", "sector"])
+    m = m[m.diff_peak_snr.fillna(0) > 5]
+    off = m[m.deep_flags.fillna("").str.contains("dip_off_target|centroid_offset")].sort_values("diff_peak_snr", ascending=False)
+    on = m[(m.toi_period_match == 1) & (m.deep_flags.fillna("") == "")].sort_values("diff_peak_snr", ascending=False)
+    picks = [("on target", on.iloc[0])] if len(on) else []
+    if len(off):
+        picks.append(("off target", off.iloc[0]))
+    if not picks:
+        return
+    man = targets.fetch_manifest(sector).set_index("tic")
+    fig, axs = plt.subplots(len(picks), 2, figsize=(9, 4.2 * len(picks)), squeeze=False)
+    for row_i, (lab, r) in enumerate(picks):
+        tp = deepvet.fetch_tpf(sector, man.loc[int(r.tic)].fname)
+        res = deepvet.centroid_test(tp, r.period, r.t0, r.duration, images=True)
+        for j, (img, c, title) in enumerate(((res["_oot"], res["_oot_c"], "out of transit"),
+                                             (res["_diff"], res["_diff_c"], "light lost in transit"))):
+            ax = axs[row_i, j]
+            ax.imshow(img, origin="lower", cmap="magma")
+            ax.plot(res["_oot_c"][1], res["_oot_c"][0], "+", color=ACC, ms=16, mew=2, label="target")
+            if j == 1:
+                ax.plot(c[1], c[0], "x", color=ACC2, ms=12, mew=2, label="dip centroid")
+                ax.legend(fontsize=7, loc="upper right", frameon=False, labelcolor=FG)
+            ax.set(title=f"TIC {int(r.tic)} ({lab}): {title}", xticks=[], yticks=[])
+            ax.title.set_fontsize(9)
+            ax.grid(False)
+        axs[row_i, 1].text(0.02, 0.02, f"offset {res['centroid_offset_px']:.2f} px ({res['centroid_offset_sigma']:.1f}σ)",
+                           transform=axs[row_i, 1].transAxes, color=FG, fontsize=8)
+    _save(fig, "08_difference_image.png")
+    for p in (config.sector_dir(sector) / "tp").glob("*.fits"):
+        p.unlink()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sector", type=int, default=70)
@@ -167,6 +205,7 @@ def main():
     if len(eb):
         eb_figure(a.sector, eb.sort_values("snr", ascending=False).iloc[0].to_dict())
     sector_figures(df)
+    diff_image_figure(a.sector, df)
 
 
 if __name__ == "__main__":

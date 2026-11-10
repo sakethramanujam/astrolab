@@ -46,8 +46,8 @@ COLS = {
 }
 R_JUP_RSUN = 0.10045
 VIZIER = ["https://vizier.cds.unistra.fr/viz-bin/asu-tsv", "https://vizier.cfa.harvard.edu/viz-bin/asu-tsv"]
-THRESH = dict(v_ratio=0.45, v_sigma=5.0, sec_scan_sigma=4.0, max_rp_rjup=2.0, eb_match_arcsec=42.0,
-              centroid_px=0.5, centroid_sigma=3.0, diff_dist_px=1.5, diff_snr=3.0, gaia_radius_px=2.0,
+THRESH = dict(v_ratio=0.45, v_sigma=5.0, sec_scan_sigma=5.0, max_rp_rjup=2.0, eb_match_arcsec=42.0,
+              centroid_px=1.0, centroid_warn_px=0.5, centroid_sigma=3.0, diff_dist_px=2.0, diff_snr=3.0, gaia_radius_px=2.0,
               unresolved_arcsec=10.0)
 
 
@@ -90,7 +90,7 @@ def _centroid3(img, iy, ix):
     return float((sub * yy).sum() / sub.sum()), float((sub * xx).sum() / sub.sum())
 
 
-def centroid_core(t, flux, period, t0, duration, target_yx=None, n_boot=200, seed=0):
+def centroid_core(t, flux, period, t0, duration, target_yx=None, n_boot=200, seed=0, images=False):
     """Difference-image centroid offset from cadence-by-pixel arrays (flux: [n, ny, nx])."""
     n0, n1 = np.ceil((t.min() - t0) / period), np.floor((t.max() - t0) / period)
     diffs = []
@@ -127,10 +127,12 @@ def centroid_core(t, flux, period, t0, duration, target_yx=None, n_boot=200, see
     sig = float(np.std(boots)) or 1e-3
     res.update(centroid_offset_px=off, centroid_offset_sigma=off / sig,
                diff_peak_dist_px=float(np.hypot(iy - oy, ix - ox)))
+    if images:
+        res.update(_oot=oot, _diff=mean, _oot_c=(oy, ox), _diff_c=(dy, dx))
     return res
 
 
-def centroid_test(tpf_path, period, t0, duration):
+def centroid_test(tpf_path, period, t0, duration, images=False):
     import lightkurve as lk
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -143,7 +145,7 @@ def centroid_test(tpf_path, period, t0, duration):
         tyx = (float(px[1]), float(px[0]))
     except Exception:
         tyx = None
-    return centroid_core(t[ok], flux[ok], period, t0, duration, tyx)
+    return centroid_core(t[ok], flux[ok], period, t0, duration, tyx, images=images)
 
 
 # ---------------------------------------------------------------- Gaia neighbours
@@ -309,26 +311,42 @@ def shape_and_secondary(row, lc_path):
     # secondary scan: box of the same duration at every phase away from the primary
     ph = ((t - t0) / P) % 1.0
     sd = np.std(f[oot]) if oot.sum() > 10 else np.std(f)
-    best = (0.0, None)
+    # Score each trial phase against the spread of all trial phases (robust z), not against white noise:
+    # red noise and the number of trials make a white-noise 4-sigma bump appear in most light curves.
     w = dur / P
+    phases, sigs = [], []
     for p0 in np.arange(0.15, 0.85, max(w / 3, 0.002)):
         m = np.abs(ph - p0) < w / 2
         if m.sum() < 5:
             continue
-        sig = (base - np.mean(f[m])) / (sd / np.sqrt(m.sum()))
-        if sig > best[0]:
-            best = (float(sig), float(p0))
+        phases.append(p0)
+        sigs.append((base - np.mean(f[m])) / (sd / np.sqrt(m.sum())))
+    best = (0.0, None)
+    if len(sigs) >= 10:
+        sigs = np.asarray(sigs)
+        spread = 1.4826 * np.median(np.abs(sigs - np.median(sigs))) or 1.0
+        z = (sigs - np.median(sigs)) / spread
+        j = int(np.argmax(z))
+        best = (float(z[j]), float(phases[j]))
     res.update(sec_scan_sigma=best[0], sec_scan_phase=best[1])
     return res
+
+
+# flags that turn a "needs review" signal into "rejected"; the rest are warnings
+REJECT = {"centroid_offset", "dip_off_target", "known_eb", "v_shape", "secondary_scan", "rp_gt_2rjup"}  # calibrated on S70 TOIs: each fires on <=3% of known planets
+BLEND = {"centroid_offset", "dip_off_target", "unresolved_neighbour"}
+EB = {"known_eb", "v_shape", "secondary_scan", "rp_gt_2rjup"}
 
 
 # ---------------------------------------------------------------- driver
 def flags_for(r):
     f = []
     if r.get("diff_peak_snr") is not None and r["diff_peak_snr"] >= THRESH["diff_snr"]:
-        if (r.get("centroid_offset_px") or 0) > THRESH["centroid_px"] and \
-                (r.get("centroid_offset_sigma") or 0) > THRESH["centroid_sigma"]:
+        off, osig = r.get("centroid_offset_px") or 0, r.get("centroid_offset_sigma") or 0
+        if off > THRESH["centroid_px"] and osig > THRESH["centroid_sigma"]:
             f.append("centroid_offset")
+        elif off > THRESH["centroid_warn_px"] and osig > THRESH["centroid_sigma"]:
+            f.append("centroid_shift_minor")       # warning only: seen on ~5% of confirmed planets
         if (r.get("diff_peak_dist_px") or 0) > THRESH["diff_dist_px"]:
             f.append("dip_off_target")
     elif r.get("n_epochs", 0) >= 2:
@@ -410,14 +428,38 @@ def run(sector, only_review=False, redo=False, prune=True, log=print):
     return frame(con, sector)
 
 
+def refresh(sector, log=print):
+    """Recompute light-curve shape metrics and flags for already-vetted stars (no TPF downloads)."""
+    con = connect()
+    df = store.frame(con, sector).set_index("tic")
+    dv = frame(con, sector)
+    man = targets.fetch_manifest(sector).set_index("tic")
+    for i, d in enumerate(dv.to_dict("records"), 1):
+        r = df.loc[d["tic"]]
+        r = r.copy(); r["tic"] = d["tic"]
+        fname = man.loc[d["tic"]].fname
+        try:
+            lc = targets.download_one(fname, MAST_FILE + fname, config.lc_dir(int(sector)))
+            d.update(shape_and_secondary(r, lc))
+        except Exception as exc:
+            log(f"  {d['tic']}: shape failed: {exc}")
+        d["deep_flags"] = ",".join(flags_for(d))
+        d["updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+        upsert(con, d)
+        if i % 25 == 0:
+            log(f"  refreshed {i}/{len(dv)}")
+    return frame(con, sector)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sector", type=int, required=True)
     ap.add_argument("--only-review", action="store_true", help="skip candidates that match known objects")
     ap.add_argument("--redo", action="store_true")
     ap.add_argument("--keep-tpf", action="store_true")
+    ap.add_argument("--refresh", action="store_true", help="recompute shape metrics + flags only (no TPFs)")
     a = ap.parse_args()
-    d = run(a.sector, a.only_review, a.redo, prune=not a.keep_tpf)
+    d = refresh(a.sector) if a.refresh else run(a.sector, a.only_review, a.redo, prune=not a.keep_tpf)
     print(d.deep_flags.fillna("").str.split(",").explode().value_counts().to_string())
 
 

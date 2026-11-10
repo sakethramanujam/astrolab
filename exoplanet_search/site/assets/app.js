@@ -42,6 +42,19 @@ function render(d){
   new Chart(cRecovery,{type:'doughnut',data:{labels:['re-found & passed','found, failed a screen','missed'],
     datasets:[{data:[t.toi_recovered,t.toi_period_found-t.toi_recovered,t.toi_hosts-t.toi_period_found],backgroundColor:[C.ok,C.warn,'rgba(139,147,179,.35)'],borderWidth:0}]},
     options:{maintainAspectRatio:false,cutout:'68%',plugins:{legend:{position:'right'}}}});
+  const fu=d.deep_funnel;
+  if(fu){
+    new Chart(cFunnel,{type:'bar',data:{labels:['passed screens, no match','deep-vetted','on-target (no blend)','not binary-like','survive everything'],
+      datasets:[{data:[fu.unmatched_passed,fu.deep_vetted,fu.survive_blend,fu.survive_eb,fu.survive_all],
+      backgroundColor:['rgba(124,196,255,.45)','rgba(124,196,255,.65)',C.acc,C.sub,C.acc2],borderWidth:0}]},
+      options:{indexAxis:'y',maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+    const dn={centroid_offset:'dip centroid off target',dip_off_target:'darkest pixel off target',unresolved_neighbour:'unresolved bright neighbour',
+      neighbour_could_mimic:'neighbour could mimic (centroid inconclusive)',centroid_inconclusive:'centroid inconclusive',centroid_shift_minor:'small centroid shift (warning)',known_eb:'known eclipsing binary',
+      v_shape:'V-shaped (grazing binary-like)',secondary_scan:'secondary eclipse found',rp_gt_2rjup:'too big (> 2 Jupiter radii)'};
+    const de=Object.entries(fu.by_flag).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
+    new Chart(cDeep,{type:'bar',data:{labels:de.map(x=>dn[x[0]]||x[0]),datasets:[{data:de.map(x=>x[1]),backgroundColor:'rgba(192,132,252,.6)',borderWidth:0}]},
+      options:{indexAxis:'y',maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+  }
   const sh=d.charts.sde_hist, ph=d.charts.period_hist;
   new Chart(cSde,{type:'bar',data:{labels:sh.edges.slice(0,-1).map(x=>x.toFixed(0)),datasets:[{label:'stars',data:sh.counts,
     backgroundColor:sh.edges.slice(0,-1).map(x=>x>=9?C.acc2:'rgba(124,196,255,.55)'),borderWidth:0,barPercentage:1,categoryPercentage:1}]},
@@ -78,7 +91,8 @@ function renderTables(d){
     const b=el('button',{className:'chip'+(s===cur?' on':''),textContent:`${label[s]} · ${n}`});
     b.onclick=()=>{cur=s;[...chips.children].forEach(x=>x.classList.remove('on'));b.classList.add('on');draw()};chips.append(b)}
   const cols=[['tic','TIC',0],['sector','Sector',0],['status','Status'],['known','Match'],['period','Period (d)',4],['duration_h','Dur (h)',1],['depth_ppm','Depth (ppm)',0],
-    ['sde','SDE',1],['snr','SNR',1],['n_transits','Transits',0],['rp_earth','Rp (R⊕)',1],['tmag','Tmag',1],['flags','Flags']];
+    ['sde','SDE',1],['snr','SNR',1],['n_transits','Transits',0],['rp_earth','Rp (R⊕)',1],['tmag','Tmag',1],['allflags','Flags']];
+  d.candidates.forEach(c=>c.allflags=[c.flags,c.deep_flags].filter(Boolean).join(',')+(c.deep_vetted?'':(c.status==='needs_review'?' (deep vetting pending)':'')));
   const tab=document.getElementById('cands');
   function draw(){
     const rows=d.candidates.filter(c=>cur==='all'||c.status===cur).sort((a,b)=>{const x=a[key],y=b[key];return (x==null)-(y==null)||(x>y?1:x<y?-1:0)*dir});
@@ -89,7 +103,7 @@ function renderTables(d){
       for(const [k,,dg] of cols){let v=c[k];
         if(k==='status')v=`<span class="badge b-${v}">${label[v]||v}</span>`;
         else if(k==='known')v=v||(c.toi_host?`<span class="kbd">TOI ${c.toi_host} host, other period</span>`:'–');
-        else if(k==='flags')v=`<span class="flags">${v||'—'}</span>`;
+        else if(k==='allflags')v=`<span class="flags">${v||'—'}</span>`;
         else if(k==='tic')v=`<a href="${c.exofop}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${v}</a>`;
         else if(dg!=null)v=fmt(v,dg);
         r.append(el('td',{className:dg!=null&&k!=='tic'?'num':''},v))}
@@ -101,5 +115,6 @@ function openPlot(c){
   dlgT.textContent=`TIC ${c.tic} · sector ${c.sector} · ${c.known||'no catalogue match'}`;
   dlgI.src=c.plot;
   dlgB.innerHTML=`Period ${fmt(c.period,5)} d · depth ${fmt(c.depth_ppm)} ppm · duration ${fmt(c.duration_h,1)} h · SDE ${fmt(c.sde,1)} · SNR ${fmt(c.snr,1)} · odd/even ${fmt(c.odd_even_sigma,1)}σ · secondary ${fmt(c.secondary_sigma,1)}σ<br>
-  Flags: <span class="flags">${c.flags||'none'}</span> · <a href="${c.exofop}" target="_blank" rel="noopener">ExoFOP page</a> · panels: raw + trend, periodogram, fold, odd/even, phase 0.5.`;
+  Screens: <span class="flags">${c.flags||'all passed'}</span><br>
+  Deep vetting: ${c.deep_vetted?`<span class="flags">${c.deep_flags||'all passed'}</span> · dip centroid offset ${fmt(c.centroid_offset_px,2)} px (${fmt(c.centroid_offset_sigma,1)}σ) · Gaia neighbours that could mimic: ${c.gaia_n_can_mimic??'–'}${c.gaia_mimic_min_sep!=null?` (closest ${fmt(c.gaia_mimic_min_sep,1)}″)`:''} · V-ratio ${fmt(c.v_ratio,2)} · best secondary ${fmt(c.sec_scan_sigma,1)}σ · ${fmt(c.rp_rjup,2)} R<sub>J</sub>${c.eb_match?` · <b>${c.eb_match}</b>`:''}`:'not run yet'}<br> · <a href="${c.exofop}" target="_blank" rel="noopener">ExoFOP page</a> · panels: raw + trend, periodogram, fold, odd/even, phase 0.5.`;
   dlg.showModal()}
