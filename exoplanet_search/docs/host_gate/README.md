@@ -16,26 +16,28 @@ two to three transits allow several periods with the same in-transit points); S 
 
 ## Diagnosis
 
-`host_gate trace` hashes every stage. On h2 the raw light curve and the binned time stamps are bit-identical to h1;
-the first divergence is the detrending trend (wotan biweight, numba-compiled), and the period grid also differs.
-A probe on the two hosts:
+`host_gate trace` hashes every stage. On h2 the raw light curve and the binned time stamps are bit-identical to h1.
+Two sources of difference, both on arm64 only:
 
-* `np.arange(a, b, step)` differs in the last bit on arm64 (its fill loop is compiled with floating-point contraction,
-  i.e. fused multiply-add, which is baseline on aarch64 and not used on x86-64 baseline builds);
-  `a + step * np.arange(n)` (two separate ufuncs, no fusion possible) is bit-identical on both.
-* `np.exp` / `np.log` differ in the last bit (different SIMD math libraries).
-* `np.sum` and BLAS-free reductions agree. numpy, scipy, numba and llvmlite versions are identical (lockfile);
-  BLAS differs (Accelerate vs OpenBLAS) but no BLAS call sits on the search path.
-
-So the arm64 failure is FMA contraction / libm, not package versions. x86_64 hosts with the same lockfile are
-bit-identical.
+* **Period grid.** `np.arange(a, b, step)` differs in the last bit on arm64 (its fill loop is compiled with
+  floating-point contraction, i.e. fused multiply-add, baseline on aarch64 and not used by x86-64 baseline builds);
+  `a + step * np.arange(n)` (two separate ufuncs) is bit-identical on both. This alone explains the 17 last-bit
+  period differences and, through the S ties, the 6 peak flips. `np.exp` / `np.log` also differ in the last bit
+  (different SIMD math libraries), though they are not on the grid path.
+* **Detrending trend.** wotan's biweight is compiled by numba with `fastmath=True, cache=True`. On h2 a freshly
+  JIT-compiled run gives the trend bit-identical to h1, while the code loaded from wotan's on-disk numba cache gives a
+  different trend (reproducible: empty `NUMBA_CACHE_DIR` → h1 hash; second run from that cache → different hash).
+  `fastmath` permits reassociation, so the result depends on how and where LLVM compiled it. Mixed fresh/cached
+  workers make h2 rows inconsistent with each other as well. h1 and h3 (both x86_64) agree bit for bit.
+* Package versions are identical (lockfile). BLAS differs (Accelerate vs OpenBLAS) but no BLAS call sits on the
+  search path. `np.sum` agrees.
 
 ## Options for v1.1 (needs a decision; nothing changed in v1.0.0)
 
 1. Keep arm64 out of the registered statistic (x86_64 hosts only), or
 2. make the v1.1 search arm64-reproducible: period grid as `fmin + df * arange(n)` (or shipped as a file), a
-   deterministic tie-break (lowest period among scan powers within 1e-9 relative of the max), and the trend computed
-   without contraction (numba `fastmath=False` is the default; check wotan's compiled loops, or replace them with a
-   NumPy-only biweight), then re-run this gate, or
+   deterministic tie-break (lowest period among scan powers within 1e-9 relative of the max), and the biweight
+   compiled without `fastmath` (vendored copy, or a NumPy-only biweight), with the numba cache disabled or keyed per
+   host; then re-run this gate on all hosts (the `fastmath` issue is also a risk between x86_64 CPU generations), or
 3. amend the gate to "same grid index for P, |ΔS| ≤ 1e-6, and ties resolved by the rule above", registered before
    any merge.
