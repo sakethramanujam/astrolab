@@ -44,6 +44,12 @@ def sh(*cmd, cwd=None, check=True, **kw):
 def status(state, **kw):
     OUTROOT.mkdir(parents=True, exist_ok=True)
     rec = dict(state=state, at_utc=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), **kw)
+    th = OUTROOT / "thermal_h1.json"                          # written every minute by scripts/thermal_guard.sh
+    if th.exists():
+        try:
+            rec["thermal_h1"] = json.loads(th.read_text())
+        except ValueError:
+            pass
     STATUS.write_text(json.dumps(rec, indent=1, default=str))
     print(json.dumps(rec, default=str))
     return rec

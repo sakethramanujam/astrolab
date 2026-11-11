@@ -1,0 +1,7 @@
+[Unit]
+Description=astrolab thermal guard tick (pause v1.1 workers at >= 90 C, resume below 80 C)
+
+[Service]
+Type=oneshot
+# Set GUARD (script path) and STATUS with: systemctl --user edit astrolab-thermal.service
+ExecStart=/bin/bash -c '"$GUARD" "$STATUS"'

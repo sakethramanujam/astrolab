@@ -1,0 +1,11 @@
+[Unit]
+Description=astrolab thermal guard, every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=5s
+Unit=astrolab-thermal.service
+
+[Install]
+WantedBy=timers.target
