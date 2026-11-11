@@ -69,7 +69,7 @@ def diff(new_file, sector, out):
     ok = (new.status == "ok") & (old.status == "ok")
     n, o = new[ok], old[ok]
     same_pd = (n.period == o.period) & (n.duration == o.duration)
-    flags_n, flags_o = n.flags.fillna(""), o.flags.fillna("")
+    flags_n, flags_o = n["flags"].fillna("").astype(str), o["flags"].fillna("").astype(str)
     res = dict(sector=sector, n=int(len(new)), n_ok_both=int(ok.sum()), rerun_code=str(new.rerun_code.iloc[0]),
                stored_git_hashes=sorted(map(str, old.git_hash.unique())),
                same_P_D=int(same_pd.sum()), same_P_D_frac=float(same_pd.mean()),
