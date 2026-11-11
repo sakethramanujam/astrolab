@@ -208,7 +208,9 @@ def check_rates(lab):
     d = lab[lab.status == "ok"].copy()
     d["group"] = d.sector.map(group_of)
     d["split"] = np.where(d.holdout, "holdout", "tuning")
-    fl = d["flags"].fillna("").str.split(",").map(set) | d.deep_flags.fillna("").str.split(",").map(set)
+    a_ = d["flags"].fillna("").astype(str).str.split(",").map(set)
+    b_ = d["deep_flags"].fillna("").astype(str).str.split(",").map(set) if "deep_flags" in d else pd.Series([set()] * len(d), index=d.index)
+    fl = pd.Series([x | y for x, y in zip(a_, b_)], index=d.index)      # elementwise set union (Series | Series is boolean)
     d["allflags"] = fl
     out = {}
     for (g, sp), x in d.groupby(["group", "split"]):
