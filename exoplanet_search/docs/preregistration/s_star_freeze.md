@@ -31,6 +31,15 @@ it is "not calibrated".
   hashes of the input tables and the commit, and is not updated afterwards. Later null realizations are reported as
   checks, not refits.
 
+## Condition to apply before freezing: red-noise floor
+
+The S70 flipped null has a non-trivial number of peaks with beta_D < 1 (2,932 of 5,881 tuning stars; 116 of the 288
+vetted peaks above S = 6; snapshot 2026-11-10, `exosearch/beta_floor.py`). Before S* is frozen, the statistic used
+for the fit, for completeness and for the candidates must apply the floor CDPP_D' = max(CDPP_D, sigma_w / sqrt(N_D))
+(beta_D >= 1), consistently on all populations. Post hoc on the stored peaks it moves S* from 12.07 to 11.62 on the
+same sample. If the floor is implemented in the search (v1.1) rather than post hoc, the frozen S* is derived from
+that run instead. Nothing is frozen by this file.
+
 ## Until then
 
 The current value in `configs/interim_threshold_v1.json` is labelled provisional. It comes from a partial flipped null
