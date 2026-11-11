@@ -1,5 +1,6 @@
 # never commit envs, data, results, caches
 .venv/
+.venv-worker/
 venv/
 __pycache__/
 *.pyc
