@@ -38,7 +38,7 @@ function render(d) {
   for (const [k, v, s, c] of [
     ['Stars searched', fmt(t.stars_searched), `${fmt(t.errors)} errors`, 'acc'],
     ['Sectors', `${t.sectors_done}<span style="font-size:18px;color:var(--muted)"> / ${t.sectors_available}</span>`, `${t.sectors_with_results} with results · next: ${(d.queue_next || []).join(', ') || '–'}`, ''],
-    ['Known TOIs re-found', `${fmt(rate, 0)}%`, `${t.toi_recovered} of ${nh} TOI hosts in calibrated (v1) rows, at S ≥ interim S*`, 'ok'],
+    ['Known TOIs re-found', nh ? `${fmt(rate, 0)}%` : '–', nh ? `${t.toi_recovered} of ${nh} TOI hosts in calibrated (v1) rows, at S ≥ interim S*` : `no calibrated (v1) rows with a catalogue cross-match yet; period re-found for ${fmt(t.toi_period_found)} of ${fmt(t.toi_hosts)} TOI hosts in v0 rows`, 'ok'],
     ['Needs review', fmt(t.needs_review), `passed every check at S ≥ interim S*, no catalogue match; not detections · ${fmt(t.uncalibrated ?? 0)} more not calibrated` +
       (pend.length ? ` · catalogue cross-match pending for sector ${pend.join(', ')}` : ''), 'acc2'],
     ['Submitted', fmt(t.submitted), 'to Planet Hunters TESS / ExoFOP', 'sub'],

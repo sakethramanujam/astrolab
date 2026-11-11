@@ -194,7 +194,7 @@ if (N) {
     const scr = sb?.scramble?.s_star ? `${fmt(sb.scramble.s_star, 1)} (95% ${ci(sb.scramble.ci95)}, ${fmt(sb.scramble.n)} stars)` : 'pending (run not finished)';
     t.append(el('p', { class: 'muted', html: `<b>Provisional interim S* for sector ${k}: ${fmt(v.s_star, 1)}</b> (95% statistical ${ci(v.ci95)}${v.sys_halfwidth != null ? `, ±${fmt(v.sys_halfwidth, 1)} systematic` : ''}). ` +
       `Side by side: flipped null ${fmt(v.s_star, 1)}; scrambled null ${scr}. It stays provisional until both are complete. ` +
-      `Fit: generalized Pareto above S = ${fmt(v.u, 0)} to ${v.k_tail} vetted noise peaks among ${fmt(v.n)} tuning stars (shape ξ = ${fmt(v.xi, 2)}); ` +
+      `Fit: generalized Pareto above S = ${fmt(v.u, 2)} to ${v.k_tail} vetted noise peaks among ${fmt(v.n)} tuning stars (shape ξ = ${fmt(v.xi, 2)}); ` +
       `the largest vetted noise peak so far is S = ${fmt(v.max_vetted, 1)}. Cameras are pooled. The histogram shows stars that pass the quality cut; the slider starts at S*.` }));
   }
 } else document.getElementById('falsealarms').append(el('p', { class: 'muted' }, 'Null runs in progress.'));
