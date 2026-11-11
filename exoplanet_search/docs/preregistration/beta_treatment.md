@@ -36,3 +36,25 @@ Candidates, candidate counts and TOI recovery are not inputs to the choice. The 
 interim nulls when scrambled r0 is complete for S70 and S106; the chosen treatment is then implemented inside the
 v1.1 statistic. The other three options are reported as sensitivity rows next to every headline number (S*,
 completeness, false-alarm rate, candidate counts), with and without the quality cut.
+
+## Amendment 1 — 2026-11-11T06:56:32Z (UTC). Predates any scrambled r0 output.
+
+Records the rule agreed on 2026-11-10 at 20:07 PST, which had not been written into this file. When this amendment
+was committed, no scrambled r0 output existed: the v1.0 null directory held only the flipped null (`invert`, S106
+still finishing) and an unrelated earlier test directory (`scramble_r9`, 16:50 PST Nov 10). There was no
+`scramble_r0` directory, part file or table. The selection code (`exosearch/v11/beta_select.py`) had been run once,
+as a code check with the flipped null used as both inputs; no scrambled data entered that run. The amendment
+replaces rules 1 and 3 above:
+
+1. **Gate (equivalence, TOST).** An option passes only if, in every sector with both nulls, the **90%** star-level
+   bootstrap CI (paired over stars in both nulls, 2,000 resamples, seed 20261110) of dS* = S*_flip − S*_scr lies
+   **entirely inside [−0.5, +0.5]**. The old check (95% CI contains 0) is no longer the gate. It is reported
+   descriptively.
+3. **Ties.** An option is tied with the leading option (highest vetted completeness at expected S 15–25) when the
+   paired-bootstrap 95% CI (over the same injections) of their vetted-completeness difference includes 0. Among the
+   leader and the options tied with it, the first in the fixed order **a, d, c, b** (smallest intervention first) is
+   chosen. The "fewest null peaks modified by more than 1%" tie rule is removed. Those counts are still reported.
+
+Rules 2 and 4 are unchanged. The rule is judged on nulls and injections only: candidates, candidate counts and TOI
+recovery are not inputs. If no option passes the gate, b is recorded per rule 4 and the v1.1 production run is not
+launched until the owner decides.

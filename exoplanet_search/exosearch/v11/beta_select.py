@@ -1,21 +1,22 @@
-"""Apply the registered beta-treatment selection rule (docs/preregistration/beta_treatment.md) exactly as written.
+"""Apply the registered beta-treatment selection rule: docs/preregistration/beta_treatment.md as amended by
+amendment 1 (2026-11-11, before any scrambled r0 output existed).
 
 Inputs (nulls and injections only; no candidate row): the v1.0 interim flipped null and scrambled realization r0 for
 S70 and S106, the v1.0 interim injections (S70 runs 0-1, S106 run 0), star_quality_v1. Per sector: tuning
 (non-holdout) stars, star-quality cut applied, statistic S_exact, options a-d applied at the stored peak
 (exosearch.stat_options.variants; S' = S_exact * beta / beta').
 
-1. Gate: the 95% star-level bootstrap CI (paired over stars present in both nulls, 2,000 resamples, seed 20261110)
-   of S*_flip - S*_scr contains 0, in every sector. Options failing in any sector are out.
+1. Gate (TOST equivalence): an option passes only if, in every sector, the 90% star-level bootstrap CI (paired over
+   stars present in both nulls, 2,000 resamples, seed 20261110) of dS* = S*_flip - S*_scr lies entirely inside
+   [-0.5, +0.5]. The 95% CI of dS* and whether it contains 0 are reported descriptively only.
 2. Among passing options: highest vetted completeness at expected S 15-25 (allowed injection range; S70 and S106
    injections pooled, each scored at its own sector's S* = max(S*_flip, S*_scr)).
-3. Differences within 2 percentage points are ties; ties go to the option that modifies the fewest null peaks by more
-   than 1% (flipped + scrambled tuning/quality null peaks of both sectors, relative to the unmodified S_exact).
-4. No option passes: b, and the failure is reported.
-Disclosed alongside (not part of the rule as written): an equivalence (TOST) reading of step 1 (90% CI of the
-difference inside +-0.5) and a paired-bootstrap tie test for step 3.
+3. Ties: an option is tied with the leader when the 95% paired-bootstrap CI (over injections) of their vetted
+   completeness difference includes 0. Among the leader and the options tied with it, the first in the fixed order
+   a, d, c, b (smallest intervention first) is chosen.
+4. No option passes the gate: b, and the failure is reported (production is not launched on a failed gate).
 
-  python -m exosearch.v11.beta_select --out DIR [--dry-run-flip-only]
+  python -m exosearch.v11.beta_select --out DIR
 """
 from __future__ import annotations
 
@@ -39,10 +40,9 @@ SECTORS = (70, 106)
 OPTIONS = ("a", "b", "c", "d")
 N_BOOT = 2000
 SEED = 20261110
-TIE_PP = 0.02
 TOST_MARGIN = 0.5
 SNR_BIN = (15, 25)
-ORDER_SMALLEST = None          # decided by the counts (rule 3), not by a fixed order
+ORDER = ("a", "d", "c", "b")   # amendment 1: smallest intervention first
 
 
 def null_frame(tag, q, sector):
@@ -98,8 +98,8 @@ def sector_option(args):
                 ci95_diff=q95, ci90_diff=q90, n_boot_ok=int(len(diffs)),
                 ci95_flip=[float(np.quantile(bf, .025)), float(np.quantile(bf, .975))],
                 ci95_scr=[float(np.quantile(bs, .025)), float(np.quantile(bs, .975))],
-                gate_pass=bool(q95[0] <= 0 <= q95[1]),
-                tost_pass=bool(-TOST_MARGIN < q90[0] and q90[1] < TOST_MARGIN),
+                ci95_contains_0=bool(q95[0] <= 0 <= q95[1]),          # descriptive only (amendment 1)
+                gate_pass=tost(q90),
                 null_peaks_moved_gt1pct=moved, vetted_flip=int(vf.sum()), vetted_scr=int(vs.sum()))
 
 
@@ -139,39 +139,51 @@ def completeness(inj, q, s_star):
     return out, ind
 
 
+def tost(ci90, margin=TOST_MARGIN):
+    """Equivalence gate: the 90% CI of dS* lies entirely inside [-margin, +margin]."""
+    return bool(-margin <= ci90[0] and ci90[1] <= margin)
+
+
+def paired_boot(ind, n_boot=N_BOOT, seed=SEED):
+    """Bootstrap means of each option's per-injection vetted indicator, same resampled injections for all options."""
+    rng = np.random.default_rng(seed)
+    n = len(next(iter(ind.values())))
+    out = {o: np.empty(n_boot) for o in ind}
+    for b in range(n_boot):
+        i = rng.integers(0, n, n)
+        for o in ind:
+            out[o][b] = ind[o][i].mean()
+    return out
+
+
+def pick(passing, comp, boots):
+    """Rules 2-4 of amendment 1 -> (option, reason, tied set)."""
+    if not passing:
+        return "b", "no option passes the TOST gate: b (most conservative) per rule 4; production is not launched", []
+    lead = max(passing, key=lambda o: (comp[o]["vetted"], -ORDER.index(o)))
+    tied = [lead]
+    for o in passing:
+        if o == lead:
+            continue
+        d = boots[lead] - boots[o]
+        if np.quantile(d, 0.025) <= 0 <= np.quantile(d, 0.975):
+            tied.append(o)
+    best = min(tied, key=ORDER.index)
+    return best, f"leader {lead}; tied with it (paired 95% CI of the completeness difference includes 0): {sorted(tied, key=ORDER.index)}; order a, d, c, b -> {best}", tied
+
+
 def choose(res, comp, ind):
     gate = {o: all(res[(s, o)]["gate_pass"] for s in SECTORS) for o in OPTIONS}
-    tost = {o: all(res[(s, o)]["tost_pass"] for s in SECTORS) for o in OPTIONS}
+    desc = {o: all(res[(s, o)]["ci95_contains_0"] for s in SECTORS) for o in OPTIONS}
     moved = {o: sum(res[(s, o)]["null_peaks_moved_gt1pct"] for s in SECTORS) for o in OPTIONS}
-
-    def pick(passing, tie_fn):
-        if not passing:
-            return "b", "no option passes the gate: b (most conservative) per rule 4"
-        top = max(comp[o]["vetted"] for o in passing)
-        tied = [o for o in passing if tie_fn(o, top)]
-        best = min(tied, key=lambda o: (moved[o], OPTIONS.index(o)))
-        return best, f"tied within rule 3: {tied}; fewest null peaks moved > 1%: {best} ({moved[best]})"
-
+    boots = paired_boot(ind)
     passing = [o for o in OPTIONS if gate[o]]
-    chosen, why = pick(passing, lambda o, top: top - comp[o]["vetted"] <= TIE_PP + 1e-12)
-    # disclosures: TOST gate and paired-bootstrap ties
-    rng = np.random.default_rng(SEED)
-    n = len(next(iter(ind.values())))
-    boots = {o: [] for o in OPTIONS}
-    for _ in range(N_BOOT):
-        i = rng.integers(0, n, n)
-        for o in OPTIONS:
-            boots[o].append(ind[o][i].mean())
-    boots = {o: np.array(v) for o, v in boots.items()}
-    tpass = [o for o in OPTIONS if tost[o]]
-
-    def paired_tie(o, top):
-        lead = max(tpass, key=lambda k: comp[k]["vetted"])
-        d = boots[lead] - boots[o]
-        return o == lead or np.quantile(d, 0.025) <= 0 <= np.quantile(d, 0.975)
-    alt, alt_why = pick(tpass, paired_tie) if tpass else ("b", "no option passes the TOST gate")
-    return dict(gate=gate, tost=tost, moved=moved, passing=passing, chosen=chosen, reason=why,
-                disclosure_tost_paired=dict(passing=tpass, chosen=alt, reason=alt_why))
+    chosen, why, tied = pick(passing, comp, boots)
+    diffs = {f"{a}-{b}": [float(np.quantile(boots[a] - boots[b], q)) for q in (0.025, 0.975)]
+             for a in OPTIONS for b in OPTIONS if a < b}
+    return dict(gate_tost=gate, passing=passing, chosen=chosen, reason=why, tied=tied, gate_failed=not passing,
+                completeness_diff_ci95=diffs,
+                descriptive=dict(ci95_contains_0=desc, null_peaks_moved_gt1pct=moved))
 
 
 def main(out, flip_tag="invert", scr_tag="scramble_r0", workers=8):
@@ -183,7 +195,7 @@ def main(out, flip_tag="invert", scr_tag="scramble_r0", workers=8):
     inj = injections(q)
     comp, ind = completeness(inj, q, {k: v["s_star"] for k, v in res.items()})
     ch = choose(res, comp, ind)
-    rep = dict(rule="docs/preregistration/beta_treatment.md (registered 2026-11-10), applied as written",
+    rep = dict(rule="docs/preregistration/beta_treatment.md (registered 2026-11-10) with amendment 1 (2026-11-11), applied as written",
                inputs=dict(flip=flip_tag, scrambled=scr_tag, sectors=list(SECTORS), n_boot=N_BOOT, seed=SEED,
                            injections_in_bin=int(inj.inbin.sum())),
                per_sector_option=[res[(s, o)] for s in SECTORS for o in OPTIONS], completeness_15_25=comp,
