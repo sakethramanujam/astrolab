@@ -32,13 +32,15 @@ function render(d) {
     (t.planet_archive_crossmatch ? '' : ' · NASA Exoplanet Archive cross-match pending (archive unavailable, no cached copy yet)') +
     Object.entries(d.catalogs || {}).map(([k, v]) => (v.fetched_at ? ` · ${k.replace('.csv', '')} ${v.fetched_at.slice(0, 10)}` : '')).join('');
   const nh = t.toi_hosts_calibrated ?? t.toi_hosts;
+  const pend = (d.sectors || []).filter((x) => x.calibrated && !x.toi_hosts).map((x) => x.sector);
   const rate = nh ? (100 * t.toi_recovered) / nh : 0;
   const S = document.getElementById('stats');
   for (const [k, v, s, c] of [
     ['Stars searched', fmt(t.stars_searched), `${fmt(t.errors)} errors`, 'acc'],
     ['Sectors', `${t.sectors_done}<span style="font-size:18px;color:var(--muted)"> / ${t.sectors_available}</span>`, `${t.sectors_with_results} with results · next: ${(d.queue_next || []).join(', ') || '–'}`, ''],
     ['Known TOIs re-found', `${fmt(rate, 0)}%`, `${t.toi_recovered} of ${nh} TOI hosts in calibrated (v1) rows, at S ≥ interim S*`, 'ok'],
-    ['Needs review', fmt(t.needs_review), `passed every check at S ≥ interim S*, no catalogue match; not detections · ${fmt(t.uncalibrated ?? 0)} more not calibrated`, 'acc2'],
+    ['Needs review', fmt(t.needs_review), `passed every check at S ≥ interim S*, no catalogue match; not detections · ${fmt(t.uncalibrated ?? 0)} more not calibrated` +
+      (pend.length ? ` · catalogue cross-match pending for sector ${pend.join(', ')}` : ''), 'acc2'],
     ['Submitted', fmt(t.submitted), 'to Planet Hunters TESS / ExoFOP', 'sub'],
   ]) S.append(el('div', { class: 'card stat', html: `<div class="k">${k}</div><div class="v ${c}">${v}</div><div class="s">${s}</div>` }));
 
