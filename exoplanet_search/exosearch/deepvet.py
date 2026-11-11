@@ -163,11 +163,10 @@ def _gaia_mast(ra, dec, radius_arcsec):
 
 
 def _gaia_esa(ra, dec, radius_arcsec):
+    from .stellar import gaia_tap
     q = (f"SELECT source_id, ra, dec, phot_g_mean_mag FROM gaiadr3.gaia_source WHERE "
          f"1=CONTAINS(POINT('ICRS',ra,dec), CIRCLE('ICRS',{ra},{dec},{radius_arcsec/3600.0}))")
-    r = requests.get(GAIA_TAP, params=dict(REQUEST="doQuery", LANG="ADQL", FORMAT="csv", QUERY=q), timeout=120)
-    r.raise_for_status()
-    return pd.read_csv(io.StringIO(r.text))
+    return gaia_tap(q, timeout=60)
 
 
 def gaia_neighbours(ra, dec, radius_arcsec):
@@ -484,7 +483,7 @@ def run(sector, only_review=False, redo=False, prune=True, log=print):
 
 
 def refresh(sector, log=print):
-    """Recompute light-curve shape metrics and flags for already-vetted stars (no TPF downloads)."""
+    """Recompute light-curve shape metrics, density/RUWE and flags for already-vetted stars (no TPF downloads)."""
     con = connect()
     df = store.frame(con, sector).set_index("tic")
     dv = frame(con, sector)
@@ -496,8 +495,9 @@ def refresh(sector, log=print):
         try:
             lc = targets.download_one(fname, MAST_FILE + fname, config.lc_dir(int(sector)))
             d.update(shape_and_secondary(r, lc))
+            d.update(stellar_checks(r, lc, d.get("t0_fine"), d.get("duration_fine")))
         except Exception as exc:
-            log(f"  {d['tic']}: shape failed: {exc}")
+            log(f"  {d['tic']}: shape/density failed: {exc}")
         d["deep_flags"] = ",".join(flags_for(d))
         d["updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
         upsert(con, d)

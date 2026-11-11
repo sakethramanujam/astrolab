@@ -77,6 +77,74 @@ def lc_checks(job):
     return out
 
 
+def label_peak(tic, period, toi, eb):
+    """(label, source) for a peak on `tic`, or (None, None)."""
+    lab, src = None, None
+    for x in toi[toi.tic == tic].itertuples():
+        if _match(period, x.period):
+            if x.disp in ("KP", "CP"):
+                return "planet", f"TOI {x.toi} {x.disp}"
+            if x.disp in ("FP", "FA") and lab is None:
+                lab, src = "fp", f"TOI {x.toi} {x.disp}"
+    if lab is None:
+        for x in eb[eb.TIC == tic].itertuples():
+            if _match(period, x.Per):
+                return "fp", "TESS EB"
+    return lab, src
+
+
+def v1_job(job):
+    """Frozen v1 search + every check (screens, light-curve deep checks, density, RUWE, and the pixel-level
+    centroid / Gaia / EB-catalogue tests) on one TOI or EB host."""
+    from types import SimpleNamespace
+    from . import deepvet, task
+    from .version import stamp
+    out = dict(key=job["key"], tic=job["tic"], sector=job["sector"], holdout=holdout.is_holdout(job["tic"]), **stamp())
+    try:
+        d = task.prepare(job["path"])
+        res = task.search_prepared(d)
+        out.update({k: res.get(k) for k in ("period", "t0", "duration", "depth", "S", "S_scan", "n_tr", "cdpp_d",
+                                              "beta_d", "sigma_w", "sde", "snr", "flags", "passed", "rp_earth",
+                                              "radius", "tmag", "ra", "dec", "camera", "s_min", "odd_even_sigma",
+                                              "secondary_sigma", "dur_ratio", "n_transits")})
+        lab, src = label_peak(job["tic"], res["period"], job["toi"], job["eb"])
+        out.update(label=lab, source=src)
+        if lab is None:
+            out["status"] = "unlabelled"
+            return out
+        r = SimpleNamespace(tic=job["tic"], sector=job["sector"], period=res["period"], t0=res["t0"],
+                            duration=res["duration"], depth=res["depth"], radius=res["radius"], ra=res["ra"],
+                            dec=res["dec"], tmag=res["tmag"])
+        dv = deepvet.vet_star(r, job["fname"])
+        out.update({k: v for k, v in dv.items() if k not in ("tic", "sector", "updated_at")})
+        out["status"] = "ok"
+    except Exception as exc:
+        out.update(status="error", error=f"{type(exc).__name__}: {exc}"[:300])
+    return out
+
+
+def main_v1(sectors, workers):
+    from . import batch, targets
+    from .version import stamp
+    st = stamp()
+    out = config.DATA_ROOT / "products" / f"v{st['pipeline_version']}" / "labelled_v1"
+    toi = toi_table()
+    eb = pd.read_csv(config.CATALOG_DIR / "tess_ebs_prsa2022.csv")
+    eb["Per"] = pd.to_numeric(eb.Per, errors="coerce")
+    jobs = []
+    for s in sectors:
+        man = targets.fetch_manifest(s).set_index("tic")
+        hosts = sorted((set(toi.tic) | set(eb.TIC)) & set(man.index))
+        for tic in hosts:
+            p = batch.lc_path(s, man.loc[tic].fname)
+            jobs.append(dict(key=f"{s}:{tic}", tic=int(tic), sector=s, path=str(p), fname=man.loc[tic].fname,
+                             toi=toi[toi.tic == tic], eb=eb[eb.TIC == tic]))
+    with batch.claim(workers):
+        res = batch.pmap(v1_job, jobs, out / "parts", workers)
+    res.to_parquet(out / "labelled_v1.parquet", index=False)
+    print(res.groupby(["sector", "label"]).size().to_string())
+
+
 def main():
     import argparse
     from . import batch, targets
@@ -84,7 +152,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sectors", default="70,106,107")
     ap.add_argument("--workers", type=int, default=12)
+    ap.add_argument("--v1", action="store_true", help="re-search TOI/EB hosts with the frozen v1 search + all checks")
     a = ap.parse_args()
+    if a.v1:
+        return main_v1([int(x) for x in a.sectors.split(",")], a.workers)
     st = stamp()
     out = config.DATA_ROOT / "products" / f"v{st['pipeline_version']}" / "labelled"
     out.mkdir(parents=True, exist_ok=True)

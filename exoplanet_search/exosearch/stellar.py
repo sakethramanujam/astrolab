@@ -21,6 +21,29 @@ from . import config
 CLARET_SRC = "J/A+A/600/A30/tableab"
 CLARET_URLS = ["https://vizier.cfa.harvard.edu/viz-bin/asu-tsv", "https://vizier.cds.unistra.fr/viz-bin/asu-tsv"]
 GAIA_TAP = "https://gea.esac.esa.int/tap-server/tap/sync"
+GAIA_TAP_MIRRORS = [GAIA_TAP, "https://gaia.aip.de/tap/sync"]     # ESA archive, then the AIP Gaia DR3 mirror
+
+
+_DEAD = set()
+
+
+def gaia_tap(query, timeout=60):
+    """Run an ADQL query on Gaia DR3 (ESA first, AIP mirror on failure) -> DataFrame.
+    A mirror that fails is skipped for the rest of the process."""
+    last = None
+    for url in GAIA_TAP_MIRRORS:
+        if url in _DEAD and len(_DEAD) < len(GAIA_TAP_MIRRORS):
+            continue
+        try:
+            r = requests.post(url, data=dict(REQUEST="doQuery", LANG="ADQL", FORMAT="votable", QUERY=query),
+                              timeout=timeout)
+            r.raise_for_status()
+            from astropy.io.votable import parse_single_table
+            return parse_single_table(io.BytesIO(r.content)).to_table(use_names_over_ids=True).to_pandas()
+        except Exception as exc:
+            last = exc
+            _DEAD.add(url)
+    raise RuntimeError(f"Gaia TAP unavailable: {last}")
 G_CGS, MSUN_G, RSUN_CM = 6.674e-8, 1.989e33, 6.957e10
 RHO_SUN = MSUN_G / (4 / 3 * np.pi * RSUN_CM ** 3)          # 1.41 g/cc
 TIC_COLS = ["ID", "Tmag", "Teff", "e_Teff", "logg", "e_logg", "rad", "e_rad", "mass", "e_mass",
@@ -133,9 +156,7 @@ def gaia_dr3(dr2_ids, chunk=300, log=print, strict=False):
              f"WHERE n.dr2_source_id IN ({sub})")
         for attempt in range(4 if strict else 2):
             try:
-                r = requests.post(GAIA_TAP, data=dict(REQUEST="doQuery", LANG="ADQL", FORMAT="csv", QUERY=q), timeout=90)
-                r.raise_for_status()
-                df = pd.read_csv(io.StringIO(r.text))
+                df = gaia_tap(q, timeout=120)
                 break
             except Exception as exc:
                 log(f"  Gaia query retry {attempt}: {exc}")

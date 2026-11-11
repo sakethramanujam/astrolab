@@ -1,0 +1,230 @@
+"""Provisional reliability summaries for the site (site/data/reliability.json) and the archive.
+
+Only binned counts and empirical quantiles live here. The statistical modelling (gamma-CDF completeness
+with bootstrap, GPD/Gumbel tail fits for S*, ROC, vetting effectiveness E, DR25-style reliability) belongs
+to analysis/; if analysis/make_reliability_json.py exists it is run instead and its output wins.
+
+  python -m exosearch.reliability            # -> site/data/reliability.json (+ products/v*/summary/)
+"""
+from __future__ import annotations
+
+import glob
+import json
+import math
+import subprocess
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from . import config, deepvet, holdout, nulltest, store, vet
+from .version import PIPELINE_VERSION, config_hash, stamp
+
+ROOT = Path(__file__).resolve().parents[1]
+SITE_JSON = ROOT / "site" / "data" / "reliability.json"
+PROD = config.DATA_ROOT / "products" / f"v{PIPELINE_VERSION}"
+P_EDGES = np.geomspace(0.5, 13.5, 9)
+R_EDGES = np.geomspace(0.5, 20.0, 9)
+TMAG_EDGES = [0, 9, 10.5, 12, 13.5, 20]
+SNR_EDGES = np.r_[np.arange(0, 30, 1.5), 30, 40, 60, 100]
+S_EDGES = np.round(np.arange(0, 40.25, 0.25), 2)
+GROUPS = {"s70": [70], "s106_107": [106, 107]}
+ALL_CHECKS = (["few_transits", "odd_even", "secondary", "too_deep", "too_long", "variable", "rp_too_large", "no_dip",
+               "common_period"] + ["centroid_offset", "dip_off_target", "known_eb", "v_shape", "secondary_scan",
+               "rp_gt_2rjup", "density_mismatch", "unresolved_neighbour", "centroid_shift_minor", "ruwe_high", "gaia_nss"])
+
+
+def _read(pattern):
+    fs = sorted(glob.glob(str(pattern)))
+    return pd.concat([pd.read_parquet(f) for f in fs], ignore_index=True) if fs else pd.DataFrame()
+
+
+def wilson(k, n, z=1.0):
+    if n == 0:
+        return [None, None]
+    p = k / n
+    d = 1 + z * z / n
+    c = (p + z * z / (2 * n)) / d
+    h = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
+    return [round(c - h, 4), round(c + h, 4)]
+
+
+def group_of(sector):
+    return next((g for g, ss in GROUPS.items() if int(sector) in ss), f"s{int(sector)}")
+
+
+# ---------------------------------------------------------------- injections
+def completeness(inj):
+    if inj.empty:
+        return None
+    d = inj[inj.status == "ok"].copy()
+    d["group"] = d.sector.map(group_of)
+    d["split"] = np.where(d.holdout, "holdout", "tuning")
+    d["pb"] = np.digitize(d.P_inj, P_EDGES) - 1
+    d["rb"] = np.digitize(d.rp_inj, R_EDGES) - 1
+    d["tb"] = np.digitize(d.tmag, TMAG_EDGES[1:-1])
+    d["sb"] = np.digitize(d.snr_exp.fillna(0), SNR_EDGES) - 1
+    out = {"p_edges": P_EDGES.round(3).tolist(), "r_edges": R_EDGES.round(3).tolist(), "tmag_edges": TMAG_EDGES,
+           "snr_edges": SNR_EDGES.tolist(), "n": int(len(d)), "maps": {}, "snr_curves": {}, "summary": {}}
+    for (g, sp), x in list(d.groupby(["group", "split"])) + [((g, "all"), x) for g, x in d.groupby("group")]:
+        for tb in ["all"] + list(range(len(TMAG_EDGES) - 1)):
+            y = x if tb == "all" else x[x.tb == tb]
+            n = np.zeros((8, 8), int); det = n.copy(); pas = n.copy()
+            ok = (y.pb >= 0) & (y.pb < 8) & (y.rb >= 0) & (y.rb < 8)
+            for (pb, rb), z in y[ok].groupby(["pb", "rb"]):
+                n[rb, pb], det[rb, pb], pas[rb, pb] = len(z), int(z.detected.sum()), int(z.passed_all.sum())
+            out["maps"][f"{g}|{sp}|{tb}"] = dict(n=n.tolist(), detected=det.tolist(), passed=pas.tolist())
+        c = x[(x.sb >= 0) & (x.sb < len(SNR_EDGES) - 1)].groupby("sb").agg(n=("detected", "size"), det=("detected", "sum"),
+                                                                         pas=("passed_all", "sum"))
+        out["snr_curves"][f"{g}|{sp}"] = {int(k): [int(v.n), int(v.det), int(v.pas)] for k, v in c.iterrows()}
+        out["summary"][f"{g}|{sp}"] = dict(n=int(len(x)), detected=int(x.detected.sum()), passed=int(x.passed_all.sum()),
+                                           matched=int(x.matched.sum()),
+                                           aliases={str(k): int(v) for k, v in x.alias.value_counts().items()},
+                                           fail_counts={c: int(x[x.detected][f"fail_{c}"].fillna(False).sum())
+                                                        for c in nulltest.SCREEN_CHECKS + ["common_period"] + nulltest.DEEP_CHECKS
+                                                        if f"fail_{c}" in x})
+    return out
+
+
+# ---------------------------------------------------------------- null tests
+def nulls(n_df):
+    if n_df.empty:
+        return None
+    d = n_df[n_df.status == "ok"].copy()
+    fl = d["flags"].fillna("").str.split(",").map(lambda x: set(x) - {"", "low_s"})
+    dfl = d.deep_flags.fillna("").str.split(",").map(set)
+    # passes every check except the S threshold (deep checks are logged for S >= S_FLOOR)
+    d["vet_ok"] = (fl.map(len) == 0) & ~d.get("fail_common_period", pd.Series(False, index=d.index)).fillna(False) \
+        & dfl.map(lambda x: not (x & deepvet.REJECT)) & d.checks_logged.fillna(False)
+    out = {"s_edges": S_EDGES.tolist(), "s_floor": nulltest.S_FLOOR, "hist": {}, "n_stars": {}, "threshold": {}}
+    for (s, m), x in d.groupby(["sector", "mode"]):
+        key = f"{int(s)}|{m}"
+        h_all, _ = np.histogram(x.S.clip(0, 39.99), S_EDGES)
+        h_vet, _ = np.histogram(x[x.vet_ok].S.clip(0, 39.99), S_EDGES)
+        out["hist"][key] = dict(all=h_all.tolist(), vetted=h_vet.tolist(), n_real=int(x.realization.nunique()))
+        out["n_stars"][key] = int(len(x) / max(x.realization.nunique(), 1))
+    inv = d[d["mode"] == "invert"]
+    for (s, cam), x in inv.groupby(["sector", "camera"]):
+        n = len(x)
+        out["threshold"][f"{int(s)}:{int(cam)}"] = dict(n=n, s_star=round(float(np.quantile(x.S, 1 - 1 / n)), 3),
+                                                       max=round(float(x.S.max()), 3))
+    for s, x in inv.groupby("sector"):
+        n = len(x)
+        out["threshold"][f"{int(s)}"] = dict(n=n, s_star=round(float(np.quantile(x.S, 1 - 1 / n)), 3),
+                                            max=round(float(x.S.max()), 3))
+    return out
+
+
+def fap(S, sector, n_df):
+    x = n_df[(n_df["mode"] == "invert") & (n_df.sector == sector) & (n_df.status == "ok")]
+    if x.empty or S is None:
+        return None
+    k = int((x.S >= S).sum())
+    return dict(k=k, n=int(len(x)), fap=round((k + 1) / (len(x) + 1), 6))
+
+
+# ---------------------------------------------------------------- per-check rates (labelled signals)
+def check_rates(lab):
+    if lab.empty:
+        return None
+    d = lab[lab.status == "ok"].copy()
+    d["group"] = d.sector.map(group_of)
+    d["split"] = np.where(d.holdout, "holdout", "tuning")
+    fl = d["flags"].fillna("").str.split(",").map(set) | d.deep_flags.fillna("").str.split(",").map(set)
+    d["allflags"] = fl
+    out = {}
+    for (g, sp), x in d.groupby(["group", "split"]):
+        rows = {}
+        for c in ALL_CHECKS:
+            r = {}
+            for lab_ in ("planet", "fp"):
+                y = x[x.label == lab_]
+                if c == "known_eb" and lab_ == "fp":
+                    y = y[~y.source.fillna("").str.startswith("TESS EB")]       # circular for catalogue EBs
+                k = int(y.allflags.map(lambda s: c in s).sum())
+                r[lab_] = dict(k=k, n=int(len(y)), ci68=wilson(k, len(y)))
+            r["reject"] = c in deepvet.REJECT or c in nulltest.SCREEN_CHECKS + ["common_period"]
+            rows[c] = r
+        y = x.copy()
+        rej = y.allflags.map(lambda s: bool(s & (deepvet.REJECT | set(nulltest.SCREEN_CHECKS) | {"common_period"})))
+        rows["_any_reject"] = {l: dict(k=int(rej[y.label == l].sum()), n=int((y.label == l).sum()),
+                                       ci68=wilson(int(rej[y.label == l].sum()), int((y.label == l).sum())))
+                               for l in ("planet", "fp")}
+        out[f"{g}|{sp}"] = rows
+    return out
+
+
+def build():
+    analysis = ROOT / "analysis" / "make_reliability_json.py"
+    if analysis.exists():                                   # the analysis PR owns the numbers once it lands
+        subprocess.run([sys.executable, str(analysis)], check=True)
+        return json.loads(SITE_JSON.read_text())
+    inj = _read(PROD / "injections" / "*" / "part-*.parquet")
+    nl = _read(PROD / "nulltests" / "*" / "null_*_maxS.parquet")
+    if nl.empty:
+        nl = _read(PROD / "nulltests" / "*" / "parts" / "part-*.parquet")
+        if not nl.empty and "realization" not in nl:
+            nl["realization"] = 0
+    lab = _read(PROD / "labelled_v1" / "parts" / "part-*.parquet")
+    missed = {}
+    for f in glob.glob(str(PROD / "missed_tois" / "*.json")):
+        missed[Path(f).stem.split("_")[-1]] = json.loads(Path(f).read_text())
+    thr = json.loads(vet.THRESHOLD_FILE.read_text())
+    out = dict(stamp(), generated_by="exosearch.reliability (provisional binned summaries)",
+               holdout=dict(seed=holdout.SEED, fraction=holdout.FRACTION),
+               detection_threshold=thr, completeness=completeness(inj), nulls=nulls(nl),
+               check_rates=check_rates(lab), missed_tois=missed)
+    cand = PROD / "summary" / "survivors.json"
+    if cand.exists():
+        out["survivors"] = json.loads(cand.read_text())
+    SITE_JSON.write_text(json.dumps(out, separators=(",", ":"), default=lambda o: None if o != o else o))
+    (PROD / "summary").mkdir(parents=True, exist_ok=True)
+    (PROD / "summary" / "reliability.json").write_text(SITE_JSON.read_text())
+    return out
+
+
+
+def survivors(sector=70):
+    """Re-vet the v0 deep-vetting survivors: v1 S at their own light curve, density/RUWE flags, empirical FAP."""
+    from . import batch, targets, task
+    dcon = deepvet.connect()
+    df = store.frame(store.connect(), sector)
+    dv = deepvet.frame(dcon, sector)
+    c = deepvet.candidates(df, only_review=True).merge(dv, on=["tic", "sector"])
+    v0_reject = {"centroid_offset", "dip_off_target", "known_eb", "v_shape", "secondary_scan", "rp_gt_2rjup"}
+    fl = c.deep_flags.fillna("").str.split(",").map(lambda x: set(x) - {""})
+    c = c[fl.map(lambda x: not (x & v0_reject))].copy()
+    man = targets.fetch_manifest(sector).set_index("tic")
+    nl = _read(PROD / "nulltests" / "invert" / "parts" / "part-*.parquet")
+    rows = []
+    for r in c.itertuples():
+        flags = sorted(set((r.deep_flags or "").split(",")) - {""})
+        res = task.search_prepared(task.prepare(batch.lc_path(sector, man.loc[r.tic].fname)))
+        same = abs(res["period"] / r.period - 1) < 0.01
+        rej = sorted(set(flags) & deepvet.REJECT)
+        status = "rejected" if rej else ("survives" if not flags else "survives, warnings")
+        f = fap(res["S"], sector, nl) if same else None
+        rows.append(dict(tic=int(r.tic), sector=sector, period=float(r.period), rp_earth=None if r.rp_earth != r.rp_earth else float(r.rp_earth),
+                         S=float(res["S"]) if same else None, v1_period=float(res["period"]), v1_same_peak=bool(same),
+                         beta_d=float(res["beta_d"]), fap=None if f is None else f["fap"], fap_k=None if f is None else f["k"],
+                         fap_n=None if f is None else f["n"], rho_transit=r.rho_transit, rho_tic=r.rho_tic, rho_z=r.rho_z,
+                         ruwe=r.ruwe, gaia_nss=r.gaia_nss, flags=flags, status=status))
+    n_null = int(len(nl[(nl.sector == sector)])) if not nl.empty else 0
+    out = dict(stamp(), sector=sector, n=len(rows), n_null=n_null,
+               note=(f"The {len(rows)} sector-{sector} signals that survived the v0 deep checks, re-vetted with the v1 density and Gaia checks. "
+                     f"S is the v1 statistic at the same peak; FAP = (k+1)/(N+1) with k of N flipped light curves in sector {sector} "
+                     f"reaching that S (N={n_null}, provisional, before vetting)."),
+               rows=sorted(rows, key=lambda x: (x["status"] != "survives", -(x["S"] or 0))))
+    (PROD / "summary").mkdir(parents=True, exist_ok=True)
+    (PROD / "summary" / "survivors.json").write_text(json.dumps(out, indent=1, default=lambda o: None if o != o else o))
+    return out
+
+
+if __name__ == "__main__":
+    if "--survivors" in sys.argv:
+        o = survivors(70)
+        print({x["status"]: sum(1 for y in o["rows"] if y["status"] == x["status"]) for x in o["rows"]})
+    o = build()
+    print({k: (None if v is None else "ok") for k, v in o.items() if k in ("completeness", "nulls", "check_rates")},
+          SITE_JSON.stat().st_size // 1024, "KB")
