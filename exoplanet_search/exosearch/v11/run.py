@@ -118,6 +118,17 @@ def build(sectors, weights, out, production=True, log=print, tics_filter=None, t
         if production and tasks_override is None:
             inj_hosts = set(inject.select_hosts(s, cfg_inj, con).tic.astype(int))
         runs = cfg_inj["runs"].get(str(s), [])
+
+        scramble_exclude = set()
+        ex_map = cfg.get("scramble", {}).get("exclude_hosts_file", {})
+        ex_file = ex_map.get(str(s)) if isinstance(ex_map, dict) else ex_map
+        if ex_file:
+            p_ex = settings.ROOT / ex_file
+            if p_ex.exists():
+                ex_df = pd.read_csv(p_ex)
+                if "tic" in ex_df.columns:
+                    scramble_exclude = set(ex_df.tic.astype(int))
+
         for r in df.itertuples():
             tic = int(r.tic)
             p = sp.get(tic, {})
@@ -126,8 +137,9 @@ def build(sectors, weights, out, production=True, log=print, tics_filter=None, t
                 tasks = [dict(t) for t in tasks_override]
             else:
                 tasks = [dict(tag="real", mode="real"), dict(tag="invert", mode="invert", seed=0)]
-                tasks += [dict(tag=f"scramble_r{k}", mode="scramble", realization=k, seed=nulltest.seed_for("scramble", s, tic, k))
-                          for k in SCRAMBLE_REALIZATIONS]
+                if tic not in scramble_exclude:
+                    tasks += [dict(tag=f"scramble_r{k}", mode="scramble", realization=k, seed=nulltest.seed_for("scramble", s, tic, k))
+                              for k in SCRAMBLE_REALIZATIONS]
                 rm = host_rm(j) if tic in inj_hosts else None
                 if rm:
                     j.update(rstar=rm[0], mstar=rm[1])

@@ -51,5 +51,12 @@
     "window_d": 0.1,
     "reject_max_epochs": 2
   },
-  "s_floor_checks": 6.0
+  "s_floor_checks": 6.0,
+  "scramble": {
+    "gap_d": 0.5,
+    "gap_trim_d": 0.3,
+    "exclude_hosts_file": {
+      "70": "configs/scramble_exclude_s0070_2026-11-11.csv"
+    }
+  }
 }

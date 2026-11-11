@@ -89,6 +89,22 @@ def host_id(explicit=None):
 
 
 def provenance(hid, beta_option, production):
-    return dict(pipeline_version=PIPELINE_VERSION, config_hash=config_hash(beta_option), commit=commit(),
-                host_id=hid, arch=platform.machine(), lib_versions=json.dumps(lib_versions(), sort_keys=True),
-                beta_option=beta_option, production=bool(production))
+    out = dict(pipeline_version=PIPELINE_VERSION, config_hash=config_hash(beta_option), commit=commit(),
+               host_id=hid, arch=platform.machine(), lib_versions=json.dumps(lib_versions(), sort_keys=True),
+               beta_option=beta_option, production=bool(production))
+    c = cfg()
+    scr = c.get("scramble", {})
+    if "exclude_hosts_file" in scr:
+        ex_files = scr["exclude_hosts_file"]
+        if isinstance(ex_files, dict):
+            for sec, rel_path in sorted(ex_files.items()):
+                p = ROOT / rel_path
+                if p.exists():
+                    out[f"scramble_exclude_file_{sec}"] = rel_path
+                    out[f"scramble_exclude_sha256_{sec}"] = _sha(p)
+        elif isinstance(ex_files, str):
+            p = ROOT / ex_files
+            if p.exists():
+                out["scramble_exclude_file"] = ex_files
+                out["scramble_exclude_sha256"] = _sha(p)
+    return out
