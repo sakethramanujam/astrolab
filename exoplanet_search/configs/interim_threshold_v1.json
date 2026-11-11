@@ -75,121 +75,23 @@
    "dropped_null_quality": 1467,
    "held_out_excluded": 1123,
    "per_camera": {
-    "1": {
-     "n_null": 1538,
-     "n_stars": 3572,
-     "target_rate": 0.00027990630691745593,
-     "u": 6.25,
-     "k_tail": 39,
-     "xi": -0.13253145028139351,
-     "sigma": 0.7337981699200753,
-     "s_star": 8.739725522765626,
-     "ci68": [
-      8.32511105722262,
-      8.984712178711218
-     ],
-     "ci95": [
-      7.898251262792486,
-      9.516780844053404
-     ],
-     "n_boot_ok": 500,
-     "n_vetted": 68,
-     "vetted_exceed": {
-      "7": 11,
-      "8": 2,
-      "10": 0,
-      "12": 0,
-      "15": 0,
-      "20": 0
-     },
-     "max_vetted": 8.517948063253433,
-     "sensitivity": {
-      "6.0": 9.239207024377922,
-      "7.0": 8.498457698975985,
-      "8.0": null
-     },
-     "alpha": "own (1/N_cam)",
-     "s_star_sector_alpha": 9.136758962431534
+    "pooled": true,
+    "note": "cameras pooled: per-camera tails too thin for a stable GPD (not fitted or published until the samples grow)",
+    "n_null": {
+     "1": 1538,
+     "2": 895,
+     "3": 547,
+     "4": 1430
     },
-    "2": {
-     "n_null": 895,
-     "n_stars": 2078,
-     "target_rate": 0.00048100100563022046,
-     "u": 6.25,
-     "k_tail": 31,
-     "xi": 0.2990182553597792,
-     "sigma": 0.5855126685545816,
-     "s_star": 11.326377953553806,
-     "ci68": [
-      9.314867428028148,
-      13.275789811937903
-     ],
-     "ci95": [
-      7.770944869451946,
-      16.86004666632306
-     ],
-     "n_boot_ok": 500,
-     "n_vetted": 49,
-     "vetted_exceed": {
-      "7": 8,
-      "8": 3,
-      "10": 2,
-      "12": 0,
-      "15": 0,
-      "20": 0
-     },
-     "max_vetted": 11.322599095442307,
-     "sensitivity": {
-      "6.0": 11.480432422606816,
-      "7.0": 11.459815391482952,
-      "8.0": null
-     },
-     "alpha": "own (1/N_cam)",
-     "s_star_sector_alpha": 15.624693121002977
-    },
-    "3": {
-     "n_null": 547,
-     "k_tail": 18,
-     "s_star": null,
-     "note": "fewer than 30 vetted exceedances; sector value applies"
-    },
-    "4": {
-     "n_null": 1430,
-     "n_stars": 3321,
-     "target_rate": 0.0003010460839433897,
-     "u": 6.25,
-     "k_tail": 41,
-     "xi": 0.22216519937727075,
-     "sigma": 0.6039946168087724,
-     "s_star": 11.01269137111365,
-     "ci68": [
-      9.499194178171935,
-      12.83375639617409
-     ],
-     "ci95": [
-      8.296707947108406,
-      16.193490133473784
-     ],
-     "n_boot_ok": 500,
-     "n_vetted": 59,
-     "vetted_exceed": {
-      "7": 12,
-      "8": 5,
-      "10": 2,
-      "12": 0,
-      "15": 0,
-      "20": 0
-     },
-     "max_vetted": 10.983575458399773,
-     "sensitivity": {
-      "6.0": 10.974709312879773,
-      "7.0": 10.903138647453135,
-      "8.0": 11.6693229012291
-     },
-     "alpha": "own (1/N_cam)",
-     "s_star_sector_alpha": 13.13953460060905
+    "k_tail": {
+     "1": 39,
+     "2": 31,
+     "3": 18,
+     "4": 41
     }
-   }
+   },
+   "status": "provisional until both the flipped and the scrambled nulls are complete"
   }
- }
+ },
+ "status": "provisional until both the flipped and the scrambled nulls are complete"
 }

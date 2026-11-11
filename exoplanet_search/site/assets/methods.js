@@ -37,11 +37,12 @@ if (J) {
     const ci = (a) => (a ? `${fmt(a[0], 1)}–${fmt(a[1], 1)}` : '–');
     const pop = DT.population || {};
     p.append(el('p', { html: DT.interim
-      ? `<b>Interim threshold.</b> ` + secs.map(([k, v]) => `Sector ${k}: <b>S* = ${fmt(v.s_star, 1)}</b> (68% interval ${ci(v.ci68)}, 95% ${ci(v.ci95)}), ` +
+      ? `<b>Interim, provisional threshold</b> (until both the flipped and the scrambled noise-only runs are complete). ` + secs.map(([k, v]) => `Sector ${k}: <b>S* = ${fmt(v.s_star, 1)}</b> (95% statistical interval ${ci(v.ci95)}` +
+          (v.sys_halfwidth != null ? `; ±${fmt(v.sys_halfwidth, 1)} systematic from the tail starting point u, range ${ci(v.sys_range)} over u = ${(v.u_stable || []).join(', ')}` : '') + `), ` +
           `from a generalized-Pareto fit to the tail of the flipped light curves that pass every vetting check, ` +
-          `${fmt(v.n_null)} tuning stars (${v.k_tail} vetted peaks in the tail), solved for one false alarm per ${fmt(v.n_stars)} searched stars.`).join(' ') +
+          `${fmt(v.n_null)} tuning stars (${v.k_tail} vetted peaks above u = ${fmt(v.u, 2)}), solved for one false alarm per ${fmt(v.n_stars)} searched stars.`).join(' ') +
         ` False alarms are counted <i>after</i> vetting, and completeness below uses the same S* and the same vetting. ` +
-        `A star-quality cut registered in advance (${DT.quality_cut}) is applied to every population` +
+        `A frozen star-quality cut, <b>registered after unblinding</b> (${DT.quality_cut}; see section 7 for its sensitivity), is applied to every population` +
         (Object.keys(pop).length ? ` (${Object.entries(pop).filter(([, v]) => v.measured).map(([k, v]) => `S${k}: ${fmt(v.dropped)} of ${fmt(v.searched)} dropped`).join(', ')})` : '') +
         `. The null run is still growing; the analysis code replaces these fits.`
       : `<b>Provisional.</b> The detection threshold is not calibrated yet.` }));
@@ -189,10 +190,12 @@ if (N) {
   const rows = Object.entries(N.threshold || {}).filter(([k]) => !k.includes(':') && N.threshold[k].ci68).sort();
   const ci = (a) => (a ? `${fmt(a[0], 1)}–${fmt(a[1], 1)}` : '–');
   for (const [k, v] of rows) {
-    const cams = Object.entries(v.per_camera || {}).map(([c, x]) => (x.s_star ? `camera ${c}: ${fmt(x.s_star, 1)} (${ci(x.ci68)})` : `camera ${c}: too few tail points`)).join(' · ');
-    t.append(el('p', { class: 'muted', html: `<b>Interim S* for sector ${k}: ${fmt(v.s_star, 1)}</b> (68% ${ci(v.ci68)}, 95% ${ci(v.ci95)}). ` +
+    const sb = N.threshold_by_null?.[k];
+    const scr = sb?.scramble?.s_star ? `${fmt(sb.scramble.s_star, 1)} (95% ${ci(sb.scramble.ci95)}, ${fmt(sb.scramble.n)} stars)` : 'pending (run not finished)';
+    t.append(el('p', { class: 'muted', html: `<b>Provisional interim S* for sector ${k}: ${fmt(v.s_star, 1)}</b> (95% statistical ${ci(v.ci95)}${v.sys_halfwidth != null ? `, ±${fmt(v.sys_halfwidth, 1)} systematic` : ''}). ` +
+      `Side by side: flipped null ${fmt(v.s_star, 1)}; scrambled null ${scr}. It stays provisional until both are complete. ` +
       `Fit: generalized Pareto above S = ${fmt(v.u, 0)} to ${v.k_tail} vetted noise peaks among ${fmt(v.n)} tuning stars (shape ξ = ${fmt(v.xi, 2)}); ` +
-      `the largest vetted noise peak so far is S = ${fmt(v.max_vetted, 1)}. Per camera: ${cams || '–'}. The histogram shows stars that pass the quality cut; the slider starts at S*.` }));
+      `the largest vetted noise peak so far is S = ${fmt(v.max_vetted, 1)}. Cameras are pooled. The histogram shows stars that pass the quality cut; the slider starts at S*.` }));
   }
 } else document.getElementById('falsealarms').append(el('p', { class: 'muted' }, 'Null runs in progress.'));
 
@@ -244,12 +247,63 @@ if (S) {
   sl.append(el('p', {}, S.note || ''));
   const g = el('div', { class: 'grid two' });
   for (const c of S.rows) {
-    const tone = c.status === 'survives' ? 'ok' : c.status === 'rejected' ? 'bad' : c.status.startsWith('survives') ? 'warn' : '';
+    const tone = c.status === 'rejected' ? 'bad' : c.status.startsWith('marginal') ? 'warn' : '';
     g.append(el('a', { class: 'card scard', href: `candidate.html#s${c.sector}/${c.tic}` },
       el('div', { class: 'srow' }, el('b', {}, `TIC ${c.tic}`), el('span', { class: `pill ${tone}` }, c.status)),
       el('div', { class: 'muted' }, `P ${fmt(c.period, 3)} d · ${c.rp_earth ? `${fmt(c.rp_earth, 1)} R⊕` : 'size ?'} · S ${fmt(c.S, 1)}${c.s_star ? ` (S* ${fmt(c.s_star, 1)})` : ''} · FAP ${c.fap != null ? (c.fap < 1e-3 ? c.fap.toExponential(1) : fmt(c.fap, 3)) : '–'}`),
+      c.expected_false_alarms_per_sector != null ? el('div', { class: 'muted' }, `Expected false alarms per sector at this S (after vetting): ${fmt(c.expected_false_alarms_per_sector, 2)}`) : null,
       el('div', { class: 'muted' }, `ρ★ transit/TIC ${c.rho_transit != null && c.rho_tic ? fmt(c.rho_transit / c.rho_tic, 2) : '–'} (z ${fmt(c.rho_z, 1)}) · RUWE ${fmt(c.ruwe, 2)}`),
       c.flags?.length ? el('div', { class: 'fchips' }, c.flags.map((f) => el('span', { class: 'fchip' }, f))) : null));
   }
   sl.append(g);
 } else sl.append(el('p', { class: 'muted' }, 'Re-vetting in progress.'));
+
+// ---------------------------------------------------------------- interim review (section 7)
+const RV = J?.review, WN = J?.whitenoise_neff, FF = J?.ffi_check_318707987;
+const rvb = document.getElementById('rvbody');
+if (rvb && RV) {
+  const tbl = (cap, head, rows) => el('table', { class: 'mini' }, el('caption', {}, cap),
+    el('tr', {}, head.map((h) => el('th', {}, h))), rows.map((r) => el('tr', {}, r.map((x) => el('td', {}, x == null ? '–' : String(x))))));
+  const g = RV.gpd || {};
+  const ci = (a) => (a ? `${fmt(a[0], 1)}–${fmt(a[1], 1)}` : '–');
+  rvb.append(el('h3', {}, 'Tail starting point'), el('p', { html:
+    `The GPD starting point u is chosen by a fixed rule: ${g.u_rule}. Vetted peaks exist only at S ≥ 6, so u starts there. ` +
+    `Chosen u = ${fmt(g.u, 2)} (${g.k} tail points): <b>S* = ${fmt(g.s_star, 1)}</b>, 95% statistical interval ${ci(g.ci95_stat)}, ` +
+    `systematic ±${fmt(g.sys_halfwidth, 1)} (range ${ci(g.sys_range)} over u = ${(g.stable_us || []).join(', ')}). ` +
+    `<a href="data/review/gpd_threshold_choice_s0070.png">Mean-residual-life and stability plots (PNG)</a>.` }));
+  rvb.append(el('p', { html: `Cameras are pooled: each camera's tail is too thin (tens of points) for a stable fit, so no per-camera threshold is used or shown until the samples grow.` }));
+  const qs = Object.entries(RV.quality_sensitivity || {});
+  rvb.append(el('h3', {}, 'Star-quality cut: frozen, registered after unblinding'), el('p', { html:
+    `The cut was written down after we had seen summary statistics of the flipped null, but before evaluating it on any population. It is frozen. Its effect at other thresholds:` }),
+    tbl('Sensitivity to the β_max cut (sector 70, tuning stars, allowed radius range)', ['β_max cut', 'Dropped', 'S*', 'Vetted, S_exp ≥ 25'],
+      qs.map(([k, v]) => [k === 'None' ? 'none' : k, fmt(v.stars_dropped), fmt(v.s_star, 1), `${fmt(100 * v.vetted_completeness_allowed_snr_ge_25, 0)}%`])));
+  const ts = Object.entries(RV.toi_dropped_vs_kept || {});
+  rvb.append(tbl('Known planets (TOI hosts) among dropped and kept stars', ['Sector', 'Dropped: hosts, re-found', 'Kept: hosts, re-found', 'Odds ratio (p)'],
+    ts.map(([s, v]) => [s, `${v.dropped.toi_hosts} (${fmt(100 * v.dropped.toi_host_rate, 2)}%), ${v.dropped.recovered}`, `${v.kept.toi_hosts} (${fmt(100 * v.kept.toi_host_rate, 2)}%), ${v.kept.recovered}`,
+      `${fmt(v.fisher_overrep.odds_ratio, 2)} (${v.fisher_overrep.p.toExponential(0)})`])),
+    el('p', { class: 'muted' }, 'Known planets are under-represented among dropped stars, not over-represented.'));
+  const ca = RV.completeness_allowed?.tuning || {};
+  const hs = RV.high_snr_failures || {};
+  rvb.append(el('h3', {}, 'Completeness inside the allowed size range'), el('p', { html:
+    `The too_deep (depth ≥ 5%) and size (R ≥ 25 R⊕) caps reject large bodies by design, so completeness is quoted only for injections they allow ` +
+    `(${fmt(100 * RV.allowed_fraction, 0)}% of injections). Of ${hs.n} high-S_exp (≥ 50) injections that were found but failed vetting, ` +
+    `too_deep is involved in ${fmt(100 * hs.too_deep_any, 0)}% (the only failure in ${fmt(100 * hs.too_deep_only, 0)}%), odd_even in ${fmt(100 * hs.odd_even_any, 0)}%.` }),
+    tbl('Sector 70, tuning stars, at the interim S*', ['Expected S', 'n', 'Found', 'Found and vetted'],
+      Object.entries(ca).map(([k, v]) => [k.replace(/[\[\)]/g, '').replace(', ', '–').replace('1000000000.0', '∞'), v.n, `${fmt(100 * v.detected, 0)}%`, `${fmt(100 * v.vetted, 0)}%`])));
+  const tf = RV.tail_fap || {};
+  rvb.append(el('h3', {}, 'TIC 318707987: marginal'), el('p', { html:
+    `At its S of 14.8 the tail fit gives ${fmt(tf['14.8']?.expected_false_alarms_per_sector, 2)} expected false alarms per sector after vetting ` +
+    `(per-star ${tf['14.8']?.per_star?.toExponential(1)}), so it is <b>marginal</b>, not a detection. ` +
+    (FF ? `The planned independent test in the sector 42/43 full-frame images is not possible: the star fell off the science pixels in both sectors ` +
+      `(the image cutouts hold ~0.02 e/s where the star would give ~75,000 e/s; the TESS pointing tool lists sector 70 only). ` +
+      `As a photometry cross-check only, our own aperture photometry of the sector 70 full-frame images finds the same period blind ` +
+      `(P ${fmt(FF.control_blind?.period, 4)} d, S ${fmt(FF.control_blind?.S, 1)}, ${fmt(FF.control_blind?.depth_ppm, 0)} ppm), but those are the same photons. ` : '') +
+    `<a href="${REPO}/blob/exoplanet-search/exoplanet_search/docs/preregistration/tic318707987_ffi.md">Test registration</a>.` }));
+  if (WN) {
+    const f = WN.fits?.S_oot || {};
+    rvb.append(el('h3', {}, 'White noise: effective number of trials'), el('p', { html:
+      `Pure white noise with the real sector-70 cadence, through the full chain, with the out-of-transit error term restored: Gumbel fit to the per-star maxima gives ` +
+      `an expected maximum of ${fmt(f.expected_max, 2)} and about ${fmt(f.joint_N_eff / 1e4, 1)} × 10⁴ effective independent trials per star (per-trial spread ${fmt(f.joint_trial_sd, 2)}). ` +
+      `The white-noise threshold for one false alarm per sector would be ${fmt(f.s_star_white_joint, 1)}; the real (vetted) S* is far higher, so the false-alarm tail comes from non-white residuals.` }));
+  }
+} else if (rvb) rvb.append(el('p', { class: 'muted' }, 'Review in progress.'));

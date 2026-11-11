@@ -144,9 +144,24 @@ def nulls(n_df, layer=None):
         for sec, r in layer["thr"]["sectors"].items():
             out["threshold"][sec] = dict(n=r["n_null"], n_stars=r["n_stars"], s_star=r["s_star"], ci68=r["ci68"], ci95=r["ci95"],
                                          k_tail=r["k_tail"], u=r["u"], xi=r["xi"], max_vetted=r["max_vetted"],
-                                         per_camera={c: dict(n=v.get("n_null"), k_tail=v.get("k_tail"), s_star=v.get("s_star"),
-                                                             ci68=v.get("ci68")) for c, v in r.get("per_camera", {}).items()})
-        out["threshold_kind"] = "interim GPD fit, vetted inverted null, tuning stars passing the quality cut"
+                                         sys_halfwidth=r.get("sys_halfwidth"), cameras="pooled")
+        out["threshold_kind"] = "interim GPD fit, vetted inverted null, tuning stars passing the quality cut (provisional)"
+        # flipped vs scrambled side by side (same quality cut, vetting, u rule); scrambled pending until its run lands
+        sc = d[d["mode"] == "scramble"] if "mode" in d else d.iloc[:0]
+        side = {}
+        for sec, r in layer["thr"]["sectors"].items():
+            side[sec] = dict(invert=dict(s_star=r["s_star"], ci95=r["ci95"], n=r["n_null"]), scramble=None)
+            xs = sc[sc.sector == int(sec)]
+            if len(xs):
+                try:
+                    from . import interim_review as rv
+                    xq = layer["interim"].with_quality(xs.assign(vetted=_vetted(xs)), layer["q"])
+                    xq = xq[~xq["drop"] & ~xq.holdout.astype(bool)]
+                    f = layer["interim"].fit_sector(xq, r["n_stars"], u=r["u"], n_boot=500)
+                    side[sec]["scramble"] = dict(s_star=f["s_star"], ci95=f["ci95"], n=f["n_null"], realizations=int(xs.realization.nunique()))
+                except Exception as exc:
+                    side[sec]["scramble"] = dict(error=type(exc).__name__)
+        out["threshold_by_null"] = dict(side, note="S* is provisional until both nulls are complete; scramble = null when not yet run")
         return out
     inv = d[d["mode"] == "invert"]
     for (s, cam), x in inv.groupby(["sector", "camera"]):
@@ -158,6 +173,13 @@ def nulls(n_df, layer=None):
         out["threshold"][f"{int(s)}"] = dict(n=n, s_star=round(float(np.quantile(x.S, 1 - 1 / n)), 3),
                                             max=round(float(x.S.max()), 3))
     return out
+
+
+def _vetted(x):
+    fl = x["flags"].fillna("").str.split(",").map(lambda f: set(f) - {"", "low_s"})
+    dfl = x.deep_flags.fillna("").str.split(",").map(set)
+    cp = x.fail_common_period.fillna(False).astype(bool) if "fail_common_period" in x else False
+    return (fl.map(len) == 0) & ~cp & dfl.map(lambda f: not (f & deepvet.REJECT)) & x.checks_logged.fillna(False).astype(bool)
 
 
 def fap(S, sector, n_df, layer=None):
@@ -228,14 +250,15 @@ def build():
     layer = _layer()
     if layer is not None:
         thr = dict(statistic="S = depth_box / (CDPP_D / sqrt(N_tr))", interim=True, provisional=True,
+                   status="provisional until both the flipped (inverted) and the scrambled nulls are complete",
+                   nulls_complete=dict(invert=(PROD / "nulltests" / "invert" / "null_invert_maxS.parquet").exists(),
+                                       scramble=bool(glob.glob(str(PROD / "nulltests" / "scramble_r*" / "null_*_maxS.parquet")))),
                    kind="interim: GPD tail fit to the vetted inverted null (tuning stars passing the quality cut), "
                         "post-vetting false-alarm rate 1/N_stars per sector; bootstrap CI",
                    default=layer["ref"], by_sector={k: dict(s_star=v["s_star"], ci68=v["ci68"], ci95=v["ci95"], n_null=v["n_null"],
                                                             n_stars=v["n_stars"], k_tail=v["k_tail"], u=v.get("u"), u_stable=v.get("u_stable"),
                                                             sys_range=v.get("sys_range"), sys_halfwidth=v.get("sys_halfwidth"),
-                                                            per_camera={c: dict(s_star_own_alpha=w.get("s_star"), s_star_sector_alpha=w.get("s_star_sector_alpha"),
-                                                                                n_null=w.get("n_null"), k_tail=w.get("k_tail"))
-                                                                        for c, w in v.get("per_camera", {}).items()})
+                                                            cameras="pooled: per-camera tails are too thin to fit (not published)")
                                               for k, v in layer["thr"]["sectors"].items()},
                    borrowed_note="sectors without their own inverted null yet use the sector-70 value",
                    pipeline_floor=json.loads(vet.THRESHOLD_FILE.read_text())["default"],
@@ -258,6 +281,7 @@ def build():
             j = json.loads(f.read_text())
             if k == "review":
                 j["gpd"] = {a: b for a, b in j["gpd"].items() if a != "diag"}
+                j.pop("per_camera", None)          # per-camera S* not published: cameras pooled until the samples grow
             if k == "ffi_check_318707987":
                 j = {a: j.get(a) for a in ("tess_point_on_silicon", "not_on_silicon", "verdict", "control_at_ref", "control_orbits_at_ref")}
                 j["control_blind"] = (json.loads(f.read_text())["sectors"].get("70") or {}).get("blind_top")

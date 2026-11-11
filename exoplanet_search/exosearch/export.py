@@ -21,7 +21,8 @@ MAX_PNG = 300 * 1024
 
 
 def _known(r):
-    return bool(r.toi_period_match or r.ctoi_period_match or r.planet_period_match)
+    """Catalogue period match. Missing cross-match (None/NaN, e.g. sectors not yet labelled) is not a match."""
+    return any(v == 1 for v in (r.toi_period_match, r.ctoi_period_match, r.planet_period_match))
 
 
 def _label(r):
@@ -39,13 +40,45 @@ def _deep(r):
     return set(filter(None, f.split(","))) if isinstance(f, str) else set()
 
 
+def _interim():
+    """Interim-layer re-flag: per-sector S* (sectors without their own null borrow sector 70) and the star-quality cut."""
+    from . import interim, quality
+    ss = interim.s_star_by_sector()
+    try:
+        q = quality.load()
+        drop = {(int(a), int(b)) for a, b, c in q[["tic", "sector", "drop"]].itertuples(index=False) if c}
+        measured = {(int(a), int(b)) for a, b in q[["tic", "sector"]].itertuples(index=False)}
+    except Exception:
+        drop, measured = set(), set()
+    return ss, drop, measured
+
+
+def _reflag(ok, ss, drop, measured):
+    """passed = v1.0.0 screens passed AND S measured (v1 rows) AND S >= interim S* AND star kept by the quality cut."""
+    ref = ss.get(70)
+    thr = ok.sector.map(lambda x: ss.get(int(x), ref))
+    key = list(zip(ok.tic.astype(int), ok.sector.astype(int)))
+    qd = pd.Series([k in drop for k in key], index=ok.index)
+    qm = pd.Series([k in measured for k in key], index=ok.index)
+    has_s = ok.S.notna()
+    ok["s_star"] = thr
+    ok["passed_screens_v10"] = (ok.passed == 1)
+    ok["passed"] = (ok.passed_screens_v10 & has_s & (ok.S >= thr) & ~(qd & qm)).astype(int)
+    ok["calib_note"] = np.select(
+        [~ok.passed_screens_v10, ~has_s, ok.S < thr, qd & qm],
+        ["", "v0 row: no calibrated S (re-search with v1 pending)", "S below the interim S*", "dropped by the star-quality cut"], "")
+    return ok
+
+
 def _status(r, subs):
     if str(r.tic) in subs:
         return "submitted"
     if _known(r):
         return "known"
-    if r.passed == 1:
-        return "rejected" if _deep(r) & deepvet.REJECT else "needs_review"
+    if r.passed_screens_v10:
+        if _deep(r) & deepvet.REJECT:
+            return "rejected"
+        return "needs_review" if r.passed == 1 else "uncalibrated"
     return "rejected"
 
 
@@ -150,6 +183,9 @@ def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
             if k not in ("tic", "sector", "updated_at"):
                 df[k] = None
     ok = df[df.status == "ok"].copy()
+    ss, qdrop, qmeas = _interim()
+    ok = _reflag(ok, ss, qdrop, qmeas)
+    calib = ok[ok.S.notna()]
     try:
         ps_ok = bool(catalogs.load_catalogs().get("ps_ok"))
     except Exception:
@@ -162,15 +198,18 @@ def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
         sectors.append(dict(
             sector=int(s), n_targets=q.get(s, {}).get("n_targets"), n_searched=int(len(g)),
             n_errors=int((df[(df.sector == s)].status != "ok").sum()), status=q.get(s, {}).get("status"),
-            n_passed=int(g.passed.sum()), toi_hosts=int(len(toi)),
+            n_passed=int(g.passed.sum()), n_passed_screens_v10=int(g.passed_screens_v10.sum()), calibrated=bool(g.S.notna().any()),
+            s_star=_f(g.s_star.iloc[0], 2) if g.S.notna().any() else None, toi_hosts=int(len(toi)),
+            toi_hosts_calibrated=int(toi.S.notna().sum()),
             toi_recovered=int(((toi.toi_period_match == 1) & (toi.passed == 1)).sum()),
             toi_period_found=int((toi.toi_period_match == 1).sum()),
-            needs_review=int(((g.passed == 1) & ~g.apply(_known, axis=1)).sum()),
+            needs_review=int(((g.passed == 1) & ~g.apply(_known, axis=1) & ~(g.apply(_deep, axis=1).map(lambda x: bool(x & deepvet.REJECT)))).sum()),
             median_star_s=_f(g.runtime_s.median(), 3)))
 
     ok["state"] = ok.apply(lambda r: _status(r, subs), axis=1)
     listed = pd.concat([
         ok[ok.state.isin(["submitted", "needs_review"])].sort_values("sde", ascending=False),   # always all of these
+        ok[ok.state == "uncalibrated"].sort_values("sde", ascending=False),
         ok[ok.state == "known"].sort_values("sde", ascending=False).head(max_candidates),
         # strongest rejects that still look physically plausible (skip broken photometry)
         ok[(ok.state == "rejected") & (ok.passed == 1)].sort_values("sde", ascending=False),  # failed deep vetting
@@ -180,6 +219,7 @@ def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
     for r in listed.itertuples():
         cands.append(dict(
             tic=int(r.tic), sector=int(r.sector), status=r.state, known=_label(r),
+            S=_f(r.S, 2), s_star=_f(r.s_star, 2) if r.S == r.S else None, calib_note=r.calib_note or None,
             toi_host=r.known_toi if r.known_toi and not r.toi_period_match else None,
             tmag=_f(r.tmag, 2), period=_f(r.period, 5), duration_h=_f(r.duration * 24, 2),
             depth_ppm=_f(r.depth * 1e6, 0), sde=_f(r.sde, 2), snr=_f(r.snr, 1),
@@ -200,7 +240,7 @@ def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
             exofop=f"https://exofop.ipac.caltech.edu/tess/target.php?id={int(r.tic)}"))
 
     # deep-vetting funnel over signals that passed the per-star screens with no catalogue match
-    rev = ok[(ok.passed == 1) & ~ok.apply(_known, axis=1) & ~ok.tic.astype(str).isin(subs)]
+    rev = ok[ok.passed_screens_v10 & ~ok.apply(_known, axis=1) & ~ok.tic.astype(str).isin(subs)]
     vet_ = rev[rev.deep_flags.apply(lambda x: isinstance(x, str))]
     fl = vet_.apply(_deep, axis=1) if len(vet_) else pd.Series(dtype=object)
     funnel = dict(
@@ -230,10 +270,14 @@ def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
         totals=dict(sectors_with_results=len(sectors), sectors_available=len(q),
                     sectors_done=sum(1 for r in q.values() if r["status"] == "done"),
                     stars_searched=int(len(ok)), errors=int((df.status != "ok").sum()),
-                    passed=int(ok.passed.sum()), toi_hosts=int(len(toi)),
+                    passed=int(ok.passed.sum()), passed_screens_v10=int(ok.passed_screens_v10.sum()),
+                    calibrated_rows=int(len(calib)), toi_hosts=int(len(toi)), toi_hosts_calibrated=int(toi.S.notna().sum()),
                     toi_recovered=int(((toi.toi_period_match == 1) & (toi.passed == 1)).sum()),
                     toi_period_found=int((toi.toi_period_match == 1).sum()),
                     needs_review=int((ok.state == "needs_review").sum()),
+                    uncalibrated=int((ok.state == "uncalibrated").sum()),
+                    passed_definition=("v1.0.0 screens passed, S measured (v1 rows), S >= interim S* of the sector (sector-70 value "
+                                       "where a sector has no null yet) and star kept by star_quality_v1. Not a detection."),
                     submitted=int((ok.state == "submitted").sum()),
                     planet_archive_crossmatch=ps_ok),
         queue_next=sectorqueue.next_sectors(3),

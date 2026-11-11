@@ -1,7 +1,7 @@
 import { el, fmt, slider, toggle, readout, surface, axes, palette, alpha, notice, starfield } from './ui.js';
 
 starfield();
-const LABEL = { needs_review: 'Needs review', known: 'Known', submitted: 'Submitted', rejected: 'Rejected' };
+const LABEL = { needs_review: 'Needs review', uncalibrated: 'Not calibrated', known: 'Known', submitted: 'Submitted', rejected: 'Rejected' };
 const ppmFmt = (v) => (Math.abs(v) >= 10000 ? `${(v / 1e4).toFixed(Math.abs(v) >= 1e5 ? 0 : 1)}%` : `${Math.round(v)}`);
 
 function parseHash() {
@@ -11,7 +11,7 @@ function parseHash() {
 
 async function main() {
   const d = await (await fetch('data/progress.json', { cache: 'no-store' })).json();
-  const RANK = { submitted: 4, needs_review: 3, known: 2, rejected: 1 };
+  const RANK = { submitted: 5, needs_review: 4, uncalibrated: 3, known: 2, rejected: 1 };
   const list = [...d.candidates].sort((a, b) => RANK[b.status] * 1000 + b.sde - (RANK[a.status] * 1000 + a.sde));
   const want = parseHash();
   const i = want ? list.findIndex((c) => c.tic === want.tic && c.sector === want.sector) : -1;
@@ -31,7 +31,8 @@ function render(c, prev, next) {
   document.getElementById('lede').innerHTML = `<span class="badge b-${c.status}">${LABEL[c.status] || c.status}</span> ` +
     (c.known ? `Our blind search re-found <b>${c.known}</b>. ` : c.toi_host ? `This star hosts TOI ${c.toi_host}, but this signal is at a different period. ` : 'No catalogue match at this period. ') +
     `A ${fmt(c.depth_ppm)} ppm dip lasting ${fmt(c.duration_h, 1)} h, every ${fmt(c.period, 4)} days, seen ${c.n_transits} times in sector ${c.sector}.` +
-    (c.status === 'needs_review' ? ' <b>Not a discovery:</b> it passed our automated checks, which is where human vetting starts.' : '');
+    (c.status === 'needs_review' ? ` <b>Not a detection:</b> it passed our automated checks with S ${fmt(c.S, 1)} ≥ interim S* ${fmt(c.s_star, 1)}, which is where human vetting starts.` : '') +
+    (c.status === 'uncalibrated' ? ` <b>Not calibrated:</b> ${c.calib_note || 'no interim S* comparison'}. It passed the v1.0.0 screens only.` : '');
   const mast = `https://mast.stsci.edu/portal/Mashup/Clients/Mast/Portal.html?searchQuery=${encodeURIComponent(`TIC ${c.tic}`)}`;
   document.getElementById('links').append(
     el('a', { class: 'btn', href: c.exofop, target: '_blank', rel: 'noopener' }, 'ExoFOP ↗'),

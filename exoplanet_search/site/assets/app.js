@@ -7,7 +7,7 @@ const rel = (iso) => {
   if (s < 90) return 'just now'; if (s < 5400) return Math.round(s / 60) + ' min ago';
   if (s < 172800) return Math.round(s / 3600) + ' h ago'; return Math.round(s / 86400) + ' days ago';
 };
-const LABEL = { all: 'All', needs_review: 'Needs review', known: 'Known', submitted: 'Submitted', rejected: 'Rejected' };
+const LABEL = { all: 'All', needs_review: 'Needs review', uncalibrated: 'Not calibrated', known: 'Known', submitted: 'Submitted', rejected: 'Rejected' };
 const FLAG_TXT = {
   centroid_offset: 'dip centroid off target', dip_off_target: 'darkest pixel off target', unresolved_neighbour: 'unresolved bright neighbour',
   neighbour_could_mimic: 'neighbour could mimic', centroid_inconclusive: 'centroid inconclusive', centroid_shift_minor: 'small centroid shift (warning)',
@@ -31,13 +31,14 @@ function render(d) {
     `last updated ${new Date(d.generated_at).toUTCString()} (${rel(d.generated_at)}) · pipeline v${d.pipeline_version}` +
     (t.planet_archive_crossmatch ? '' : ' · NASA Exoplanet Archive cross-match pending (archive unavailable, no cached copy yet)') +
     Object.entries(d.catalogs || {}).map(([k, v]) => (v.fetched_at ? ` · ${k.replace('.csv', '')} ${v.fetched_at.slice(0, 10)}` : '')).join('');
-  const rate = t.toi_hosts ? (100 * t.toi_recovered) / t.toi_hosts : 0;
+  const nh = t.toi_hosts_calibrated ?? t.toi_hosts;
+  const rate = nh ? (100 * t.toi_recovered) / nh : 0;
   const S = document.getElementById('stats');
   for (const [k, v, s, c] of [
     ['Stars searched', fmt(t.stars_searched), `${fmt(t.errors)} errors`, 'acc'],
     ['Sectors', `${t.sectors_done}<span style="font-size:18px;color:var(--muted)"> / ${t.sectors_available}</span>`, `${t.sectors_with_results} with results · next: ${(d.queue_next || []).join(', ') || '–'}`, ''],
-    ['Known TOIs re-found', `${fmt(rate, 0)}%`, `${t.toi_recovered} of ${t.toi_hosts} TOI hosts`, 'ok'],
-    ['Needs review', fmt(t.needs_review), 'passed every screen, no catalogue match', 'acc2'],
+    ['Known TOIs re-found', `${fmt(rate, 0)}%`, `${t.toi_recovered} of ${nh} TOI hosts in calibrated (v1) rows, at S ≥ interim S*`, 'ok'],
+    ['Needs review', fmt(t.needs_review), `passed every check at S ≥ interim S*, no catalogue match; not detections · ${fmt(t.uncalibrated ?? 0)} more not calibrated`, 'acc2'],
     ['Submitted', fmt(t.submitted), 'to Planet Hunters TESS / ExoFOP', 'sub'],
   ]) S.append(el('div', { class: 'card stat', html: `<div class="k">${k}</div><div class="v ${c}">${v}</div><div class="s">${s}</div>` }));
 
@@ -67,7 +68,7 @@ function sectorMap(d, table) {
     const r = bySector[s.sector];
     info.innerHTML = [['Sector', `S${s.sector}`], ['Status', s.status.replace('_', ' ') + (next.has(s.sector) && s.status !== 'done' ? ' (up next)' : '')],
       ['Stars searched', `${fmt(s.n_searched)}${s.n_targets ? ' / ' + fmt(s.n_targets) : ''}`],
-      ['Passed screens', r ? fmt(r.n_passed) : '–'], ['TOIs re-found', r ? `${r.toi_recovered} / ${r.toi_hosts}` : '–'], ['Needs review', r ? fmt(r.needs_review) : '–']]
+      ['Passed (S ≥ S*)', r ? (r.calibrated ? fmt(r.n_passed) : 'not calibrated') : '–'], ['TOIs re-found', r ? `${r.toi_recovered} / ${r.toi_hosts}` : '–'], ['Needs review', r ? fmt(r.needs_review) : '–']]
       .map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
   };
   for (let i = 0; i < YEARS.length - 1; i++) {
@@ -122,7 +123,7 @@ function sectorTable(d) {
 /* ───── candidate explorer: search, filter, sort; state lives in the URL hash ───── */
 function candidates(d) {
   const all = d.candidates;
-  const RANK = { submitted: 4, needs_review: 3, known: 2, rejected: 1 };
+  const RANK = { submitted: 5, needs_review: 4, uncalibrated: 3, known: 2, rejected: 1 };
   all.forEach((c) => {
     c.rank = RANK[c.status] * 1000 + (c.sde || 0);
     c.allflags = [c.flags, c.deep_flags].filter(Boolean).join(',');
@@ -172,7 +173,7 @@ function candidates(d) {
     el('div', { class: 'ctl' }, el('span', { class: 'lbl' }, 'Flags'), flagSel), sS.el, sP0.el, sP1.el, sR.el, sT.el, el('div', { class: 'ctl' }, reset));
 
   const chips = document.getElementById('chips');
-  const chipBtns = ['all', 'needs_review', 'known', 'submitted', 'rejected'].map((s) => {
+  const chipBtns = ['all', 'needs_review', 'uncalibrated', 'known', 'submitted', 'rejected'].map((s) => {
     const b = el('button', { type: 'button', class: 'chip', 'data-s': s }, `${LABEL[s]} · ${s === 'all' ? all.length : all.filter((c) => c.status === s).length}`);
     b.addEventListener('click', () => { st.status = s; chipsSync(); draw(); });
     chips.append(b);

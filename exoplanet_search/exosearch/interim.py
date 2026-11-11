@@ -29,6 +29,7 @@ PROD = config.DATA_ROOT / "products" / f"v{PIPELINE_VERSION}"
 U_DEFAULT = 6.0           # = nulltest.S_FLOOR: every check is logged above it
 U_SENS = (6.0, 7.0, 8.0)
 N_BOOT = 2000
+PER_CAMERA = False        # per-camera S* off: pooled until camera samples support a stable tail fit
 SEED = 20261110
 REJECT_ALL = set(nulltest.SCREEN_CHECKS) | {"common_period"} | deepvet.REJECT
 
@@ -143,7 +144,7 @@ def main():
         r["held_out_excluded"] = int(((null.sector == s) & null.holdout.astype(bool) & ~null["drop"]).sum())
         res[str(s)] = r
         cams = {}
-        for cam, xc in x.groupby("camera"):
+        for cam, xc in ([] if not PER_CAMERA else x.groupby("camera")):
             k_c = int((xc.vetted & (xc.S > u0)).sum())
             if k_c >= 30:
                 c = fit_sector(xc, pop[s]["kept"] * len(xc) / len(x), u=u0, n_boot=500)      # own alpha = 1/N_cam
@@ -153,7 +154,11 @@ def main():
             else:
                 cams[str(int(cam))] = dict(n_null=int(len(xc)), k_tail=k_c,
                                            s_star=None, note="fewer than 30 vetted exceedances; sector value applies")
-        r["per_camera"] = cams
+        r["per_camera"] = cams if PER_CAMERA else dict(
+            pooled=True, note="cameras pooled: per-camera tails too thin for a stable GPD (not fitted or published until the samples grow)",
+            n_null={str(int(c)): int(len(xc)) for c, xc in x.groupby("camera")},
+            k_tail={str(int(c)): int((xc.vetted & (xc.S > u0)).sum()) for c, xc in x.groupby("camera")})
+        r["status"] = "provisional until both the flipped and the scrambled nulls are complete"
     out = dict(name="interim_threshold_v1", layer="interim analysis layer over frozen exosearch v1.0.0",
                pipeline_version=st["pipeline_version"], config_hash=st["config_hash"], git_hash=st["git_hash"],
                statistic="S = depth_box / (CDPP_D / sqrt(N_tr))", interim=True,
