@@ -19,13 +19,14 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Union
 
+from astropy.io import fits
 import numpy as np
 import pandas as pd
 
-from .. import batch, bls, config, lightcurve, store, targets
-from . import grid, search, settings
+from .. import batch, bls, catalogs, config, lightcurve, store, targets
+from . import grid, pipeline, search, settings
 
 # Contamination factor documentation:
 # For PDCSAP flux, the SPOC pipeline has already performed crowding correction by subtracting
@@ -36,13 +37,13 @@ from . import grid, search, settings
 # non-target starlight in the aperture by a factor equal to CROWDSAP (the target flux fraction),
 # so the expected depth in SAP would be catalogue_depth * CROWDSAP.
 CONTAMINATION_FACTOR_PDCSAP = 1.0
+DETREND_WINDOW_DAYS = 0.75
 
 
 def calculate_grid_halfwidth(
     period: float,
     baseline: float = 27.0,
     durations: np.ndarray = search.DURATIONS,
-    min_transits: int = 2,
     frequency_factor: float = 1.0,
 ) -> float:
     """Calculate the period-grid plateau half-width at a given period from the v1.1 grid spacing.
@@ -111,7 +112,6 @@ def check_recovery(
 
     # Check 2x / 0.5x aliases
     for ratio in alias_ratios:
-        # Check alias within half-width of the alias period or within tolerance
         target_alias = p_cat * ratio
         hw_alias = half_width * (ratio ** 2)
         if abs(p_found - target_alias) <= max(hw_alias, alias_tol * target_alias):
@@ -131,7 +131,7 @@ def determine_miss_cause(
     p_found: Optional[float],
     half_width: float,
     s_found: Optional[float] = None,
-    detrend_window: float = 0.75,
+    detrend_window: float = DETREND_WINDOW_DAYS,
 ) -> str:
     """Classify the miss cause bucket according to exosearch/missed.py rules:
     1. few_transits   : < 2 transits of ephemeris with >= half cadences in raw sector data
@@ -153,6 +153,98 @@ def determine_miss_cause(
     if not recovered:
         return "outcompeted"
     return "other"
+
+
+def read_crowdsap_from_fits(fits_path: Union[str, Path]) -> float:
+    """Read CROWDSAP from FITS header (HDU 1 or HDU 0)."""
+    with fits.open(fits_path, memmap=False) as hdul:
+        for hdu in hdul:
+            if "CROWDSAP" in hdu.header and hdu.header["CROWDSAP"] is not None:
+                val = float(hdu.header["CROWDSAP"])
+                if np.isfinite(val):
+                    return val
+    return 1.0
+
+
+def select_known_planet_targets(
+    sector: int = 70,
+    searched_tics: Optional[set[int]] = None,
+) -> pd.DataFrame:
+    """Find sector-70 searched stars hosting confirmed planets or active TOIs."""
+    if searched_tics is None:
+        con = store.connect()
+        df_searched = store.frame(con, sector)
+        searched_tics = set(df_searched.tic.astype(int))
+
+    cats = catalogs.load_catalogs()
+    toi_df = cats["toi"]
+    active_toi = toi_df[~toi_df.disp.isin(["FP", "FA"])].copy()
+
+    # Load full TOI table for ephemeris & depth
+    toi_path = config.CATALOG_DIR / "exofop_toi.csv"
+    if toi_path.exists():
+        t_raw = pd.read_csv(toi_path, comment="#", low_memory=False)
+        t_raw = t_raw.rename(columns={
+            "TIC ID": "tic", "TOI": "toi", "Period (days)": "period",
+            "TFOPWG Disposition": "disp", "Epoch (BJD)": "epoch_bjd",
+            "Duration (hours)": "dur_h", "Depth (ppm)": "depth_ppm",
+        })
+        active_toi_full = t_raw[t_raw.tic.isin(searched_tics) & ~t_raw.disp.isin(["FP", "FA"])].copy()
+    else:
+        active_toi_full = active_toi[active_toi.tic.isin(searched_tics)].copy()
+        if "dur_h" not in active_toi_full.columns:
+            active_toi_full["dur_h"] = 2.4
+        if "depth_ppm" not in active_toi_full.columns:
+            active_toi_full["depth_ppm"] = 1000.0
+        if "epoch_bjd" not in active_toi_full.columns:
+            active_toi_full["epoch_bjd"] = 2457000.0
+
+    targets_list = []
+    seen_keys = set()
+
+    for r in active_toi_full.itertuples():
+        tic = int(r.tic)
+        p = float(r.period) if pd.notna(r.period) else np.nan
+        if np.isnan(p) or p <= 0:
+            continue
+        dur_h = float(getattr(r, "dur_h", 2.4)) if pd.notna(getattr(r, "dur_h", 2.4)) else 2.4
+        depth_ppm = float(getattr(r, "depth_ppm", 1000.0)) if pd.notna(getattr(r, "depth_ppm", 1000.0)) else 1000.0
+        t0 = float(getattr(r, "epoch_bjd", 2457000.0)) - 2457000.0 if pd.notna(getattr(r, "epoch_bjd", 2457000.0)) else 0.0
+        key = (tic, round(p, 4))
+        if key not in seen_keys:
+            seen_keys.add(key)
+            targets_list.append({
+                "tic": tic,
+                "name": f"TOI {r.toi}",
+                "period": p,
+                "t0": t0,
+                "dur_h": dur_h,
+                "depth_ppm": depth_ppm,
+                "type": "toi",
+            })
+
+    # PS confirmed planets
+    ps_df = cats["ps"]
+    ps_s70 = ps_df[ps_df.tic.isin(searched_tics)].copy()
+    for r in ps_s70.itertuples():
+        tic = int(r.tic)
+        p = float(r.pl_orbper) if pd.notna(r.pl_orbper) else np.nan
+        if np.isnan(p) or p <= 0:
+            continue
+        key = (tic, round(p, 4))
+        if key not in seen_keys:
+            seen_keys.add(key)
+            targets_list.append({
+                "tic": tic,
+                "name": str(r.pl_name),
+                "period": p,
+                "t0": 0.0,
+                "dur_h": 2.4,
+                "depth_ppm": 1000.0,
+                "type": "ps",
+            })
+
+    return pd.DataFrame(targets_list)
 
 
 def evaluate_known_planets(
@@ -184,12 +276,13 @@ def evaluate_known_planets(
     if not search_results_df.empty:
         for r in search_results_df.itertuples():
             tic = int(r.tic)
-            P = getattr(r, "period", None) or getattr(r, "P_grid", None)
+            P = getattr(r, "period", None)
+            if P is None or pd.isna(P):
+                P = getattr(r, "P_grid", None)
             S = getattr(r, "S", None)
             res_by_tic[tic] = dict(period=P, S=S)
 
     rows = []
-    baseline = 27.0
 
     for row in targets_df.itertuples():
         tic = int(row.tic)
@@ -209,6 +302,7 @@ def evaluate_known_planets(
         n_tr = int(getattr(row, "n_tr", 2))
         n_raw = int(getattr(row, "n_raw", n_tr))
         cdpp_d = float(getattr(row, "cdpp_d", getattr(row, "cdpp", 1e-4)))
+        baseline = float(getattr(row, "baseline", 27.0))
 
         # Expected S
         if cdpp_d > 0 and n_tr > 0:
@@ -277,3 +371,128 @@ def evaluate_known_planets(
     }
 
     return out_df, summary
+
+
+def run_known_planet_recovery(
+    s_star: float,
+    search_results_path: Optional[Union[str, Path]] = None,
+    out_dir: Union[str, Path] = Path("."),
+    sector: int = 70,
+    targets_csv: Optional[Union[str, Path]] = None,
+) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """Run known-planet recovery evaluation and write CSV and JSON outputs."""
+    out_p = Path(out_dir)
+    out_p.mkdir(parents=True, exist_ok=True)
+
+    # 1. Load or build targets
+    if targets_csv and Path(targets_csv).exists():
+        df_tgt = pd.read_csv(targets_csv)
+    else:
+        df_tgt = select_known_planet_targets(sector=sector)
+
+    # 2. Enrich targets with light-curve data, masks, CDPP, and CROWDSAP if not pre-computed
+    enriched_rows = []
+    man = None
+    try:
+        man = targets.fetch_manifest(sector).set_index("tic")
+    except Exception:
+        pass
+
+    cfg = settings.cfg()
+
+    for row in df_tgt.itertuples():
+        rdict = dict(row._asdict())
+        tic = int(rdict["tic"])
+        P = float(rdict["period"])
+        dur_h = float(rdict.get("dur_h", rdict.get("duration_hours", 2.4)))
+        dur_d = dur_h / 24.0
+        t0 = float(rdict.get("t0", 0.0))
+
+        # Check if already computed
+        if "n_tr" in rdict and "cdpp_d" in rdict and "crowdsap" in rdict:
+            enriched_rows.append(rdict)
+            continue
+
+        # Look up lightcurve
+        crowdsap = 1.0
+        n_raw = 0
+        n_tr = 0
+        cdpp_d = 1e-4
+        baseline = 27.0
+
+        fname = man.loc[tic].fname if (man is not None and tic in man.index) else None
+        p = batch.lc_path(sector, fname, download=False) if fname else None
+        if p and p.exists():
+            crowdsap = read_crowdsap_from_fits(p)
+            try:
+                t, f, e, q, meta = lightcurve.load_spoc_raw(p)
+                good = lightcurve.good_mask(f, e, q)
+                tg = t[good]
+                fg = f[good] / np.nanmedian(f[good])
+                eg = e[good] / np.nanmedian(f[good])
+                baseline = float(tg.max() - tg.min()) if len(tg) > 0 else 27.0
+                n_raw = count_surviving_transits(t, P, t0, dur_d)
+
+                # Prepare with v1.1 masks
+                d = pipeline.prepare(tg, fg, eg, cfg, prewhiten_on=True, gap_trim=0.3)
+                tf, ff, ef = d["flat"]
+                n_tr = count_surviving_transits(tf, P, t0, dur_d)
+
+                # CDPP at duration
+                prof = bls.noise_profile(tf, ff, [dur_d])
+                cdpp_d = prof[2].get(dur_d, (1e-4, 1.0))[0]
+                if np.isnan(cdpp_d) or cdpp_d <= 0:
+                    cdpp_d = 1e-4
+            except Exception:
+                pass
+
+        rdict.update(
+            crowdsap=crowdsap,
+            n_raw=n_raw,
+            n_tr=n_tr,
+            cdpp_d=cdpp_d,
+            baseline=baseline,
+        )
+        enriched_rows.append(rdict)
+
+    df_enriched = pd.DataFrame(enriched_rows)
+
+    # 3. Load search results
+    if search_results_path and Path(search_results_path).exists():
+        df_search = pd.read_csv(search_results_path)
+    else:
+        df_search = pd.DataFrame(columns=["tic", "period", "S"])
+
+    out_df, summary = evaluate_known_planets(df_enriched, df_search, s_star=s_star)
+
+    # Output CSV and JSON
+    csv_path = out_p / "known_planets_recovery.csv"
+    out_df.to_csv(csv_path, index=False)
+
+    json_path = out_p / "known_planets_summary.json"
+    with open(json_path, "w") as fp:
+        json.dump(summary, fp, indent=2, default=float)
+
+    return out_df, summary
+
+
+def main():
+    ap = argparse.ArgumentParser(description="v1.1 Known planet / active TOI recovery test (T2)")
+    ap.add_argument("--s-star", type=float, required=True, help="Detection threshold S*")
+    ap.add_argument("--results", help="Search results CSV path")
+    ap.add_argument("--targets", help="Targets CSV path (optional)")
+    ap.add_argument("--out", required=True, help="Output directory")
+    ap.add_argument("--sector", type=int, default=70, help="TESS Sector")
+    a = ap.parse_args()
+
+    run_known_planet_recovery(
+        s_star=a.s_star,
+        search_results_path=a.results,
+        out_dir=a.out,
+        sector=a.sector,
+        targets_csv=a.targets,
+    )
+
+
+if __name__ == "__main__":
+    main()

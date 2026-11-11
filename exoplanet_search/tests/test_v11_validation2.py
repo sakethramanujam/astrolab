@@ -2,20 +2,43 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from exosearch import inject
 from exosearch.v11 import validate_pw2, registration_checks, settings
 
 
 def test_seed_disjointness():
     """Verify new seeds: base seed 20261112, runs 12-15 are strictly disjoint
-    from validate.py SEED 20261110 / run 0."""
+    from validate.py SEED 20261110 / run 0, cfg_v1 seed 70106 runs 0-11,
+    and host-selection RNG seed inject.seed_for(..., sector, -1, 0)."""
     new_base = validate_pw2.BASE_SEED
     old_base = validate_pw2.EXCLUDED_BASE_SEED
+    cfg_v1_seed = 70106
     assert new_base != old_base
     assert new_base == 20261112
     assert old_base == 20261110
 
-    sample_tics = [1001, 1002, 1003, 20261110, 20261112]
-    old_seeds = {validate_pw2.seed_for_pw2(old_base, 70, 0, tic) for tic in sample_tics}
+    sample_tics = [1001, 1002, 1003, 20261110, 20261112, 70106]
+
+    # 1. Host selection RNG seed check
+    host_seed_new = inject.seed_for(new_base, 70, -1, 0)
+    host_seed_old_base = inject.seed_for(old_base, 70, -1, 0)
+    host_seed_v1 = inject.seed_for(cfg_v1_seed, 70, -1, 0)
+    assert host_seed_new != host_seed_old_base
+    assert host_seed_new != host_seed_v1
+
+    # 2. Excluded task seeds
+    # Old validate.py run-0 seeds under base seed 20261110
+    old_validate_seeds = {validate_pw2.seed_for_pw2(old_base, 70, 0, tic) for tic in sample_tics}
+    # v1.0 injection runs 0..11 under seed 70106
+    v1_injection_seeds = {
+        inject.seed_for(cfg_v1_seed, 70, r, tic)
+        for r in range(12)
+        for tic in sample_tics
+    }
+    # validate.py run-0 seeds under seed 70106
+    v1_run0_seeds = {inject.seed_for(cfg_v1_seed, 70, 0, tic) for tic in sample_tics}
+
+    # New seeds under base seed 20261112, runs 12..15
     new_seeds = set()
     for r in validate_pw2.INJECTION_RUNS:
         assert r in (12, 13, 14, 15)
@@ -24,8 +47,10 @@ def test_seed_disjointness():
             s = validate_pw2.seed_for_pw2(new_base, 70, r, tic)
             new_seeds.add(s)
 
-    # Disjoint sets
-    assert len(old_seeds.intersection(new_seeds)) == 0
+    # Disjointness checks
+    assert len(old_validate_seeds.intersection(new_seeds)) == 0
+    assert len(v1_injection_seeds.intersection(new_seeds)) == 0
+    assert len(v1_run0_seeds.intersection(new_seeds)) == 0
 
 
 def test_group_split_at_5_cpd():
@@ -62,6 +87,7 @@ def test_criteria_arithmetic_all_pass():
             "tic": 1000 + i,
             "group": "delta_scuti" if i < 15 else "gamma_dor",
             "period": p,
+            "f_dom": 12.0 if i < 15 else 3.0,
             "pulsation_frequencies": puls
         })
 
@@ -71,7 +97,8 @@ def test_criteria_arithmetic_all_pass():
     # Generate matched expected S bins
     for s_val in [12.0, 20.0, 30.0]:
         for k in range(20):
-            gaia_injections.append({"tic": 1000 + k, "expected_S": s_val, "recovered": True, "group": "delta_scuti"})
+            grp = "delta_scuti" if k < 12 else "gamma_dor"
+            gaia_injections.append({"tic": 1000 + k, "expected_S": s_val, "recovered": True, "group": grp})
             quiet_injections.append({"tic": 2000 + k, "expected_S": s_val, "recovered": True, "prewhiten": True})
             quiet_injections.append({"tic": 2000 + k, "expected_S": s_val, "recovered": True, "prewhiten": False})
 
@@ -80,7 +107,11 @@ def test_criteria_arithmetic_all_pass():
     assert res["pass"]
     assert res["criterion_1_real_gaia_search"]["pass"]
     assert res["criterion_1_real_gaia_search"]["total_clean_rate"] == 23 / 25
+    assert len(res["criterion_1_real_gaia_search"]["real_gaia_table"]) == 25
+    assert "pulsation_frequencies" in res["criterion_1_real_gaia_search"]["real_gaia_table"][0]
     assert res["criterion_2_gaia_vs_quiet_injections"]["pass"]
+    assert "delta_scuti" in res["criterion_2_gaia_vs_quiet_injections"]["groups"]
+    assert "gamma_dor" in res["criterion_2_gaia_vs_quiet_injections"]["groups"]
     assert res["criterion_3_quiet_prewhiten_drop"]["pass"]
     assert res["criterion_3_quiet_prewhiten_drop"]["drop_pp"] <= 0.02
 
