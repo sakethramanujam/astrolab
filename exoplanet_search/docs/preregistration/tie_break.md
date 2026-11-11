@@ -23,3 +23,21 @@ with option 1 as the stopgap; `docs/host_gate/README.md`).
   passes on all hosts with these rules, the registered statistic is computed only on x86_64 hosts (h1, h3). The
   arm64 host (h2) produces no production rows.
 * GPU or float32 searches are separate statistics with their own nulls and injections, never mixed into S*.
+
+## Amendment 1 — 2026-11-10 21:30 PST (RF Engineer). Predates every v1.1 run: no v1.1 data exists.
+
+Only cross-host dry runs on the interim code (`exosearch/host_gate.py --fixed`, 200 S70 gate stars) and
+diagnostics of stored v1.0.0 rows had been run when this was written. It replaces the "Tie-break" section above.
+
+1. In-band grid points (|S_i − S_max| ≤ 1e-9·S_max, over all trial durations) are grouped by period index into
+   **contiguous plateaus** (runs of adjacent grid indices) and **disjoint peaks** (separated runs; a single point is
+   a plateau of width 1).
+2. On a plateau, the reported **P is the plateau centre** (P_lo + P_hi)/2 and **sigma_P is half its width** in days
+   (edges extended by half a grid step; a single point gets half a grid step). t0, D and the depth come from the
+   lower-middle grid point of the plateau (`P_grid`); D is the shortest in-band duration there.
+3. The **lowest-period rule chooses only between disjoint plateaus or peaks**, never within a plateau.
+4. Logged per star: `n_plateaus`, `plateau_width` (grid steps, chosen plateau), `plateau_width_max`, `disjoint`
+   (more than one in-band plateau/peak), `P_lowest_edge`, `sigma_P`, `n_tie_band`, and the plateau list.
+5. sigma_P is carried into the candidate tables (site and exports).
+6. The period grid is not changed by this amendment. Plateau widths are reported only; any future grid change follows
+   the Ofir (2014, A&A 561, A138) oversampling criterion and is registered before v1.1 production.

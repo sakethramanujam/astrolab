@@ -45,13 +45,14 @@ def lib_versions():
     return v
 
 
+PLATEAU_KEYS = ("P_grid", "n_tie_band", "n_plateaus", "disjoint", "plateau_width", "plateau_width_max", "P_lowest_edge", "sigma_P", "plateaus")
 TIE_REL = 1e-9          # registered tie band: |S_i - S_max| <= TIE_REL * S_max (docs/preregistration/tie_break.md)
 
 
 def apply_fixes():
     """Dry-run fixes for cross-host reproducibility (interim code only; v1.0.0 untouched):
     1. period grid = fmin + df * arange(n) (no fused multiply-add in np.arange's fill loop);
-    2. ties within TIE_REL * S_max -> lowest period, then shortest duration; band size logged per star;
+    2. ties within TIE_REL * S_max: plateau / disjoint-peak rule of choose_peak (amended 2026-11-10);
     3. wotan's numba kernels recompiled with fastmath=False, cache=False (and parallel=False)."""
     import numba
     import wotan
@@ -98,16 +99,7 @@ def apply_fixes():
             per_d.append((float(D), cd, beta, r, p))
         if not per_d:
             raise ValueError("no valid noise estimate")
-        top = max(float(p.max()) for *_, p in per_d)
-        band = top - TIE_REL * abs(top)
-        cands = []
-        for D, cd, beta, r, p in per_d:
-            for i in np.flatnonzero(p >= band):
-                cands.append((float(r.period[i]), D, i, cd, beta, r, p))
-        cands.sort(key=lambda c: (c[0], c[1]))                      # lowest period, then shortest duration
-        P, D, i, cd, beta, r, p = cands[0]
-        best = dict(period=P, t0=float(r.transit_time[i]), duration=D, depth_box=float(r.depth[i]), S_scan=float(p[i]),
-                    cdpp_d=cd, beta_d=beta, n_tie_band=len(cands))
+        best = choose_peak(per_d, periods)
         ntr = bls.transit_count(tb, best["period"], best["t0"], best["duration"], bin_d)
         s_val = best["depth_box"] * np.sqrt(ntr) / best["cdpp_d"] if ntr > 0 else 0.0
         smax[~np.isfinite(smax)] = 0.0
@@ -118,6 +110,43 @@ def apply_fixes():
 
     bls.period_grid, bls.search_s = period_grid, search_s
     return len(new)
+
+
+def choose_peak(per_d, periods):
+    """Registered tie-break (amended 2026-11-10, docs/preregistration/tie_break.md).
+    In-band = grid points with |S_i - S_max| <= TIE_REL * S_max over all trial durations. Their period indices are
+    split into plateaus (runs of adjacent grid indices) and disjoint peaks (a peak = a plateau of width 1). The
+    lowest-period rule chooses only between plateaus; on the chosen plateau P is the plateau centre
+    (P_lo + P_hi) / 2 (t0, D and the depth come from the lower-middle grid point, P_grid) and sigma_P = half the
+    plateau width in days, edges extended by half a grid step (half a grid step for a single point)."""
+    top = max(float(p.max()) for *_, p in per_d)
+    band = top - TIE_REL * abs(top)
+    inb = {}                                                    # period index -> durations in band
+    for D, cd, beta, r, p in per_d:
+        for i in np.flatnonzero(p >= band):
+            inb.setdefault(int(i), []).append(D)
+    idx = np.array(sorted(inb))
+    if periods[0] > periods[-1]:
+        raise ValueError("period grid must be ascending")
+    runs = np.split(idx, np.flatnonzero(np.diff(idx) > 1) + 1)
+    step = lambda i: float(periods[min(i + 1, len(periods) - 1)] - periods[max(i - 1, 0)]) / (2 if 0 < i < len(periods) - 1 else 1)
+    plats = []
+    for run in runs:
+        lo, hi = int(run[0]), int(run[-1])
+        c = lo + (hi - lo) // 2                                 # centre (lower-middle for even widths)
+        width_days = float(periods[hi] - periods[lo]) + 0.5 * (step(lo) + step(hi))
+        plats.append(dict(lo=lo, hi=hi, centre=c, width=int(hi - lo + 1), P_lo=float(periods[lo]),
+                          P_hi=float(periods[hi]), sigma_P=width_days / 2))
+    ch = plats[0]                                               # lowest-period plateau or peak
+    c = ch["centre"]
+    Ds = sorted(inb.get(c, [])) or sorted({d for i in range(ch["lo"], ch["hi"] + 1) for d in inb[i]})
+    D = Ds[0]
+    cd, beta, r, p = next((cd, beta, r, p) for D_, cd, beta, r, p in per_d if D_ == D)
+    return dict(period=0.5 * (ch["P_lo"] + ch["P_hi"]), P_grid=float(r.period[c]), t0=float(r.transit_time[c]), duration=D, depth_box=float(r.depth[c]),
+                S_scan=float(p[c]), cdpp_d=cd, beta_d=beta, n_tie_band=int(sum(len(v) for v in inb.values())),
+                n_plateaus=len(plats), disjoint=len(plats) > 1, plateau_width=ch["width"],
+                plateau_width_max=max(q["width"] for q in plats), P_lowest_edge=ch["P_lo"], sigma_P=ch["sigma_P"],
+                plateaus=json.dumps([[q["P_lo"], q["P_hi"], q["width"]] for q in plats]))
 
 
 def pick():
@@ -156,21 +185,23 @@ def _one(args):
             st = bls.stats(*d["binned"], o["period"], o["duration"], o["t0"])
             dep = float(st["depth"][0]) if np.ndim(st["depth"]) else float(st["depth"])
             r = dict(S=o["S"], depth=dep, n_tr=o["n_tr"], cdpp_d=o["cdpp_d"], period=o["period"], duration=o["duration"],
-                     t0=o["t0"], depth_box=o["depth_box"], beta_d=o["beta_d"], n_tie_band=o["n_tie_band"])
+                     t0=o["t0"], depth_box=o["depth_box"], beta_d=o["beta_d"],
+                     **{k: o[k] for k in PLATEAU_KEYS})
         else:
             r = task.search_prepared(d)
         se = r["depth"] * np.sqrt(r["n_tr"]) / r["cdpp_d"]
         return dict(tic=tic, status="ok", S=r["S"], S_exact=se, period=r["period"], duration=r["duration"], t0=r["t0"],
                     depth_box=r["depth_box"], depth=r["depth"], n_tr=r["n_tr"], cdpp_d=r["cdpp_d"], beta_d=r["beta_d"],
-                    n_tie_band=r.get("n_tie_band"),
+                    **{k: r.get(k) for k in PLATEAU_KEYS},
                     download_s=dl, search_s=time.perf_counter() - t0 - dl)
     except Exception as exc:                                      # error text kept short and path-free
         return dict(tic=tic, status="error", error=type(exc).__name__)
 
 
-def run(host_id, workers, out, fixed=False, fresh_cache_dir=None, jobs=None, sector=SECTOR):
+def run(host_id, workers, out, fixed=False, fresh_cache_dir=None, jobs=None, sector=SECTOR, allow_dirty=False):
     from multiprocessing import get_context
-    from . import targets
+    from . import targets, worker_guard
+    dirty = worker_guard.require_clean(allow_dirty)
     if jobs is None:
         man = targets.fetch_manifest(SECTOR).set_index("tic")
         tics = [int(x) for x in TICS.read_text().split()]
@@ -181,7 +212,8 @@ def run(host_id, workers, out, fixed=False, fresh_cache_dir=None, jobs=None, sec
     wall = time.time() - t0
     d = pd.DataFrame(rows).sort_values("tic")
     meta = dict(host_id=host_id, arch=platform.machine(), system=platform.system(), lib_versions=lib_versions(),
-                workers=workers, wall_s=wall, fixes_applied=bool(fixed), fresh_numba_cache=bool(fresh_cache_dir))
+                workers=workers, wall_s=wall, fixes_applied=bool(fixed), fresh_numba_cache=bool(fresh_cache_dir),
+                tree_dirty=bool(dirty))
     d["host_id"], d["arch"], d["lib_versions"] = host_id, meta["arch"], json.dumps(meta["lib_versions"], sort_keys=True)
     d.to_csv(out, index=False)
     ok = d[d.status == "ok"]
@@ -192,15 +224,22 @@ def run(host_id, workers, out, fixed=False, fresh_cache_dir=None, jobs=None, sec
     print(json.dumps(meta))
 
 
-def v10check(workers, out, cache_dir, n=N, seed=SEED, sector=105):
-    """v1.0.0 exposure: do freshly compiled wotan kernels reproduce the stored v1.0.0 rows (mostly cached code)?"""
+def s105_sample(n=N, seed=SEED, sector=105):
     from . import store, targets
     d = store.frame(store.connect(), sector)
     d = d[(d.status == "ok") & (d.pipeline_version == "1.0.0") & d.S.notna()]
     d = d.sample(min(n, len(d)), random_state=seed).sort_values("tic")
     man = targets.fetch_manifest(sector).set_index("tic")
-    jobs = [(int(t), man.loc[int(t)].fname, sector) for t in d.tic]
-    run("h1", workers, out, fixed=False, fresh_cache_dir=cache_dir, jobs=jobs, sector=sector)
+    return d, [(int(t), man.loc[int(t)].fname, sector) for t in d.tic]
+
+
+def v10check(workers, out, cache_dir, n=N, seed=SEED, sector=105, fixed=False):
+    """v1.0.0 exposure: do freshly compiled wotan kernels reproduce the stored v1.0.0 rows (mostly cached code)?
+    With fixed=True the same rows are searched with the registered plateau rule instead (for the plateau report)."""
+    d, jobs = s105_sample(n, seed, sector)
+    run("h1", workers, out, fixed=fixed, fresh_cache_dir=None if fixed else cache_dir, jobs=jobs, sector=sector)
+    if fixed:
+        return
     x = pd.read_csv(out).set_index("tic")
     ref = d.set_index("tic").loc[x.index]
     ok = x.status == "ok"
@@ -274,8 +313,10 @@ def main():
     r = sp.add_parser("run"); r.add_argument("--host-id", required=True); r.add_argument("--workers", type=int, default=4); r.add_argument("--out", required=True)
     r.add_argument("--fixed", action="store_true", help="apply the dry-run reproducibility fixes (grid, tie-break, wotan no fastmath/cache)")
     r.add_argument("--fresh-cache-dir", default=None, help="parent dir for per-process empty numba caches")
+    r.add_argument("--allow-dirty", action="store_true", help="dry runs only: start although tracked files differ from HEAD")
     v = sp.add_parser("v10check", help="recompute ~200 stored v1.0.0 S105 rows with fresh numba compiles; compare to the DB")
     v.add_argument("--workers", type=int, default=2); v.add_argument("--out", required=True); v.add_argument("--cache-dir", default="/tmp")
+    v.add_argument("--fixed", action="store_true", help="search the sample with the registered plateau rule instead")
     tr = sp.add_parser("trace"); tr.add_argument("tics", nargs="+", type=int)
     c = sp.add_parser("compare"); c.add_argument("files", nargs="+"); c.add_argument("--summary")
     a = ap.parse_args()
@@ -284,9 +325,9 @@ def main():
     elif a.cmd == "trace":
         trace(a.tics)
     elif a.cmd == "run":
-        run(a.host_id, a.workers, a.out, fixed=a.fixed, fresh_cache_dir=a.fresh_cache_dir)
+        run(a.host_id, a.workers, a.out, fixed=a.fixed, fresh_cache_dir=a.fresh_cache_dir, allow_dirty=a.allow_dirty)
     elif a.cmd == "v10check":
-        v10check(a.workers, a.out, a.cache_dir)
+        v10check(a.workers, a.out, a.cache_dir, fixed=a.fixed)
     else:
         compare(a.files, a.summary)
 
