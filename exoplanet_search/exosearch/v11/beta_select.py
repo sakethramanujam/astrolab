@@ -19,6 +19,11 @@ difference inside +-0.5) and a paired-bootstrap tie test for step 3.
 """
 from __future__ import annotations
 
+import os
+
+for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMBA_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+    os.environ[_v] = "1"          # before numpy is imported: one thread per worker (reproducible sums, no oversubscription)
+
 import argparse
 import json
 import time

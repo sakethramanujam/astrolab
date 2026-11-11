@@ -12,7 +12,7 @@ import os
 import tempfile
 
 for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMBA_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
-    os.environ.setdefault(_v, "1")
+    os.environ[_v] = "1"
 
 _STATE = {"n": None}
 
@@ -20,6 +20,11 @@ _STATE = {"n": None}
 def install():
     if _STATE["n"] is not None:
         return _STATE["n"]
+    try:                                  # numpy may already be loaded (e.g. by a caller): cap its BLAS pool too
+        from threadpoolctl import threadpool_limits
+        _STATE["tp"] = threadpool_limits(1)
+    except Exception:
+        pass
     os.environ["NUMBA_CACHE_DIR"] = tempfile.mkdtemp(prefix="nbc-v11-")
     import importlib
     import pkgutil
