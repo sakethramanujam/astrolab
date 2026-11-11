@@ -130,14 +130,22 @@ def test_criteria_arithmetic_edge_cases_failing():
             "period": 3.0 if clean else 0.1,
             "pulsation_frequencies": [10.0]
         })
-    res1 = validate_pw2.evaluate_pw2_report(gaia_results, [], [], cfg)
+    quiet_pw_dummy = [{"tic": 2000 + k, "expected_S": 15.0, "recovered": True, "prewhiten": True} for k in range(20)]
+    quiet_nopw_dummy = [{"tic": 2000 + k, "expected_S": 15.0, "recovered": True, "prewhiten": False} for k in range(20)]
+    gaia_inj_dummy = [{"tic": 1000 + k, "expected_S": 15.0, "recovered": True, "group": "delta_scuti"} for k in range(20)]
+    res1 = validate_pw2.evaluate_pw2_report(gaia_results, gaia_inj_dummy, quiet_pw_dummy + quiet_nopw_dummy, cfg)
     assert not res1["criterion_1_real_gaia_search"]["pass"]
     assert not res1["pass"]
 
     # Case 2: Fail criterion 2 (Gaia recovery drops by > 5 pp vs quiet at same S)
     gaia_inj_bad = [{"tic": 1000 + k, "expected_S": 15.0, "recovered": (k < 10), "group": "delta_scuti"} for k in range(20)] # 50%
-    quiet_inj_good = [{"tic": 2000 + k, "expected_S": 15.0, "recovered": True, "prewhiten": True} for k in range(20)] # 100%
-    res2 = validate_pw2.evaluate_pw2_report([], gaia_inj_bad, quiet_inj_good, cfg)
+    quiet_inj_good = (
+        [{"tic": 2000 + k, "expected_S": 15.0, "recovered": True, "prewhiten": True} for k in range(20)] + # 100%
+        [{"tic": 2000 + k, "expected_S": 15.0, "recovered": True, "prewhiten": False} for k in range(20)]
+    )
+    # 25 clean Gaia stars to pass criterion 1
+    gaia_results_good = [{"tic": 1000 + i, "group": "delta_scuti", "period": 3.0, "pulsation_frequencies": [10.0]} for i in range(25)]
+    res2 = validate_pw2.evaluate_pw2_report(gaia_results_good, gaia_inj_bad, quiet_inj_good, cfg)
     assert not res2["criterion_2_gaia_vs_quiet_injections"]["pass"]
     assert not res2["pass"]
 
@@ -146,7 +154,8 @@ def test_criteria_arithmetic_edge_cases_failing():
         [{"tic": 2000 + k, "expected_S": 15.0, "recovered": (k < 18), "prewhiten": True} for k in range(20)] + # 90%
         [{"tic": 2000 + k, "expected_S": 15.0, "recovered": True, "prewhiten": False} for k in range(20)]       # 100% (drop = 10 pp > 2 pp)
     )
-    res3 = validate_pw2.evaluate_pw2_report([], [], quiet_inj_drop, cfg)
+    gaia_inj_good = [{"tic": 1000 + k, "expected_S": 15.0, "recovered": True, "group": "delta_scuti"} for k in range(20)]
+    res3 = validate_pw2.evaluate_pw2_report(gaia_results_good, gaia_inj_good, quiet_inj_drop, cfg)
     assert not res3["criterion_3_quiet_prewhiten_drop"]["pass"]
     assert not res3["pass"]
 
@@ -168,3 +177,95 @@ def test_registration_guard():
     df_scr_leaked = pd.DataFrame({"tic": [101, 201, 202], "status": "ok"})
     with pytest.raises(AssertionError, match="Population guard failed"):
         registration_checks.check_registration_population(df_flip, df_scr_leaked, df_ex)
+
+
+def test_empty_samples_fail_every_criterion():
+    """F1: Every criterion must FAIL when its sample is empty or incomplete."""
+    cfg = settings.cfg()
+
+    # Completely empty
+    res_empty = validate_pw2.evaluate_pw2_report([], [], [], cfg)
+    assert not res_empty["pass"]
+    assert not res_empty["criterion_1_real_gaia_search"]["pass"]
+    assert not res_empty["criterion_2_gaia_vs_quiet_injections"]["pass"]
+    assert not res_empty["criterion_3_quiet_prewhiten_drop"]["pass"]
+
+    # Incomplete Gaia real stars (e.g. 24 of 25)
+    gaia_incomplete = [{"tic": 1000 + i, "group": "delta_scuti", "period": 3.0, "pulsation_frequencies": [10.0]} for i in range(24)]
+    res_incomplete = validate_pw2.evaluate_pw2_report(gaia_incomplete, [], [], cfg)
+    assert not res_incomplete["criterion_1_real_gaia_search"]["pass"]
+    assert res_incomplete["criterion_1_real_gaia_search"]["total_stars"] == 24
+
+
+def test_missing_or_holdout_star_counts_against_criterion1_denominator_25():
+    """F2: criterion 1 denominator must be the full registered list (25 stars).
+    Any listed star not evaluated (holdout star, missing light curve, missing stellar parameters,
+    task error, no dominant frequency) counts as NOT clean and is listed in the report with its reason."""
+    cfg = settings.cfg()
+
+    # Construct report run scenario where only 20 stars are evaluated cleanly,
+    # 2 are holdout, 1 has missing light curve, 1 has missing stellar params, 1 has no dominant frequency
+    gaia_eval = []
+    for i in range(20):
+        gaia_eval.append({
+            "tic": 1000 + i,
+            "group": "delta_scuti" if i < 10 else "gamma_dor",
+            "period": 3.0,
+            "pulsation_frequencies": [10.0],
+            "f_dom": 12.0 if i < 10 else 2.0,
+        })
+    # Add the remaining 5 stars with reasons
+    gaia_eval.append({"tic": 1020, "group": "unclassified", "period": 0.0, "f_dom": 0.0, "pulsation_frequencies": [], "unclean_reason": "holdout star"})
+    gaia_eval.append({"tic": 1021, "group": "gamma_dor", "period": 0.0, "f_dom": 1.5, "pulsation_frequencies": [], "unclean_reason": "holdout star"})
+    gaia_eval.append({"tic": 1022, "group": "unclassified", "period": 0.0, "f_dom": 0.0, "pulsation_frequencies": [], "unclean_reason": "missing light curve"})
+    gaia_eval.append({"tic": 1023, "group": "delta_scuti", "period": 0.0, "f_dom": 8.0, "pulsation_frequencies": [], "unclean_reason": "missing stellar parameters"})
+    gaia_eval.append({"tic": 1024, "group": "unclassified", "period": 0.0, "f_dom": 0.0, "pulsation_frequencies": [], "unclean_reason": "no dominant frequency"})
+
+    quiet_inj = (
+        [{"tic": 2000 + k, "expected_S": 15.0, "recovered": True, "prewhiten": True} for k in range(20)] +
+        [{"tic": 2000 + k, "expected_S": 15.0, "recovered": True, "prewhiten": False} for k in range(20)]
+    )
+    gaia_inj = [{"tic": 1000 + k, "expected_S": 15.0, "recovered": True, "group": "delta_scuti"} for k in range(20)]
+
+    res = validate_pw2.evaluate_pw2_report(gaia_eval, gaia_inj, quiet_inj, cfg)
+    c1 = res["criterion_1_real_gaia_search"]
+    assert c1["total_stars"] == 25
+    assert c1["total_clean"] == 20
+    assert c1["total_clean_rate"] == 20 / 25  # 80% < 90% -> fails
+    assert not c1["pass"]
+    assert "unclassified" in c1["groups"]
+    assert c1["groups"]["unclassified"]["n_total"] == 3
+    assert c1["groups"]["unclassified"]["n_clean"] == 0
+
+    reasons = {r["tic"]: r["unclean_reason"] for r in c1["real_gaia_table"] if not r["clean_peak"]}
+    assert reasons[1020] == "holdout star"
+    assert reasons[1021] == "holdout star"
+    assert reasons[1022] == "missing light curve"
+    assert reasons[1023] == "missing stellar parameters"
+    assert reasons[1024] == "no dominant frequency"
+
+
+def test_gaia_star_without_stellar_params_manifest_tasks(tmp_path):
+    """F3: Gaia stars without stellar params get a real task but no injection task.
+    Holdout stars stay out of every arm."""
+    from exosearch import holdout
+    # Create synthetic test using build_pw2_manifests
+    jobs = validate_pw2.build_pw2_manifests([("local", 1.0)], tmp_path)
+    job_map = {j["tic"]: j for j in jobs}
+
+    # TIC 17228263 is a holdout star -> must NOT be in jobs
+    assert holdout.is_holdout(17228263)
+    assert 17228263 not in job_map
+
+    # TIC 279057510 is also a holdout star -> must NOT be in jobs
+    assert holdout.is_holdout(279057510)
+    assert 279057510 not in job_map
+
+    # TIC 284704271 is a Gaia star without stellar params (not holdout)
+    # -> must get a real task but no injection tasks
+    assert not holdout.is_holdout(284704271)
+    assert 284704271 in job_map
+    j_284 = job_map[284704271]
+    tags = [t["tag"] for t in j_284["tasks"]]
+    assert tags == ["gaia_real_pw"]
+    assert all("inj" not in t for t in tags)

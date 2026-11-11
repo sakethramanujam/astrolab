@@ -156,12 +156,13 @@ def evaluate_pw2_report(
     quiet_injections: List[Dict[str, Any]],
     cfg: Optional[Dict[str, Any]] = None,
     s_bins: Optional[List[float]] = None,
+    unclean_reasons: Optional[Dict[int, str]] = None,
 ) -> Dict[str, Any]:
     """Evaluate all three pass criteria:
     (i) at least 90% of Gaia stars have top search peak that is not a pulsation frequency or harmonic;
     (ii) injection recovery on Gaia stars within 5 percentage points of quiet stars at same S;
     (iii) quiet-star recovery with prewhitening drops by no more than 2 points vs without.
-    Report per group (delta Scuti, gamma Dor) and total, with binomial CIs.
+    Report per group (delta Scuti, gamma Dor, unclassified) and total, with binomial CIs.
     """
     if cfg is None:
         cfg = settings.cfg()
@@ -177,13 +178,26 @@ def evaluate_pw2_report(
     gaia_rows = []
     for g in gaia_results:
         tic = int(g["tic"])
-        grp = g.get("group", "delta_scuti")
+        grp = g.get("group", "unclassified")
         f_dom = float(g.get("f_dom", 0.0))
         p_found = float(g.get("period", 0.0))
         f_found = 1.0 / p_found if p_found > 0 else 0.0
         puls_freqs = g.get("pulsation_frequencies", [])
-        is_puls = is_pulsation_or_harmonic(f_found, puls_freqs, freq_tol, harm_tol, harmonics)
-        clean_peak = not is_puls
+        
+        # Check if already marked unclean or missing
+        reason = g.get("unclean_reason")
+        if unclean_reasons and tic in unclean_reasons:
+            reason = unclean_reasons[tic]
+
+        if reason is not None:
+            clean_peak = False
+            is_puls = (reason == "pulsation_harmonic")
+        else:
+            is_puls = is_pulsation_or_harmonic(f_found, puls_freqs, freq_tol, harm_tol, harmonics)
+            clean_peak = not is_puls
+            if not clean_peak:
+                reason = "pulsation_harmonic"
+
         gaia_rows.append(dict(
             tic=tic,
             group=grp,
@@ -193,13 +207,14 @@ def evaluate_pw2_report(
             pulsation_frequencies=puls_freqs,
             is_pulsation=is_puls,
             clean_peak=clean_peak,
+            unclean_reason=reason if not clean_peak else "",
         ))
 
     if gaia_rows:
         df_gaia_real = pd.DataFrame(gaia_rows)
     else:
         df_gaia_real = pd.DataFrame(columns=[
-            "tic", "group", "f_dom", "P_found", "f_found", "pulsation_frequencies", "is_pulsation", "clean_peak"
+            "tic", "group", "f_dom", "P_found", "f_found", "pulsation_frequencies", "is_pulsation", "clean_peak", "unclean_reason"
         ])
 
     crit1_groups = {}
@@ -218,8 +233,8 @@ def evaluate_pw2_report(
     total_gaia = len(df_gaia_real)
     total_clean = int(df_gaia_real.clean_peak.sum()) if total_gaia > 0 else 0
     total_clean_rate = float(total_clean / total_gaia) if total_gaia > 0 else 0.0
-    # At least 90% of the Gaia stars overall must be clean
-    crit1_pass = bool(total_clean_rate >= 0.90) if total_gaia > 0 else True
+    # At least 90% of the full registered 25 Gaia stars must be clean; fails if empty/incomplete
+    crit1_pass = bool(total_gaia >= 25 and total_clean_rate >= 0.90)
 
     # Criterion (ii): Injection recovery on Gaia stars vs quiet stars at same expected S
     df_gaia_inj = pd.DataFrame(gaia_injections) if gaia_injections else pd.DataFrame(columns=["tic", "expected_S", "recovered", "group"])
@@ -233,7 +248,7 @@ def evaluate_pw2_report(
         df_quiet_nopw = pd.DataFrame()
 
     crit2_bins = []
-    crit2_pass = True
+    crit2_pass = False
 
     # Helper function to compute bin comparison
     def _compute_bins_comparison(df_target, df_ref):
@@ -246,7 +261,7 @@ def evaluate_pw2_report(
             set(df_t["s_bin"].dropna().unique()).union(set(df_r["s_bin"].dropna().unique())),
             key=lambda x: x.left,
         )
-        b_pass = True
+        b_pass = bool(len(all_bins) > 0)
         for b in all_bins:
             sub_t = df_t[df_t.s_bin == b]
             sub_r = df_r[df_r.s_bin == b]
@@ -291,7 +306,7 @@ def evaluate_pw2_report(
                     "overall_rec": g_grp_rec,
                     "overall_ci95": grp_ci,
                     "overall_diff_pp": grp_diff,
-                    "overall_pass": bool(grp_diff >= -0.05),
+                    "overall_pass": bool(len(g_sub_s10) > 0 and len(q_sub_s10) > 0 and grp_diff >= -0.05),
                     "bins": grp_bins,
                 }
 
@@ -305,10 +320,10 @@ def evaluate_pw2_report(
         g_ci_tot = binomial_ci_wilson(int(g_s10.recovered.sum()), ng_s10) if ng_s10 > 0 else (0.0, 0.0)
         q_ci_tot = binomial_ci_wilson(int(q_s10.recovered.sum()), nq_s10) if nq_s10 > 0 else (0.0, 0.0)
         diff_tot = g_rec_tot - q_rec_tot
-        crit2_overall_pass = bool(diff_tot >= -0.05)
-        crit2_pass = crit2_pass and crit2_overall_pass
+        crit2_overall_pass = bool(ng_s10 > 0 and nq_s10 > 0 and diff_tot >= -0.05)
+        crit2_pass = bool(crit2_pass and crit2_overall_pass)
     else:
-        crit2_overall_pass = True
+        crit2_overall_pass = False
         diff_tot = 0.0
         g_rec_tot, q_rec_tot = 0.0, 0.0
         g_ci_tot, q_ci_tot = (0.0, 0.0), (0.0, 0.0)
@@ -325,12 +340,12 @@ def evaluate_pw2_report(
         ci_pw = binomial_ci_wilson(int(q_pw_s10.recovered.sum()), n_pw) if n_pw > 0 else (0.0, 0.0)
         ci_nopw = binomial_ci_wilson(int(q_nopw_s10.recovered.sum()), n_nopw) if n_nopw > 0 else (0.0, 0.0)
         quiet_drop = r_nopw - r_pw
-        crit3_pass = bool(quiet_drop <= 0.02)
+        crit3_pass = bool(n_pw > 0 and n_nopw > 0 and quiet_drop <= 0.02)
     else:
         r_pw, r_nopw, quiet_drop = 0.0, 0.0, 0.0
         ci_pw, ci_nopw = (0.0, 0.0), (0.0, 0.0)
         n_pw, n_nopw = 0, 0
-        crit3_pass = True
+        crit3_pass = False
 
     overall_pass = bool(crit1_pass and crit2_pass and crit3_pass)
 
@@ -423,16 +438,22 @@ def build_pw2_manifests(
     all_tics = quiet_hosts.union(gaia_tics)
     jobs = run.build([sector], weights, out, production=False, tics_filter=all_tics, tasks_override=[], write=False)
 
+    from .. import holdout
+
     keep = []
     for j in jobs:
-        rm = run.host_rm(j)
-        if not rm:
-            continue
-        j.update(rstar=rm[0], mstar=rm[1])
         tic = int(j["tic"])
+        # Blinding: keep holdout stars OUT of every arm
+        if holdout.is_holdout(tic):
+            continue
+
+        rm = run.host_rm(j)
+        if rm:
+            j.update(rstar=rm[0], mstar=rm[1])
+
         tasks = []
 
-        if tic in quiet_hosts:
+        if tic in quiet_hosts and rm:
             # Quiet star arms: injections with prewhitening and without across runs 12-15
             for r in injection_runs:
                 seed = seed_for_pw2(base_seed, sector, r, tic)
@@ -441,16 +462,18 @@ def build_pw2_manifests(
                 tasks.append(dict(base, tag=f"quiet_nopw_r{r}", prewhiten=False))
 
         if tic in gaia_tics:
-            # Real search with prewhitening
+            # Real search with prewhitening (even without stellar parameters)
             tasks.append(dict(mode="real", tag="gaia_real_pw", prewhiten=True))
-            # Injections with prewhitening
-            for r in injection_runs:
-                seed = seed_for_pw2(base_seed, sector, r, tic)
-                base = dict(mode="inject", run=r, seed=seed, wrong_density=False)
-                tasks.append(dict(base, tag=f"gaia_inj_pw_r{r}", prewhiten=True))
+            # Injections with prewhitening (only if stellar parameters exist)
+            if rm:
+                for r in injection_runs:
+                    seed = seed_for_pw2(base_seed, sector, r, tic)
+                    base = dict(mode="inject", run=r, seed=seed, wrong_density=False)
+                    tasks.append(dict(base, tag=f"gaia_inj_pw_r{r}", prewhiten=True))
 
-        j["tasks"] = tasks
-        keep.append(j)
+        if tasks:
+            j["tasks"] = tasks
+            keep.append(j)
 
     cfg = settings.cfg()
     run.write_manifests(keep, out, cfg, cfg_inj, weights, name="validation_pw2")
@@ -471,7 +494,7 @@ def run_pw2_report(
     out_p = Path(out_dir)
     out_p.mkdir(parents=True, exist_ok=True)
 
-    df_rows = pd.concat([run.load_rows(d) for d in dirs], ignore_index=True)
+    df_rows = pd.concat([run.load_rows(d) for d in dirs], ignore_index=True) if dirs else pd.DataFrame()
     if "status" in df_rows.columns:
         df_rows = df_rows[df_rows.status == "ok"].copy()
 
@@ -502,21 +525,73 @@ def run_pw2_report(
     # Extract gaia_results (real search with pw)
     gaia_results = []
     df_real = df_rows[df_rows.task == "gaia_real_pw"] if "task" in df_rows.columns else pd.DataFrame()
+    evaluated_tics = set()
+
     for r in df_real.itertuples():
         tic = int(r.tic)
+        evaluated_tics.add(tic)
         cinfo = gaia_class_map.get(tic, {})
-        grp = cinfo.get("group", getattr(r, "group", "delta_scuti"))
+        grp = cinfo.get("group", getattr(r, "group", "unclassified"))
         f_dom = cinfo.get("f_dom", 0.0)
         puls_freqs = cinfo.get("pulsation_frequencies", [])
         period = getattr(r, "period", getattr(r, "P_grid", 0.0))
         if pd.isna(period):
             period = getattr(r, "P_grid", 0.0)
+        
+        # Determine unclean reason if any
+        reason = None
+        if not cinfo or f_dom <= 0:
+            reason = "no dominant frequency"
+
         gaia_results.append({
             "tic": tic,
             "group": grp,
             "f_dom": f_dom,
             "period": float(period) if pd.notna(period) else 0.0,
             "pulsation_frequencies": puls_freqs,
+            "unclean_reason": reason,
+        })
+
+    # Account for all 25 registered stars (F2 BLOCKER)
+    # Any star not evaluated counts as NOT clean and is listed with its reason
+    from .. import holdout
+    stellar_params_map = run.star_params(sector, list(gaia_tics)) if gaia_tics else {}
+
+    for tic in gaia_tics:
+        if tic in evaluated_tics:
+            continue
+        cinfo = gaia_class_map.get(tic, {})
+        grp = cinfo.get("group", "unclassified")
+        f_dom = cinfo.get("f_dom", 0.0)
+        puls_freqs = cinfo.get("pulsation_frequencies", [])
+
+        # Diagnose reason
+        fname = man.loc[tic].fname if (man is not None and tic in man.index) else None
+        p = batch.lc_path(sector, fname, download=False) if fname else None
+        has_lc = bool(p and p.exists())
+        
+        sp = stellar_params_map.get(tic, {})
+        j = run.base_job(sector, tic, "dummy", None, None, sp)
+        has_rm = bool(run.host_rm(j))
+
+        if holdout.is_holdout(tic):
+            reason = "holdout star"
+        elif not has_lc:
+            reason = "missing light curve"
+        elif not has_rm:
+            reason = "missing stellar parameters"
+        elif f_dom <= 0:
+            reason = "no dominant frequency"
+        else:
+            reason = "task error"
+
+        gaia_results.append({
+            "tic": tic,
+            "group": grp,
+            "f_dom": f_dom,
+            "period": 0.0,
+            "pulsation_frequencies": puls_freqs,
+            "unclean_reason": reason,
         })
 
     # Extract gaia_injections
