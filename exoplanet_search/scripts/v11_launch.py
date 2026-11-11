@@ -2,7 +2,8 @@
 """Unattended v1.1 beta registration and production launch (coordinator, run by the exo-v11-launch timer).
 
 Each run is idempotent and ends in exactly one state, written to STATUS (outside the repo):
-  waiting_r0       lane-a has not logged DONE for the flipped null and scrambled r0
+  waiting_r0       the flipped null and scrambled r0 are not finished (no completed max-S
+                   products, and no lane-a journal DONE lines)
   gate_failed      beta_select ran; no option passed the TOST gate. Result committed and pushed; nothing launched
   registered_blocked_checks
                    beta registered and committed (configs/v1.1.json beta_option set), but the 3-host gate or the
@@ -57,14 +58,39 @@ def status(state, **kw):
     return rec
 
 
-def r0_done():
-    """DONE lines for the flipped null and scrambled r0 in the current lane-a run (journal since its start)."""
+def r0_products_done():
+    """True when both null max-S tables exist and were written after that run's provenance (start).
+
+    These files are the end-of-run outputs of `exosearch.nulltest` (v1.0 interim layer). They remain
+    after the transient exo-lane-a unit is stopped, so detection does not depend on the unit existing.
+    """
+    root = DATA / "products" / "v1.0.0" / "nulltests"
+    for tag in ("invert", "scramble_r0"):
+        parquet, prov = root / tag / f"null_{tag}_maxS.parquet", root / tag / "provenance.json"
+        if not parquet.is_file() or parquet.stat().st_size <= 0:
+            return False
+        if prov.is_file() and parquet.stat().st_mtime < prov.stat().st_mtime:
+            return False
+    return True
+
+
+def r0_journal_done():
+    """DONE lines in the exo-lane-a journal, including after the transient unit is gone.
+
+    If the unit still exists, only lines since its start are used, so an older finished run cannot
+    satisfy a new one. Otherwise the retained journal is used in full.
+    """
+    cmd = ["journalctl", "--user", "-u", "exo-lane-a", "-o", "cat", "--no-pager"]
     since = sh("systemctl", "--user", "show", "exo-lane-a", "-p", "ExecMainStartTimestamp", "--value", check=False).strip()
-    if not since:
-        return False
-    since = " ".join(since.split()[1:3])                     # drop weekday and zone: "YYYY-MM-DD HH:MM:SS"
-    log = sh("journalctl", "--user", "-u", "exo-lane-a", "--since", since, "-o", "cat", "--no-pager", check=False)
+    if since:
+        cmd.extend(["--since", " ".join(since.split()[1:3])])  # drop weekday and zone: "YYYY-MM-DD HH:MM:SS"
+    log = sh(*cmd, check=False)
     return all(any(" DONE " in l and d.split("  ", 1)[1] in l for l in log.splitlines()) for d in DONE)
+
+
+def r0_done():
+    """True once the flipped null and scrambled r0 have finished."""
+    return r0_products_done() or r0_journal_done()
 
 
 def origin_json(path):
