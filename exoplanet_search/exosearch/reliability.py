@@ -59,6 +59,9 @@ def _layer():
     return dict(thr=thr, q=quality.load(), s_star=ss, ref=ref, interim=interim)
 
 
+MARGINAL_EFA = 0.1      # expected post-vetting false alarms per sector at the signal's S above which it is called marginal
+
+
 def s_star_for(layer, sector):
     """(S*, borrowed_from) for a sector; sectors without their own null borrow the sector-70 value."""
     v = layer["s_star"].get(int(sector))
@@ -228,7 +231,12 @@ def build():
                    kind="interim: GPD tail fit to the vetted inverted null (tuning stars passing the quality cut), "
                         "post-vetting false-alarm rate 1/N_stars per sector; bootstrap CI",
                    default=layer["ref"], by_sector={k: dict(s_star=v["s_star"], ci68=v["ci68"], ci95=v["ci95"], n_null=v["n_null"],
-                                                            n_stars=v["n_stars"], k_tail=v["k_tail"]) for k, v in layer["thr"]["sectors"].items()},
+                                                            n_stars=v["n_stars"], k_tail=v["k_tail"], u=v.get("u"), u_stable=v.get("u_stable"),
+                                                            sys_range=v.get("sys_range"), sys_halfwidth=v.get("sys_halfwidth"),
+                                                            per_camera={c: dict(s_star_own_alpha=w.get("s_star"), s_star_sector_alpha=w.get("s_star_sector_alpha"),
+                                                                                n_null=w.get("n_null"), k_tail=w.get("k_tail"))
+                                                                        for c, w in v.get("per_camera", {}).items()})
+                                              for k, v in layer["thr"]["sectors"].items()},
                    borrowed_note="sectors without their own inverted null yet use the sector-70 value",
                    pipeline_floor=json.loads(vet.THRESHOLD_FILE.read_text())["default"],
                    quality_cut=layer["thr"]["quality_cut"], population=layer["thr"]["population"])
@@ -242,6 +250,18 @@ def build():
                holdout=dict(seed=holdout.SEED, fraction=holdout.FRACTION),
                detection_threshold=thr, completeness=completeness(inj), nulls=nulls(nl, layer),
                check_rates=check_rates(lab), missed_tois=missed)
+    extra = {"review": PROD / "analysis_layer" / "review" / "review.json",
+             "whitenoise_neff": PROD / "calibration" / "whitenoise_neff_s0070.json",
+             "ffi_check_318707987": PROD / "analysis_layer" / "ffi_check" / "TIC318707987" / "ffi_check.json"}
+    for k, f in extra.items():
+        if f.exists():
+            j = json.loads(f.read_text())
+            if k == "review":
+                j["gpd"] = {a: b for a, b in j["gpd"].items() if a != "diag"}
+            if k == "ffi_check_318707987":
+                j = {a: j.get(a) for a in ("tess_point_on_silicon", "not_on_silicon", "verdict", "control_at_ref", "control_orbits_at_ref")}
+                j["control_blind"] = (json.loads(f.read_text())["sectors"].get("70") or {}).get("blind_top")
+            out[k] = j
     cand = PROD / "summary" / "survivors.json"
     if cand.exists():
         out["survivors"] = json.loads(cand.read_text())
@@ -267,13 +287,23 @@ def survivors(sector=70):
     layer = _layer()
     sstar = s_star_for(layer, sector)[0] if layer else None
     qs = layer["q"][layer["q"].sector == sector].set_index("tic") if layer else None
+    tail = None
+    if layer:
+        from . import interim_review as rv
+        tr = layer["thr"]["sectors"].get(str(sector)) or layer["thr"]["sectors"]["70"]
+        x = layer["interim"].with_quality(layer["interim"].load_null("invert"), layer["q"])
+        x = x[(x.sector == (sector if str(sector) in layer["thr"]["sectors"] else 70)) & ~x["drop"] & ~x.holdout.astype(bool)]
+        Sv = x.S.values[x.vetted.values]
+        tail = lambda S_: rv.tail_rate(Sv, len(x), tr["u"], S_) * tr["n_stars"]   # expected post-vetting false alarms / sector
     rows = []
     for r in c.itertuples():
         flags = sorted(set((r.deep_flags or "").split(",")) - {""})
         res = task.search_prepared(task.prepare(batch.lc_path(sector, man.loc[r.tic].fname)))
         same = abs(res["period"] / r.period - 1) < 0.01
         rej = sorted(set(flags) & deepvet.REJECT)
-        status = "rejected" if rej else ("survives" if not flags else "survives, warnings")
+        efa = float(tail(res["S"])) if tail and same else None
+        word = "marginal" if efa is not None and efa >= MARGINAL_EFA else "survives vetting"
+        status = "rejected" if rej else (word if not flags else f"{word}, warnings")
         f = fap(res["S"], sector, nl, layer) if same else None
         qd = bool(qs.loc[r.tic, "drop"]) if qs is not None and r.tic in qs.index else None
         bmax = float(qs.loc[r.tic, "beta_max"]) if qs is not None and r.tic in qs.index else None
@@ -287,15 +317,17 @@ def survivors(sector=70):
                          fap_n=None if f is None else f["n"], rho_transit=r.rho_transit, rho_tic=r.rho_tic, rho_z=r.rho_z,
                          ruwe=r.ruwe, gaia_nss=r.gaia_nss, flags=flags, status=status, s_star=sstar,
                          above_s_star=None if sstar is None or not same else bool(res["S"] >= sstar),
-                         beta_max=bmax, quality_drop=qd))
+                         beta_max=bmax, quality_drop=qd, expected_false_alarms_per_sector=efa))
     n_null = int(len(nl[(nl.sector == sector)])) if not nl.empty else 0
     out = dict(stamp(), sector=sector, n=len(rows), n_null=n_null,
                note=(f"The {len(rows)} sector-{sector} signals that survived the v0 deep checks, re-vetted with the v1 density and Gaia checks. "
                      f"S is the v1 statistic at the same peak. " + (
                          f"Interim S* = {sstar:.1f} (vetted inverted null). FAP = (k+1)/(N+1), k of N quality-passing tuning flipped light "
-                         f"curves whose max S passes every check and reaches that S (post-vetting, partial null)." if sstar else
+                         f"curves whose max S passes every check and reaches that S (post-vetting, partial null). "
+                         f"Expected false alarms per sector at S from the GPD tail fit; 'marginal' when >= {MARGINAL_EFA}. "
+                         f"No row is a detection or a confirmed planet." if sstar else
                          f"FAP = (k+1)/(N+1) with k of N flipped light curves reaching that S (N={n_null}, before vetting).")),
-               rows=sorted(rows, key=lambda x: (x["status"] != "survives", -(x["S"] or 0))))
+               rows=sorted(rows, key=lambda x: (not x["status"].startswith(("marginal", "survives")), -(x["S"] or 0))))
     (PROD / "summary").mkdir(parents=True, exist_ok=True)
     (PROD / "summary" / "survivors.json").write_text(json.dumps(_clean(out), indent=1, allow_nan=False, default=str))
     return out
