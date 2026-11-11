@@ -80,6 +80,14 @@ def checks():
         why.append("validation report not committed as passing")
     if cfg is None or cfg.get("beta_option") is not None:
         why.append("configs/v1.1.json beta_option already set or unreadable")
+    # Both checks must have run on the search code that would be launched (settings.py only adds host ids;
+    # validate.py and beta_select.py are report/selection code, not the search).
+    commits = {h.get("commit") for h in (g or {}).get("hosts", [])} | set((v or {}).get("commit", []))
+    spec = [f"{SUB}/exosearch", f"{SUB}/configs", f":(exclude){SUB}/exosearch/v11/settings.py",
+            f":(exclude){SUB}/exosearch/v11/validate.py", f":(exclude){SUB}/exosearch/v11/beta_select.py"]
+    for c in sorted(x for x in commits if x):
+        if sp.run(["git", "diff", "--quiet", c, f"origin/{BRANCH}", "--", *spec], cwd=REPO).returncode != 0:
+            why.append(f"search code or configs changed since check commit {c[:8]}; rerun the checks")
     return why
 
 
