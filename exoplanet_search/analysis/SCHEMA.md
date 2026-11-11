@@ -56,6 +56,11 @@ bound on the max of that statistic. v1.0.0 products are unchanged; v1.1 computes
 | `lib_versions` | numpy / scipy / astropy / BLAS versions from the lockfile, as one string |
 | `statistic_id` | `S_cpu_f64` for the registered statistic; any GPU / float32 BLS is a separate id with its own nulls |
 | `prewhiten_n`, `prewhiten_freqs`, `prewhiten_comb` | prewhitening terms removed, their frequencies (c/d), peaks kept by the comb guard |
+| `period` | plateau centre (d) under the registered tie-break (tie_break.md amendment 1) |
+| `P_grid_halfwidth` | grid-degeneracy half-width (d) of the chosen plateau; **not a period error** |
+| `period_ambiguous` | n_tr ≤ 2: true period may be P/n; shown as approximate |
+| `n_tie_band`, `n_plateaus`, `plateau_width`, `disjoint`, `P_lowest_edge`, `P_grid` | tie-band diagnostics per row |
+| `tree_clean` | worker started on a clean tree at the pinned commit (workers refuse otherwise) |
 
 ## Injections — `injections/injection_v1/part-*.parquet`
 
