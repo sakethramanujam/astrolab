@@ -1,6 +1,8 @@
 """Tests for v1.1 scrambled-null transform (exosearch.v11.scramble)."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 from astropy.timeseries import BoxLeastSquares
@@ -38,6 +40,7 @@ def test_gap_edge_cadences_removed_before_scrambling(v11_cfg):
     assert len(t_out) < len(t)
     assert len(f_out) == len(t_out)
     assert len(e_out) == len(t_out)
+    assert info["scr_scheme"] == "segment_rotation"
 
 
 def test_no_samples_cross_gap_and_each_segment_is_cyclic_rotation(v11_cfg):
@@ -114,121 +117,73 @@ def test_segments_get_independent_offsets(v11_cfg):
     assert len(set(offsets_seg1)) > 10
 
 
-def test_fallback_for_short_segment(v11_cfg):
-    """Fallback path for short segments (< 3x longest duration):
-    - Shorter than one block (3x longest duration): left unrotated with scheme 'unrotated'.
-    - Long enough for blocks >= 3x longest duration: shuffled in blocks >= 3x longest duration.
+def test_single_sample_segment_rotates_trivially_by_zero(v11_cfg):
+    """A 1-sample segment trivially rotates by 0 and produces valid output."""
+    t = np.array([100.0, 100.001, 101.5])  # gap between index 1 and 2 is 1.499 d > 0.5 d
+    # Use gap_trim_d = 0 so the points survive
+    cfg = {"scramble": {"gap_d": 0.5, "gap_trim_d": 0.0}}
+    f = np.array([1.0, 2.0, 3.0])
+    e = np.array([0.1, 0.1, 0.1])
+    t_out, f_out, e_out, info = scramble.segment_rotate(t, f, e, seed=42, cfg=cfg)
+
+    assert info["n_segments"] == 2
+    # Second segment has 1 sample; offset must be 0
+    assert info["scr_offsets"][1] == 0
+    assert f_out[2] == 3.0
+    assert info["scr_scheme"] == "segment_rotation"
+
+
+def test_planted_signal_real_cadence_check(v11_cfg):
+    """Planted-signal test using real sector-70 cadence and gap structure from s0070_cadence.npz.
+
+    Injects box transit trains at P = 1, 3, 6 d (depth giving > 20 sigma unscrambled)
+    with white noise plus mild red noise across at least 10 seeds each.
+    Asserts every period's max sigma < 3.
     """
-    dt = 2.0 / 1440.0
-    # Long segment 1: 5 days
-    t1 = np.arange(100.0, 105.0, dt)
-    # Short segment 2: 0.5 days span (after trimming, even smaller, < 0.75 d threshold)
-    # Put a 1.0 day gap before it, and 1.0 day gap after
-    t2 = np.arange(106.0, 106.5, dt)
-    t = np.concatenate([t1, t2])
-    f = np.arange(t.size, dtype=float)
-    e = np.ones_like(t)
+    fixture_path = Path(__file__).resolve().parent / "fixtures" / "s0070_cadence.npz"
+    d = np.load(fixture_path)
+    t = d["t"]
 
-    # Note: lightcurve.gap_edge_mask trims 0.3 d from both ends of every segment!
-    # A 0.5 d segment with 0.3 d trim at both ends has no surviving cadences.
-    # To test short segment fallback that survives gap trim, use a segment of 1.1 days:
-    # 1.1 d - 2*0.3 d = 0.5 d span surviving. 0.5 d < 0.75 d (3x 0.25 d).
-    t2_surv = np.arange(106.0, 107.1, dt)
-    t = np.concatenate([t1, t2_surv])
-    f = np.arange(t.size, dtype=float)
-    e = np.ones_like(t)
+    noise_white = 0.0004
+    noise_red_amp = 0.0001
+    dur = 0.1
+    t0 = float(t[0] + 0.1)
+    depth = 0.0006
+    n_seeds = 10
+    periods = [1.0, 3.0, 6.0]
 
-    t_out, f_out, e_out, info = scramble.segment_rotate(t, f, e, seed=42, cfg=v11_cfg)
+    for P in periods:
+        # Check unscrambled significance > 20 sigma
+        rng_u = np.random.default_rng(0)
+        w_u = rng_u.normal(0, noise_white, size=len(t))
+        r_u = noise_red_amp * np.sin(2 * np.pi * (t - t[0]) / 3.5)
+        f_u = 1.0 + w_u + r_u
+        e_u = np.full_like(t, noise_white)
+        phase_u = ((t - t0 + 0.5 * P) % P) - 0.5 * P
+        f_u[np.abs(phase_u) < dur / 2.0] -= depth
+        bls_u = BoxLeastSquares(t, f_u, dy=e_u)
+        st_u = bls_u.compute_stats(P, dur, t0)
+        unscr_sigma = float(st_u["depth"][0] / st_u["depth_phased"][1])
+        assert unscr_sigma > 20.0, f"Unscrambled significance {unscr_sigma:.2f} <= 20 for P={P}"
 
-    # Segment 2 surviving span is ~0.5 d < 0.75 d (one block) -> left unrotated
-    assert info["scr_schemes"][-1] == "unrotated"
-    assert info["scr_offsets"][-1] == 0
+        sigmas = []
+        for s in range(n_seeds):
+            rng = np.random.default_rng(s)
+            w = rng.normal(0, noise_white, size=len(t))
+            r = noise_red_amp * np.sin(2 * np.pi * (t - t[0]) / 3.5)
+            f = 1.0 + w + r
+            e = np.full_like(t, noise_white)
+            phase = ((t - t0 + 0.5 * P) % P) - 0.5 * P
+            f[np.abs(phase) < dur / 2.0] -= depth
 
-    # Also test an explicit custom configuration where segment has multiple blocks but < threshold
-    custom_cfg = {
-        "scramble": {
-            "gap_d": 0.5,
-            "gap_trim_d": 0.0,  # no trim for this unit test
-            "block_duration_multiplier": 3.0,
-            "longest_trial_duration_d": 0.1,  # threshold = 0.3 d
-        }
-    }
-    # Segment of 0.25 d (< 0.3 d threshold) with cadences dt = 0.01 d (25 points).
-    # block duration = 0.3 d -> n_block = ceil(0.3 / 0.01) = 30 points.
-    # len is 25 < 30 points -> unrotated.
-    t_tiny = np.arange(0, 0.25, 0.01)
-    f_tiny = np.arange(len(t_tiny), dtype=float)
-    e_tiny = np.ones_like(f_tiny)
-    _, f_res, _, inf = scramble.segment_rotate(t_tiny, f_tiny, e_tiny, seed=1, cfg=custom_cfg)
-    assert inf["scr_schemes"] == ["unrotated"]
-    assert np.array_equal(f_res, f_tiny)
+            t_scr, f_scr, e_scr, _ = scramble.segment_rotate(t, f, e, seed=s, cfg=v11_cfg)
+            bls = BoxLeastSquares(t_scr, f_scr, dy=e_scr)
+            st = bls.compute_stats(P, dur, t0)
+            sig = float(abs(st["depth"][0]) / st["depth_phased"][1])
+            sigmas.append(sig)
 
-    # Segment of 0.25 d with block threshold 0.1 d -> n_block = 10 points.
-    # 25 points >= 10 points -> block_shuffle
-    custom_cfg2 = {
-        "scramble": {
-            "gap_d": 0.5,
-            "gap_trim_d": 0.0,
-            "block_duration_multiplier": 1.0,
-            "longest_trial_duration_d": 0.1,  # threshold = 0.1 d, but segment span < threshold?
-        }
-    }
-    # If segment span = 0.08 d < 0.1 d, with dt = 0.005 d (16 points), block_len = 0.1 d -> 20 points
-    # Let min_seg_d = 0.2 d, segment span = 0.15 d (so < min_seg_d)
-    # but dt = 0.001 d, n_block = ceil(0.05 / 0.001)
-    # The rule says: contiguous blocks of length >= 3x longest trial duration.
-    # If segment is shorter than 3x longest trial duration, fallback block shuffle uses blocks >= 3x longest trial duration.
-    # If segment is shorter than 1 block (i.e. shorter than 3x longest trial duration), it cannot form even 1 full block.
-    # Thus any segment shorter than 3x longest trial duration has length < 1 block, so it is left unrotated!
-
-
-def test_planted_periodic_box_transit_train_decoheres(v11_cfg):
-    """A planted periodic box-transit train (several transits over 2 orbits, realistic noise)
-    does not survive scrambling coherently (phase-folded depth at injected period/epoch drops
-    to consistent with noise, e.g. < 3 sigma, across several seeds).
-    """
-    P_inj = 4.2
-    t0_inj = 101.5
-    dur_inj = 0.1
-    depth_inj = 0.0006  # 600 ppm depth
-    noise = 0.0004     # 400 ppm noise
-
-    # Two orbits across 27 days
-    dt = 2.0 / 1440.0
-    t1 = np.arange(100.0, 113.0, dt)
-    t2 = np.arange(114.5, 127.0, dt)
-    t = np.concatenate([t1, t2])
-
-    rng = np.random.default_rng(42)
-    f = 1.0 + rng.normal(0, noise, size=t.size)
-    e = np.full_like(t, noise)
-
-    # Invert box transit dip
-    phase = ((t - t0_inj + 0.5 * P_inj) % P_inj) - 0.5 * P_inj
-    in_tr = np.abs(phase) < (dur_inj / 2.0)
-    f[in_tr] -= depth_inj
-
-    # Check that unshuffled raw transit is strongly detected (> 20 sigma)
-    bls_raw = BoxLeastSquares(t, f, dy=e)
-    st_raw = bls_raw.compute_stats(P_inj, dur_inj, t0_inj)
-    raw_depth = st_raw["depth"][0]
-    raw_err = st_raw["depth_phased"][1]
-    raw_signif = raw_depth / raw_err
-    assert raw_signif > 20.0, f"Raw injection significance too low: {raw_signif}"
-
-    # Across several seeds, the scrambled signal should drop to < 3 sigma
-    sigmas = []
-    seeds = [1, 2, 3, 4, 5]
-    for s in seeds:
-        t_scr, f_scr, e_scr, _ = scramble.segment_rotate(t, f, e, seed=s, cfg=v11_cfg)
-        bls_scr = BoxLeastSquares(t_scr, f_scr, dy=e_scr)
-        st_scr = bls_scr.compute_stats(P_inj, dur_inj, t0_inj)
-        depth_scr = st_scr["depth"][0]
-        err_scr = st_scr["depth_phased"][1]
-        sigma = abs(depth_scr) / err_scr
-        sigmas.append(sigma)
-
-    assert all(sig < 3.0 for sig in sigmas), f"Scrambled depth significant (> 3 sigma): {sigmas}"
+        max_sig = max(sigmas)
+        assert max_sig < 3.0, f"Period {P} max sigma {max_sig:.2f} >= 3.0 across {n_seeds} seeds"
 
 
 def test_pipeline_scramble_mode_integration(v11_cfg):
@@ -272,6 +227,5 @@ def test_pipeline_scramble_mode_integration(v11_cfg):
     assert row["mode"] == "scramble"
     assert "scr_offsets" in row
     assert "scr_scheme" in row
-    assert row["scr_scheme"] == "rotate"
+    assert row["scr_scheme"] == "segment_rotation"
     assert len(row["scr_offsets"]) == 2
-

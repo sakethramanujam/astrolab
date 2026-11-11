@@ -14,8 +14,6 @@
   "s_floor_checks": 6.0,
   "scramble": {
     "gap_d": 0.5,
-    "gap_trim_d": 0.3,
-    "block_duration_multiplier": 3.0,
-    "longest_trial_duration_d": 0.25
+    "gap_trim_d": 0.3
   }
 }
