@@ -1,0 +1,7 @@
+[Unit]
+Description=v1.1 beta registration and production launch (idempotent; see scripts/v11_launch.py)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Documents/repos/astro-compute-lab/exoplanet_search
+ExecStart=/usr/bin/python3 scripts/v11_launch.py

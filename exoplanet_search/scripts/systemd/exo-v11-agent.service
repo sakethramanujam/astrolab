@@ -1,0 +1,9 @@
+[Unit]
+Description=v1.1 remote-host agent (starts this host's share once go.json is on origin)
+
+[Service]
+Type=oneshot
+# Set REPO and HOST with: systemctl --user edit exo-v11-agent.service
+Environment=HOST=h3
+ExecStart=/bin/bash -c '"$REPO"/exoplanet_search/scripts/v11_host_agent.sh "$HOST"'
+KillMode=process

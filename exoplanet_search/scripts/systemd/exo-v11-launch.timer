@@ -1,0 +1,10 @@
+[Unit]
+Description=Poll every 5 min for scrambled r0 and launch v1.1 if every gate passed
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+Unit=exo-v11-launch.service
+
+[Install]
+WantedBy=timers.target

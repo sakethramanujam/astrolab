@@ -1,0 +1,10 @@
+[Unit]
+Description=Poll every 5 min for the v1.1 go signal
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+Unit=exo-v11-agent.service
+
+[Install]
+WantedBy=timers.target
