@@ -41,3 +41,24 @@ Two sources of difference, both on arm64 only:
    host; then re-run this gate on all hosts (the `fastmath` issue is also a risk between x86_64 CPU generations), or
 3. amend the gate to "same grid index for P, |ΔS| ≤ 1e-6, and ties resolved by the rule above", registered before
    any merge.
+
+## Dry run with the adopted fixes (`--fixed`)
+
+Fixes (interim code only, `exosearch/host_gate.py: apply_fixes`): period grid `fmin + df·arange(n)`; tie-break
+|S_i − S_max| ≤ 1e-9·S_max → lowest period, then shortest duration (`docs/preregistration/tie_break.md`); wotan's 24
+numba kernels recompiled with `fastmath=False, cache=False, parallel=False`. Summary: `summary_dryrun_fixed.json`.
+
+| host | arch | max abs ΔS | max abs ΔS_exact | best (P, D) differs | stars with > 1 grid point in the tie band | gate |
+|---|---|---|---|---|---|---|
+| h1 | x86_64 | 0 (reference) | 0 | 0 | 25 / 200 (12.5%; max 38) | pass |
+| h2 | arm64 | 7.1e-15 | 0 | 0 | 25 / 200 (same stars, same counts) | **pass** |
+| h3 | x86_64 | 0 | 0 | 0 | 25 / 200 | pass |
+
+The 6 stars that switched peaks before (38349319, 51988338, 333557762, 353927437, 365179665, 611355482) now resolve to
+the same (P, D) on all hosts; they had 4–27 grid points in the tie band. The fixed grid is a different float grid
+from v1.0.0, so v1.1 rows are not bit-comparable with v1.0.0 rows (S differs by ≤ 0.007 on h1 between the two paths).
+Stopgap until the fixes are in the v1.1 code and the gate is re-run there: registered statistic from h1/h3 only.
+
+Throughput on the gate (search time only, at the worker counts shown; wall time includes the MAST downloads):
+h1 ~700 stars/h per worker (idle priority under the running lanes), h2 ~2,650 stars/h per worker (12 workers:
+~32,000/h; 200 stars in 24 s wall), h3 ~470 stars/h per worker (6 workers: ~2,800/h).
