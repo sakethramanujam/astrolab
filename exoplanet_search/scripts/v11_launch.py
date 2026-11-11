@@ -3,12 +3,14 @@
 
 Each run is idempotent and ends in exactly one state, written to STATUS (outside the repo):
   waiting_r0       lane-a has not logged DONE for the flipped null and scrambled r0
-  blocked_checks   docs/v1.1_checks/host_gate.json or validation.json missing or not all_pass on origin
   gate_failed      beta_select ran; no option passed the TOST gate. Result committed and pushed; nothing launched
-  launched         beta registration committed, configs/v1.1.json beta_option set, manifests + go.json pushed,
-                   coordinator share started. Remote hosts start their own share when their agent sees go.json
+  registered_blocked_checks
+                   beta registered and committed (configs/v1.1.json beta_option set), but the 3-host gate or the
+                   validation is not committed as passing on the current search code; re-checked every run
+  launched         manifests + go.json pushed at the current origin head, coordinator share started. Remote hosts
+                   start their own share when their agent sees go.json
   error            a step failed; see message (nothing is launched after a failed step)
-Terminal states (gate_failed, launched) are never redone. --dry-run evaluates the checks and prints the plan only.
+Terminal states (gate_failed, launched) are never redone; the beta registration runs once. --dry-run evaluates the checks and prints the plan only.
 
   scripts/v11_launch.py [--dry-run]
 """
@@ -70,7 +72,7 @@ def origin_json(path):
     return json.loads(r.stdout) if r.returncode == 0 else None
 
 
-def checks():
+def checks(registered=None):
     g, v = origin_json("docs/v1.1_checks/host_gate.json"), origin_json("docs/v1.1_checks/validation.json")
     cfg = origin_json("configs/v1.1.json")
     why = []
@@ -78,15 +80,21 @@ def checks():
         why.append("3-host gate summary not committed as passing")
     if not (v and v.get("all_pass") is True):
         why.append("validation report not committed as passing")
-    if cfg is None or cfg.get("beta_option") is not None:
-        why.append("configs/v1.1.json beta_option already set or unreadable")
+    if cfg is None or (registered and cfg.get("beta_option") != registered):
+        why.append("configs/v1.1.json beta_option does not match the registration")
     # Both checks must have run on the search code that would be launched (settings.py only adds host ids;
     # validate.py and beta_select.py are report/selection code, not the search).
     commits = {h.get("commit") for h in (g or {}).get("hosts", [])} | set((v or {}).get("commit", []))
     spec = [f"{SUB}/exosearch", f"{SUB}/configs", f":(exclude){SUB}/exosearch/v11/settings.py",
-            f":(exclude){SUB}/exosearch/v11/validate.py", f":(exclude){SUB}/exosearch/v11/beta_select.py"]
+            f":(exclude){SUB}/exosearch/v11/validate.py", f":(exclude){SUB}/exosearch/v11/beta_select.py",
+            f":(exclude){SUB}/configs/v1.1.json"]
+    def cfg_wo_beta(ref):
+        r = sp.run(["git", "show", f"{ref}:{SUB}/configs/v1.1.json"], cwd=REPO, text=True, capture_output=True)
+        return {k: x for k, x in json.loads(r.stdout).items() if k != "beta_option"} if r.returncode == 0 else None
+    head_cfg = cfg_wo_beta(f"origin/{BRANCH}")
     for c in sorted(x for x in commits if x):
-        if sp.run(["git", "diff", "--quiet", c, f"origin/{BRANCH}", "--", *spec], cwd=REPO).returncode != 0:
+        if (sp.run(["git", "diff", "--quiet", c, f"origin/{BRANCH}", "--", *spec], cwd=REPO).returncode != 0
+                or cfg_wo_beta(c) != head_cfg):
             why.append(f"search code or configs changed since check commit {c[:8]}; rerun the checks")
     return why
 
@@ -103,70 +111,95 @@ def push(wt, paths, msg):
     return sh("git", "rev-parse", "HEAD", cwd=wt).strip()
 
 
+def worktree(path, ref):
+    if path.exists():
+        sh("git", "worktree", "remove", "--force", str(path), cwd=REPO, check=False)
+    sh("git", "worktree", "add", "-q", "--detach", str(path), ref, cwd=REPO)
+
+
+def register(env):
+    """Run beta_select exactly as registered on the flipped null and scrambled r0; commit the result (and the
+    beta option when the TOST gate passed). Returns the registration record."""
+    worktree(WT, f"origin/{BRANCH}")
+    (WT / SUB / ".venv").symlink_to(REPO / SUB / ".venv")
+    day = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
+    reg = Path("docs/preregistration") / f"beta_registration_{day}"
+    sh(".venv/bin/python", "-m", "exosearch.v11.beta_select", "--out", str(reg), cwd=WT / SUB, env=env)
+    dec = json.loads((WT / SUB / reg / "beta_selection.json").read_text())["decision"]
+    ts = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    lines = [f"# Beta-treatment registration, {ts} (UTC)", "",
+             "Applied unattended by scripts/v11_launch.py: docs/preregistration/beta_treatment.md with amendment 1,",
+             "exactly as written, on the flipped null and scrambled r0 (nulls and injections only).", "",
+             f"* TOST gate (90% CI of dS* inside [-0.5, +0.5], every sector): {dec['gate_tost']}",
+             f"* Passing: {dec['passing']}", f"* Decision: **{dec['chosen']}**. {dec['reason']}",
+             f"* Gate failed: {dec['gate_failed']}", "", "Full numbers: beta_selection.json in this directory."]
+    (WT / SUB / reg / "README.md").write_text("\n".join(lines) + "\n")
+    paths = [f"{SUB}/{reg}/README.md", f"{SUB}/{reg}/beta_selection.json"]
+    if dec["gate_failed"]:
+        R = push(WT, paths, f"beta registration {ts}: TOST gate FAILED for every option; v1.1 production not launched")
+        return dict(commit=R, at_utc=ts, decision=dec, option=None)
+    cfgp = WT / SUB / "configs/v1.1.json"
+    cfg = json.loads(cfgp.read_text()); cfg["beta_option"] = dec["chosen"]
+    cfgp.write_text(json.dumps(cfg, indent=2) + "\n")
+    R = push(WT, paths + [f"{SUB}/configs/v1.1.json"],
+             f"beta registration {ts}: option {dec['chosen']} (TOST gate passed: {dec['passing']}); configs/v1.1.json beta_option set")
+    return dict(commit=R, at_utc=ts, decision=dec, option=dec["chosen"])
+
+
+def launch(reg, env):
+    """Pin the current origin head (search code verified by checks()), build manifests, push go.json, start h1."""
+    worktree(WT, f"origin/{BRANCH}")
+    (WT / SUB / ".venv").symlink_to(REPO / SUB / ".venv")
+    P = sh("git", "rev-parse", "HEAD", cwd=WT).strip()
+    man = Path("runs/v1.1")
+    sh(".venv/bin/python", "-m", "exosearch.v11.run", "build", "--sectors", "70,106", "--weights", WEIGHTS,
+       "--out", str(man), cwd=WT / SUB, env=env)
+    go = dict(pinned_commit=P, beta_option=reg["option"], registration_commit=reg["commit"], workers=WORKERS,
+              weights=WEIGHTS, manifests={h: f"{SUB}/{man}/manifest_{h}.jsonl.gz" for h in WORKERS})
+    (WT / SUB / man / "go.json").write_text(json.dumps(go, indent=1) + "\n")
+    M = push(WT, [f"{SUB}/{man}/{f}" for f in ("go.json", "manifest_summary.json")] +
+             [go["manifests"][h] for h in WORKERS], f"v1.1 production manifests at {P[:8]} (S70 + S106); go")
+    worktree(PROD, P)
+    (PROD / SUB / ".venv-worker").symlink_to(REPO / SUB / ".venv-worker")
+    sh("git", "fetch", "-q", "origin", BRANCH, cwd=REPO)
+    mf = OUTROOT / "manifest_h1.jsonl.gz"
+    mf.write_bytes(sp.run(["git", "show", f"{M}:{go['manifests']['h1']}"], cwd=REPO, capture_output=True, check=True).stdout)
+    cmd = (f"{PROD}/{SUB}/scripts/v11_work.sh h1 {mf} {WORKERS['h1']} {OUTROOT}/h1 & w=$!; "
+           f"{PROD}/{SUB}/scripts/v11_backoff.sh $w 18 15; wait $w")
+    sh("systemd-run", "--user", "--unit", "exo-v11-h1", "--setenv", f"EXO_DATA_ROOT={DATA}", "bash", "-c", cmd)
+    return dict(pinned_commit=P, manifest_commit=M, unit="exo-v11-h1")
+
+
 def main(dry):
     prev = json.loads(STATUS.read_text()) if STATUS.exists() else {}
     if prev.get("state") in ("gate_failed", "launched"):
         print(f"terminal state {prev['state']}; nothing to do"); return
+    reg = prev.get("registration")
     sh("git", "fetch", "-q", "origin", BRANCH, cwd=REPO)
-    done, why = r0_done(), checks()
+    done = r0_done()
     if dry:
-        print(json.dumps(dict(dry_run=True, r0_done=done, blocked=why, status_file=str(STATUS), weights=WEIGHTS, workers=WORKERS,
-                              would=("run beta_select, commit registration, launch if TOST passes" if done and not why
-                                     else "write status and exit")), indent=1))
+        why = checks(reg and reg.get("option"))
+        print(json.dumps(dict(dry_run=True, r0_done=done, registered=bool(reg), launch_blocked_by=why,
+                              status_file=str(STATUS), weights=WEIGHTS, workers=WORKERS,
+                              would=("wait for r0" if not done else
+                                     ("register beta (beta_select, commit), then " if not reg else "") +
+                                     ("launch" if not why else "write status; no launch"))), indent=1))
         return
     if not done:
         return status("waiting_r0")
-    if why:
-        return status("blocked_checks", reasons=why)
+    env = dict(os.environ, PYTHONPATH=".", EXO_DATA_ROOT=str(DATA))
     try:
-        if WT.exists():
-            sh("git", "worktree", "remove", "--force", str(WT), cwd=REPO, check=False)
-        sh("git", "worktree", "add", "-q", "--detach", str(WT), f"origin/{BRANCH}", cwd=REPO)
-        (WT / SUB / ".venv").symlink_to(REPO / SUB / ".venv")
-        day = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
-        reg = Path("docs/preregistration") / f"beta_registration_{day}"
-        env = dict(os.environ, PYTHONPATH=".", EXO_DATA_ROOT=str(DATA))
-        sh(".venv/bin/python", "-m", "exosearch.v11.beta_select", "--out", str(reg), cwd=WT / SUB, env=env)
-        rep = json.loads((WT / SUB / reg / "beta_selection.json").read_text())
-        dec = rep["decision"]
-        ts = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        lines = [f"# Beta-treatment registration, {ts} (UTC)", "",
-                 "Applied unattended by scripts/v11_launch.py: docs/preregistration/beta_treatment.md with amendment 1,",
-                 "exactly as written, on the flipped null and scrambled r0 (nulls and injections only).", "",
-                 f"* TOST gate (90% CI of dS* inside [-0.5, +0.5], every sector): {dec['gate_tost']}",
-                 f"* Passing: {dec['passing']}", f"* Decision: **{dec['chosen']}**. {dec['reason']}",
-                 f"* Gate failed: {dec['gate_failed']}", "", "Full numbers: beta_selection.json in this directory."]
-        (WT / SUB / reg / "README.md").write_text("\n".join(lines) + "\n")
-        paths = [f"{SUB}/{reg}/README.md", f"{SUB}/{reg}/beta_selection.json"]
-        if dec["gate_failed"]:
-            R = push(WT, paths, f"beta registration {ts}: TOST gate FAILED for every option; v1.1 production not launched")
-            return status("gate_failed", commit=R, decision=dec)
-        cfgp = WT / SUB / "configs/v1.1.json"
-        cfg = json.loads(cfgp.read_text()); cfg["beta_option"] = dec["chosen"]
-        cfgp.write_text(json.dumps(cfg, indent=2) + "\n")
-        R = push(WT, paths + [f"{SUB}/configs/v1.1.json"],
-                 f"beta registration {ts}: option {dec['chosen']} (TOST gate passed: {dec['passing']}); configs/v1.1.json beta_option set")
-        man = Path("runs/v1.1")
-        sh(".venv/bin/python", "-m", "exosearch.v11.run", "build", "--sectors", "70,106", "--weights", WEIGHTS,
-           "--out", str(man), cwd=WT / SUB, env=env)
-        go = dict(pinned_commit=R, beta_option=dec["chosen"], registered_utc=ts, workers=WORKERS,
-                  manifests={h: f"{SUB}/{man}/manifest_{h}.jsonl.gz" for h in WORKERS})
-        (WT / SUB / man / "go.json").write_text(json.dumps(go, indent=1) + "\n")
-        M = push(WT, [f"{SUB}/{man}/{f}" for f in ("go.json", "manifest_summary.json")] +
-                 [go["manifests"][h] for h in WORKERS], f"v1.1 production manifests at {R[:8]} (S70 + S106); go")
-        if PROD.exists():
-            sh("git", "worktree", "remove", "--force", str(PROD), cwd=REPO, check=False)
-        sh("git", "worktree", "add", "-q", "--detach", str(PROD), R, cwd=REPO)
-        (PROD / SUB / ".venv-worker").symlink_to(REPO / SUB / ".venv-worker")
-        mf = OUTROOT / "manifest_h1.jsonl.gz"
-        sh("git", "fetch", "-q", "origin", BRANCH, cwd=REPO)
-        mf.write_bytes(sp.run(["git", "show", f"{M}:{go['manifests']['h1']}"], cwd=REPO, capture_output=True, check=True).stdout)
-        cmd = (f"{PROD}/{SUB}/scripts/v11_work.sh h1 {mf} {WORKERS['h1']} {OUTROOT}/h1 & w=$!; "
-               f"{PROD}/{SUB}/scripts/v11_backoff.sh $w 18 15; wait $w")
-        sh("systemd-run", "--user", "--unit", "exo-v11-h1", "--setenv", f"EXO_DATA_ROOT={DATA}", "bash", "-c", cmd)
-        return status("launched", registration_commit=R, manifest_commit=M, decision=dec, unit="exo-v11-h1")
+        if not reg:
+            reg = register(env)
+            if reg["option"] is None:
+                return status("gate_failed", registration=reg)
+            sh("git", "fetch", "-q", "origin", BRANCH, cwd=REPO)
+        why = checks(reg["option"])
+        if why:
+            return status("registered_blocked_checks", registration=reg, reasons=why)
+        return status("launched", registration=reg, **launch(reg, env))
     except Exception as e:                                    # nothing further runs after a failed step
-        return status("error", message=str(e)[-800:])
+        return status("error", registration=reg, message=str(e)[-800:])
 
 
 if __name__ == "__main__":
