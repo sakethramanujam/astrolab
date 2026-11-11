@@ -67,7 +67,16 @@ def main():
                         rho_S_beta_peak=float(stats.spearmanr(x.S, x.beta_d, nan_policy="omit")[0]),
                         rho_S_tmag=float(stats.spearmanr(x.S, x.tmag, nan_policy="omit")[0]),
                         rho_S_sigma_w=float(stats.spearmanr(x.S, x.sigma_w_q, nan_policy="omit")[0]))
+    for name in sp:
+        x = d[{"all": d.index == d.index, "quality_pass": ~d["drop"], "quality_pass_S_gt_u": ~d["drop"] & (d.S > U),
+               "vetted_quality_pass": ~d["drop"] & d.vetted}[name]]
+        sp[name]["rho_S_duty_cycle"] = float(stats.spearmanr(x.S, x.duration / x.period, nan_policy="omit")[0])
+        sp[name]["rho_S_n_tr"] = float(stats.spearmanr(x.S, x.n_tr, nan_policy="omit")[0])
     res["spearman"] = sp
+    big = d[d.S > 100]
+    res["raw_extreme_tail"] = dict(n_S_gt_100=int(len(big)), dropped_by_quality=int(big["drop"].sum()),
+                                   vetted=int(big.vetted.sum()), median_tmag=float(big.tmag.median()) if len(big) else None,
+                                   frac_single_epoch=float((big.n_tr <= 1.5).mean()) if len(big) else None)
     tail = d[~d["drop"] & (d.S > U)]
     res["tail_vs_bulk"] = dict(
         beta_max_median_tail=float(tail.beta_max.median()), beta_max_median_bulk=float(d[~d["drop"] & (d.S <= U)].beta_max.median()),
@@ -97,7 +106,9 @@ def main():
     for s, ds in d.groupby("sector"):
         refs = ds.groupby("camera").tic.first().to_dict()
         ev = sector_events(int(s), refs)
-        for lab, sel in (("tail S>u (kept)", ~ds["drop"] & (ds.S > U)), ("bulk S<=u (kept)", ~ds["drop"] & (ds.S <= U))):
+        for lab, sel in (("tail S>u (kept)", ~ds["drop"] & (ds.S > U)), ("bulk S<=u (kept)", ~ds["drop"] & (ds.S <= U)),
+                         ("tail S>u, <=2 epochs (kept)", ~ds["drop"] & (ds.S > U) & (ds.n_tr <= 2)),
+                         ("vetted tail S>u (kept)", ~ds["drop"] & (ds.S > U) & ds.vetted)):
             obs_d, obs_e, ctl_d, ctl_e = [], [], [], []
             for r in ds[sel].itertuples():
                 e = ev.get(int(r.camera))
@@ -116,7 +127,7 @@ def main():
                 frac_within_0p5d_edge=float((obs_e < .5).mean()) if obs_e.size else None,
                 control_frac_edge=float((ctl_e < .5).mean()) if ctl_e.size else None,
                 n_dumps={int(c): int(v["dumps"].size) for c, v in ev.items()})
-            if lab.startswith("tail"):
+            if lab == "tail S>u (kept)":
                 bins = np.linspace(0, 2, 41)
                 axs[0].hist(ctl_d, bins, density=True, histtype="step", color="#999999", label="control (random epoch)")
                 axs[0].hist(obs_d, bins, density=True, histtype="step", color="#e45756", lw=1.5, label=f"null tail epochs (n={obs_d.size})")
