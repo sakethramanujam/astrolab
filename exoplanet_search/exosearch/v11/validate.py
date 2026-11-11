@@ -132,6 +132,48 @@ def compare_arms(df, set_, arm_a, arm_b, by, bins, label, rng, judge="recovery")
     return rows
 
 
+PULS_MIN_REMOVED = 0.8      # fixed a priori: median fraction of injected pulsation amplitude removed
+PULS_MIN_STAR = 0.5         # fixed a priori: minimum fraction of injected pulsation amplitude removed
+
+
+def synth_pulsator(seed, n_modes=3, sigma=4e-4):
+    """Synthetic 27 d / 2 min light curve with red noise, rotation, and delta Sct modes."""
+    from scipy.signal import lfilter
+    rng = np.random.default_rng(seed)
+    t = np.arange(3000.0, 3027.0, 2 / 1440)
+    f = 1.0 + rng.normal(0, sigma, t.size)
+    f += lfilter([1.0], [1.0, -0.999], rng.normal(0, sigma * 0.03, t.size))
+    fr = rng.uniform(0.3, 1.5)
+    f += 2e-3 * np.sin(2 * np.pi * fr * t + rng.uniform(0, 6.28)) + 0.8e-3 * np.sin(4 * np.pi * fr * t)
+    modes = [(float(rng.uniform(6, 60)), float(rng.uniform(1e-3, 5e-3))) for _ in range(n_modes)]
+    for fm, am in modes:
+        f += am * np.sin(2 * np.pi * fm * t + rng.uniform(0, 6.28))
+    return t, f, modes
+
+
+def pulsator_efficacy(cfg, n=10):
+    """Pulsator-removal check (seeded, synthetic): prewhitening must remove real delta Sct pulsations.
+    A policy that removes nothing fails. -> dict with pass flag."""
+    from .prewhiten import _fit, prewhiten
+    rem_all = []
+    rows = []
+    for k in range(n):
+        t, f, modes = synth_pulsator(1000 + k, n_modes=int(1 + k % 4))
+        r, log = prewhiten(t, f, cfg["prewhiten"])
+        star_rem = []
+        for fm, am in modes:
+            a_after = max(_fit(t, r, fm + d)[0] for d in np.linspace(-0.01, 0.01, 5))
+            frac = 1.0 - min(a_after / am, 1.0)
+            rem_all.append(frac)
+            star_rem.append(frac)
+        rows.append(dict(seed=1000 + k, n_terms=log["prewhiten_n"], mean_removed=float(np.mean(star_rem))))
+    med_rem = float(np.median(rem_all))
+    min_rem = float(np.min(rem_all))
+    ok = bool(med_rem >= PULS_MIN_REMOVED and min_rem >= PULS_MIN_STAR)
+    return dict(criteria=dict(min_median_removed=PULS_MIN_REMOVED, min_star_removed=PULS_MIN_STAR),
+                median_removed=med_rem, min_removed=min_rem, rows=rows, pass_=ok)
+
+
 def report(dirs, out):
     df = pd.concat([run.load_rows(d) for d in dirs], ignore_index=True)
     df = df[df.status == "ok"].copy()
@@ -169,11 +211,13 @@ def report(dirs, out):
     p2 = [r["bin"] for k in ("prewhitening_main_by_duration", "prewhitening_main_by_period", "prewhitening_usp_by_duration")
           for r in tabs[k] if r["fail_depth"]]
     p3 = [r["bin"] for r in cap if r["fail_recovery"]]
-    res.update(tables=tabs, P1_fail_bins=p1, P2_fail_bins=p2, P3_fail_bins=p3, all_pass=not (p1 or p2 or p3))
+    puls = pulsator_efficacy(settings.cfg())
+    res.update(tables=tabs, P1_fail_bins=p1, P2_fail_bins=p2, P3_fail_bins=p3, P4_pulsator_removal=puls,
+               all_pass=not (p1 or p2 or p3) and puls["pass_"])
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     (out / "validation.json").write_text(json.dumps(res, indent=1, default=float))
-    print(json.dumps(dict(all_pass=res["all_pass"], P1=p1, P2=p2, P3=p3, counts=res["counts"]), indent=1))
+    print(json.dumps(dict(all_pass=res["all_pass"], P1=p1, P2=p2, P3=p3, P4_pass=puls["pass_"], counts=res["counts"]), indent=1))
     return res
 
 
