@@ -7,6 +7,7 @@ Gate: for every star, |S_host - S_ref| <= 1e-6 and |S_exact_host - S_exact_ref| 
 
   python -m exosearch.host_gate pick                         # writes configs/host_gate_tics.txt (seeded)
   python -m exosearch.host_gate run --host-id h2 --workers 12 --out /tmp/gate_h2.csv.gz
+  python -m exosearch.host_gate trace 26016053                # per-stage hashes, to localise a divergence
   python -m exosearch.host_gate compare gate_h1.csv.gz gate_h2.csv.gz ... --summary docs/host_gate/summary.json
 """
 from __future__ import annotations
@@ -104,10 +105,16 @@ def compare(files, summary):
         dSx = (a.S_exact - b.S_exact).abs()
         same_pd = (a.period == b.period) & (a.duration == b.duration)
         bad = common[(dS > TOL) | (dSx > TOL) | ~same_pd]
+        relP = (a.period / b.period - 1).abs()
+        ulp = ~same_pd & (a.duration == b.duration) & (relP < 1e-12)          # same grid point, last-bit difference
+        flip = ~same_pd & ~ulp                                                  # a different best peak
+        flips = [dict(tic=int(t), P_ref=float(a.period[t]), P_host=float(b.period[t]), D_ref=float(a.duration[t]),
+                      D_host=float(b.duration[t]), S_ref=float(a.S[t]), dS=float(b.S[t] - a.S[t])) for t in common[flip]]
         hosts.append(dict(host_id=m["host_id"], arch=m["arch"], system=m["system"], lib_versions=m["lib_versions"],
                           workers=m["workers"], n_ok=m["n_ok"], n_err=m["n_err"], n_compared=int(len(common)),
                           max_abs_dS=float(dS.max()), max_abs_dS_exact=float(dSx.max()),
-                          n_PD_mismatch=int((~same_pd).sum()), n_fail=int(len(bad)),
+                          n_PD_mismatch=int((~same_pd).sum()), n_P_last_bit_only=int(ulp.sum()), n_peak_flip=int(flip.sum()),
+                          peak_flips=flips, max_rel_dP_same_grid_point=float(relP[same_pd | ulp].max()), n_fail=int(len(bad)),
                           fail_tics=[int(t) for t in bad[:20]], stars_per_hour=m.get("stars_per_hour"),
                           search_s_per_star_median=m.get("search_s_per_star"),
                           passes=bool(len(bad) == 0 and m["n_err"] == 0 and len(common) == len(ref))))
@@ -119,15 +126,32 @@ def compare(files, summary):
     print(json.dumps(res, indent=1))
 
 
+def trace(tics):
+    """Per-stage array hashes for a star (raw, trend, flat, binned, period grid, CDPP) to localise a divergence."""
+    import hashlib
+    from . import batch, bls, targets, task
+    h = lambda a: hashlib.sha256(np.ascontiguousarray(np.asarray(a, dtype=float)).tobytes()).hexdigest()[:12]
+    man = targets.fetch_manifest(SECTOR).set_index("tic")
+    for tic in tics:
+        d = task.prepare(batch.lc_path(SECTOR, man.loc[tic].fname))
+        t, f, _ = d["raw"]; _, ff, _ = d["flat"]; tb, fb, _ = d["binned"]
+        _, _, prof = bls.noise_profile(d["flat"][0], ff)
+        print(json.dumps(dict(tic=tic, raw_t=h(t), raw_f=h(f), trend=h(d["trend"]), flat=h(ff), binned_t=h(tb), binned_f=h(fb),
+                              grid=h(bls.period_grid(tb)), cdpp=h([prof[k][0] for k in sorted(prof)]))))
+
+
 def main():
     ap = argparse.ArgumentParser()
     sp = ap.add_subparsers(dest="cmd", required=True)
     sp.add_parser("pick")
     r = sp.add_parser("run"); r.add_argument("--host-id", required=True); r.add_argument("--workers", type=int, default=4); r.add_argument("--out", required=True)
+    tr = sp.add_parser("trace"); tr.add_argument("tics", nargs="+", type=int)
     c = sp.add_parser("compare"); c.add_argument("files", nargs="+"); c.add_argument("--summary")
     a = ap.parse_args()
     if a.cmd == "pick":
         pick()
+    elif a.cmd == "trace":
+        trace(a.tics)
     elif a.cmd == "run":
         run(a.host_id, a.workers, a.out)
     else:
