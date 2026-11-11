@@ -5,11 +5,12 @@
 #   thermal_guard.sh STATUS_FILE        env: HOT=90 COOL=80 PATTERN='exosearch.v11.run work'
 # Linux: hwmon coretemp/k10temp/zenpower, else thermal_zone x86_pkg_temp. macOS: `pmset -g therm` (thermal or
 # performance warning recorded, or CPU_Speed_Limit < 80, counts as serious). WSL: powershell.exe
-# MSAcpi_ThermalZoneTemperature if Windows allows it unelevated; otherwise no reading and no action.
+# MSAcpi_ThermalZoneTemperature if Windows allows it unelevated; otherwise no reading and no action (the GPU
+# temperature from nvidia-smi is logged for information only).
 set -uo pipefail
 STATUS="$1"; HOT="${HOT:-90}"; COOL="${COOL:-80}"; PATTERN="${PATTERN:-exosearch.v11.run work}"
 STATE="$STATUS.paused"; mkdir -p "$(dirname "$STATUS")"
-src=""; temp=""; level=""
+src=""; temp=""; level=""; gpu=""
 if [ "$(uname)" = Darwin ]; then
   src="pmset"; t=$(pmset -g therm 2>/dev/null)
   lim=$(echo "$t" | awk -F= '/CPU_Speed_Limit/ {gsub(/ /,"",$2); print $2}')
@@ -17,7 +18,9 @@ if [ "$(uname)" = Darwin ]; then
   else level=nominal; fi
 elif grep -qi microsoft /proc/version 2>/dev/null; then
   src="MSAcpi_ThermalZoneTemperature"
-  temp=$(timeout 20 powershell.exe -NoProfile -Command '$t = Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction Stop; [math]::Round((($t | Measure-Object CurrentTemperature -Maximum).Maximum / 10 - 273.15), 1)' 2>/dev/null | tr -d '\r' | grep -E '^[0-9.]+$')
+  temp=$(timeout 20 powershell.exe -NoProfile -Command '$t = Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction Stop; [math]::Round((($t | Measure-Object CurrentTemperature -Maximum).Maximum / 10 - 273.15), 1)' </dev/null 2>/dev/null | tr -d '\r' | grep -E '^[0-9.]+$')
+  # No CPU reading unelevated: record the GPU temperature for information only (read-only query; never acted on).
+  [ -z "$temp" ] && gpu=$(timeout 10 nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits </dev/null 2>/dev/null | head -1 | tr -dc '0-9')
 else
   for h in /sys/class/hwmon/hwmon*; do
     case "$(cat "$h/name" 2>/dev/null)" in coretemp|k10temp|zenpower)
@@ -46,8 +49,8 @@ elif [ "$cool" = 1 ] && [ -f "$STATE" ]; then
 elif [ -f "$STATE" ]; then
   action=held
 fi
-printf '{"at_utc": "%s", "source": "%s", "temp_c": %s, "level": "%s", "hot_c": %s, "cool_c": %s, "workers": %s, "action": "%s", "paused": %s}\n' \
+printf '{"at_utc": "%s", "source": "%s", "temp_c": %s, "level": "%s", "hot_c": %s, "cool_c": %s, "workers": %s, "action": "%s", "paused": %s, "gpu_temp_c_info": %s}\n' \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${src:-none}" "${temp:-null}" "${level:-}" "$HOT" "$COOL" \
-  "$(echo $pids | wc -w | tr -d ' ')" "$action" "$([ -f "$STATE" ] && echo true || echo false)" > "$STATUS"
+  "$(echo $pids | wc -w | tr -d ' ')" "$action" "$([ -f "$STATE" ] && echo true || echo false)" "${gpu:-null}" > "$STATUS"
 [ "$action" = paused ] || [ "$action" = resumed ] && cat "$STATUS" >> "$STATUS.log"
 exit 0
