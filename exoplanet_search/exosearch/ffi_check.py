@@ -24,16 +24,35 @@ from . import bls, config, task
 warnings.filterwarnings("ignore")
 
 
-def photometry(tic, sector, cache, size=15):
+class NotOnSilicon(RuntimeError):
+    pass
+
+
+def on_silicon(tpf, tmag):
+    """TESScut footprints are approximate: a cutout can be served for a sector in which the star fell off the
+    science pixels (gap / collateral), giving an image of ~0 e/s. Compare the brightest central pixel with the flux
+    expected for the star (~15000 e/s at Tmag 10; a single pixel holds >~ 20% of it)."""
+    med = np.nanmedian(tpf.flux.value, axis=0)
+    c = med.shape[0] // 2
+    peak = float(np.nanmax(med[c - 2:c + 3, c - 2:c + 3]))
+    expected = 15000.0 * 10 ** (-0.4 * (tmag - 10.0)) if tmag is not None else None
+    ok = peak > 0.01 * expected if expected else peak > 10.0
+    return ok, dict(central_peak_e_per_s=peak, expected_total_e_per_s=expected, image_median_e_per_s=float(np.nanmedian(med)))
+
+
+def photometry(tic, sector, cache, size=15, tmag=None):
     import lightkurve as lk
     sr = lk.search_tesscut(f"TIC {tic}", sector=sector)
     tpf = sr.download(cutout_size=size, download_dir=str(cache), quality_bitmask="hard")
+    ok_si, si = on_silicon(tpf, tmag)
+    if not ok_si:
+        raise NotOnSilicon(json.dumps(si))
     ap = tpf.create_threshold_mask(threshold=5, reference_pixel="center")
     flux = tpf.flux.value
     med = np.nanmedian(flux, axis=0)
     bkg_mask = (~ap) & (med < np.nanpercentile(med, 50))
     bkg = np.nanmedian(flux[:, bkg_mask], axis=1)
-    tpf_b = tpf - bkg[:, None, None] * tpf.flux.unit if hasattr(tpf.flux, "unit") else tpf
+    tpf_b = tpf - bkg[:, None, None] * tpf.flux.unit
     ok = np.isfinite(bkg) & (bkg < np.nanpercentile(bkg, 90))          # drop the worst scattered light
     lc = tpf_b[ok].to_lightcurve(aperture_mask=ap)
     try:
@@ -115,6 +134,7 @@ def main():
     ap.add_argument("--dur", type=float, required=True)
     ap.add_argument("--sectors", default="42,43")
     ap.add_argument("--control", type=int, default=None, help="reference sector run through the same FFI photometry")
+    ap.add_argument("--tmag", type=float, default=None, help="TESS mag, for the on-silicon flux check")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
     out_dir = Path(a.out) if a.out else config.DATA_ROOT / "products" / "v1.0.0" / "analysis_layer" / "ffi_check" / f"TIC{a.tic}"
@@ -122,8 +142,23 @@ def main():
     cache = out_dir / "cache"
     res = dict(tic=a.tic, ref=dict(period=a.period, t0=a.t0, duration=a.dur), sectors={})
     data = {}
+    try:                                                                # tess-point, if installed: authoritative pointing
+        from tess_stars2px import tess_stars2px_function_entry as t2p
+        from astroquery.mast import Catalogs
+        row = Catalogs.query_object(f"TIC {a.tic}", catalog="TIC", radius=0.001)[0]
+        r = t2p(a.tic, float(row["ra"]), float(row["dec"]))
+        res["tess_point_on_silicon"] = [dict(sector=int(x), camera=int(c), ccd=int(d), col=float(cc), row=float(rr))
+                                        for x, c, d, cc, rr in zip(r[3], r[4], r[5], r[6], r[7])]
+    except Exception as exc:
+        res["tess_point_on_silicon"] = f"unavailable ({type(exc).__name__})"
+    res["not_on_silicon"] = {}
     for s in [int(x) for x in a.sectors.split(",")] + ([a.control] if a.control else []):
-        t, f, e, info = photometry(a.tic, s, cache)
+        try:
+            t, f, e, info = photometry(a.tic, s, cache, tmag=a.tmag)
+        except NotOnSilicon as exc:
+            res["not_on_silicon"][str(s)] = json.loads(str(exc))
+            print(f"S{s}: target not on science pixels {exc}")
+            continue
         d = prepared(t, f, e, s)
         data[s] = d
         tb, fb, _ = d["binned"]
@@ -141,7 +176,22 @@ def main():
         res["sectors"][str(s)] = info
         print(s, json.dumps(info, default=float))
     # stitched FFI sectors: blind + at the candidate period (fine local refit of P and T0 inside the FFI data only)
-    ffi = [int(x) for x in a.sectors.split(",")]
+    ffi = [int(x) for x in a.sectors.split(",") if int(x) in data]
+    if not ffi:
+        res["verdict"] = ("not testable: the target was not on science pixels in any requested FFI sector "
+                          f"({', '.join(sorted(res['not_on_silicon']))}); no independent recovery is possible from these sectors")
+        if a.control and a.control in data:
+            tr, fr = data[a.control]["flat"][0], data[a.control]["flat"][1]
+            rb = bls.search_s(*data[a.control]["binned"][:2], tr, fr)
+            cdr = rb["cdpp_by_d"][f"{min(bls.DURATIONS, key=lambda x: abs(x - a.dur)):.2f}"]
+            res["control_at_ref"] = at_ephemeris(tr, fr, a.period, a.t0, a.dur, cdr)
+            mid = 0.5 * (tr.min() + tr.max())
+            gap = tr[np.argmax(np.diff(tr)) + 1] if np.diff(tr).max() > 0.5 else mid
+            res["control_orbits_at_ref"] = {name: at_ephemeris(tr[m], fr[m], a.period, a.t0, a.dur, cdr)
+                                            for name, m in (("orbit1", tr < gap), ("orbit2", tr >= gap))}
+        (out_dir / "ffi_check.json").write_text(json.dumps(res, indent=1, default=float))
+        print(json.dumps({k: v for k, v in res.items() if k != "sectors"}, indent=1, default=float))
+        return
     tf = np.concatenate([data[s]["flat"][0] for s in ffi]); ff = np.concatenate([data[s]["flat"][1] for s in ffi])
     tb = np.concatenate([data[s]["binned"][0] for s in ffi]); fb = np.concatenate([data[s]["binned"][1] for s in ffi])
     blind = bls.search_s(tb, fb, tf, ff)
