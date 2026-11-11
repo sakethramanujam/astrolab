@@ -45,7 +45,7 @@ def lib_versions():
     return v
 
 
-PLATEAU_KEYS = ("grid_df", "P_grid", "n_tie_band", "n_plateaus", "disjoint", "plateau_width", "plateau_width_max", "P_lowest_edge", "sigma_P", "plateaus")
+PLATEAU_KEYS = ("grid_df", "P_grid", "n_tie_band", "n_plateaus", "disjoint", "plateau_width", "plateau_width_max", "P_lowest_edge", "P_grid_halfwidth", "plateaus")
 TIE_REL = 1e-9          # registered tie band: |S_i - S_max| <= TIE_REL * S_max (docs/preregistration/tie_break.md)
 
 
@@ -117,8 +117,8 @@ def choose_peak(per_d, periods):
     In-band = grid points with |S_i - S_max| <= TIE_REL * S_max over all trial durations. Their period indices are
     split into plateaus (runs of adjacent grid indices) and disjoint peaks (a peak = a plateau of width 1). The
     lowest-period rule chooses only between plateaus; on the chosen plateau P is the plateau centre
-    (P_lo + P_hi) / 2 (t0, D and the depth come from the lower-middle grid point, P_grid) and sigma_P = half the
-    plateau width in days, edges extended by half a grid step (half a grid step for a single point)."""
+    (P_lo + P_hi) / 2 (t0, D and the depth come from the lower-middle grid point, P_grid) and P_grid_halfwidth (the
+    grid-degeneracy half-width, not a period error) = half the plateau width in days, edges extended by half a grid step (half a grid step for a single point)."""
     top = max(float(p.max()) for *_, p in per_d)
     band = top - TIE_REL * abs(top)
     inb = {}                                                    # period index -> durations in band
@@ -136,7 +136,7 @@ def choose_peak(per_d, periods):
         c = lo + (hi - lo) // 2                                 # centre (lower-middle for even widths)
         width_days = float(periods[hi] - periods[lo]) + 0.5 * (step(lo) + step(hi))
         plats.append(dict(lo=lo, hi=hi, centre=c, width=int(hi - lo + 1), P_lo=float(periods[lo]),
-                          P_hi=float(periods[hi]), sigma_P=width_days / 2))
+                          P_hi=float(periods[hi]), hw=width_days / 2))
     ch = plats[0]                                               # lowest-period plateau or peak
     c = ch["centre"]
     Ds = sorted(inb.get(c, [])) or sorted({d for i in range(ch["lo"], ch["hi"] + 1) for d in inb[i]})
@@ -145,9 +145,9 @@ def choose_peak(per_d, periods):
     return dict(period=0.5 * (ch["P_lo"] + ch["P_hi"]), P_grid=float(r.period[c]), t0=float(r.transit_time[c]), duration=D, depth_box=float(r.depth[c]),
                 S_scan=float(p[c]), cdpp_d=cd, beta_d=beta, n_tie_band=int(sum(len(v) for v in inb.values())),
                 n_plateaus=len(plats), disjoint=len(plats) > 1, plateau_width=ch["width"],
-                plateau_width_max=max(q["width"] for q in plats), P_lowest_edge=ch["P_lo"], sigma_P=ch["sigma_P"],
+                plateau_width_max=max(q["width"] for q in plats), P_lowest_edge=ch["P_lo"], P_grid_halfwidth=ch["hw"],
                 grid_df=float(1.0 / periods[0] - 1.0 / periods[1]),
-                plateaus=json.dumps([[q["P_lo"], q["P_hi"], q["width"], q["sigma_P"]] for q in plats]))
+                plateaus=json.dumps([[q["P_lo"], q["P_hi"], q["width"], q["hw"]] for q in plats]))
 
 
 def pick():

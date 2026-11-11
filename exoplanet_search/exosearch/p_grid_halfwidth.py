@@ -1,14 +1,15 @@
-"""sigma_P for the candidate tables: half-width of the in-band plateau that contains the stored period
-(registered tie-break, docs/preregistration/tie_break.md, amendment 1).
+"""Grid-degeneracy half-width (P_grid_halfwidth) for the candidate tables: half-width of the in-band plateau that
+contains the stored period (registered tie-break, docs/preregistration/tie_break.md, amendment 1). Not a period
+error: it ignores photometric noise, and with n_tr <= 2 the true period may be P/n (period_ambiguous).
 
 Each candidate star is re-searched with the interim fixed search (`host_gate run --fixed`, x86_64 host, 1 thread
 per worker); the stored v1.0.0 period is located on that search's plateau list. If it lies on an in-band plateau
-(|P - centre| <= sigma_P), sigma_P is that plateau's half-width; otherwise the stored peak is not in the tie band of
-the fixed-grid search and sigma_P is half the local grid step, P^2 * df / 2 (flag sigma_P_in_band = False).
+(|P - centre| <= half-width), P_grid_halfwidth is that plateau's half-width; otherwise the stored peak is not in the
+tie band of the fixed-grid search and it is half the local grid step, P^2 * df / 2 (P_grid_halfwidth_in_band False).
 
-  python -m exosearch.sigma_p lists --outdir /tmp/sigp          # one TIC list per sector from site/data/candidates.csv
+  python -m exosearch.p_grid_halfwidth lists --outdir /tmp/sigp          # one TIC list per sector from site/data/candidates.csv
   (host_gate run --fixed --sector S --tics-file /tmp/sigp/tics_sS.txt --out /tmp/sigp/plat_sS.csv.gz, per sector)
-  python -m exosearch.sigma_p match /tmp/sigp/plat_s*.csv.gz     # -> products/interim/sigma_p_v1.csv
+  python -m exosearch.p_grid_halfwidth match /tmp/sigp/plat_s*.csv.gz     # -> products/interim/sigma_p_v1.csv
 """
 from __future__ import annotations
 
@@ -22,7 +23,7 @@ import pandas as pd
 from . import config
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = config.DATA_ROOT / "products" / "interim" / "sigma_p_v1.csv"
+OUT = config.DATA_ROOT / "products" / "interim" / "p_grid_halfwidth_v1.csv"
 
 
 def lists(outdir, cands=ROOT / "site" / "data" / "candidates.csv"):
@@ -36,8 +37,8 @@ def lists(outdir, cands=ROOT / "site" / "data" / "candidates.csv"):
 def locate(P, plateaus, grid_df):
     for lo, hi, w, sp in plateaus:
         if abs(P - 0.5 * (lo + hi)) <= sp * (1 + 1e-9):
-            return dict(sigma_P=sp, sigma_P_in_band=True, plateau_width=int(w), plateau_centre=0.5 * (lo + hi))
-    return dict(sigma_P=0.5 * P * P * grid_df, sigma_P_in_band=False, plateau_width=1, plateau_centre=np.nan)
+            return dict(P_grid_halfwidth=sp, P_grid_halfwidth_in_band=True, plateau_width=int(w), plateau_centre=0.5 * (lo + hi))
+    return dict(P_grid_halfwidth=0.5 * P * P * grid_df, P_grid_halfwidth_in_band=False, plateau_width=1, plateau_centre=np.nan)
 
 
 def match(files, out=OUT, stored=None):
@@ -52,13 +53,15 @@ def match(files, out=OUT, stored=None):
         for r in g[g.status == "ok"].itertuples():
             P = float(st.loc[int(r.tic)].period)
             loc = locate(P, json.loads(r.plateaus), float(r.grid_df))
-            rows.append(dict(tic=int(r.tic), sector=sector, period_v10=P, **loc,
+            n_tr = st.loc[int(r.tic)].n_transits
+            rows.append(dict(tic=int(r.tic), sector=sector, period_v10=P, **loc, n_transits=n_tr,
+                             period_ambiguous=bool(n_tr == n_tr and n_tr <= 2),
                              n_plateaus=int(r.n_plateaus), disjoint=bool(r.disjoint)))
     d = pd.DataFrame(rows)
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     d.to_csv(out, index=False)
-    print(f"{len(d)} rows -> {out}; in band {d.sigma_P_in_band.mean():.3f}; plateau>1 {(d.plateau_width > 1).mean():.3f}; "
-          f"median sigma_P {d.sigma_P.median():.5f} d")
+    print(f"{len(d)} rows -> {out}; in band {d.P_grid_halfwidth_in_band.mean():.3f}; plateau>1 {(d.plateau_width > 1).mean():.3f}; "
+          f"median half-width {d.P_grid_halfwidth.median():.5f} d")
     return d
 
 

@@ -41,3 +41,11 @@ diagnostics of stored v1.0.0 rows had been run when this was written. It replace
 5. sigma_P is carried into the candidate tables (site and exports).
 6. The period grid is not changed by this amendment. Plateau widths are reported only; any future grid change follows
    the Ofir (2014, A&A 561, A138) oversampling criterion and is registered before v1.1 production.
+
+### Amendment 1a — 2026-11-10 22:05 PST (terminology and flag; Scientist review). Still before any v1.1 run.
+
+* The plateau half-width of rule 2 is named the **grid-degeneracy half-width**, column `P_grid_halfwidth` (days),
+  everywhere (v1.1 rows, tables, exports, site). It is not a period error and is never labelled as one: it ignores the
+  photometric uncertainty and P/n aliases. "sigma_P" in amendment 1 above means this quantity.
+* New per-row flag **`period_ambiguous`** = number of transits ≤ 2: the true period may be P/n (n = 2, 3, …). Such
+  periods are shown as approximate/ambiguous, not to full precision.

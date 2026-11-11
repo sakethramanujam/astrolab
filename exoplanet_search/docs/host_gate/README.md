@@ -66,17 +66,17 @@ h1 ~700 stars/h per worker (idle priority under the running lanes), h2 ~2,650 st
 ## Dry run with the amended tie-break (plateau rule, 2026-11-10 21:30 PST)
 
 Same 200 S70 stars and fixes, tie-break per `docs/preregistration/tie_break.md` amendment 1 (P = plateau centre,
-sigma_P = half its width, lowest period only between disjoint plateaus/peaks). Commit dcd5914a on all hosts.
+P_grid_halfwidth = half its width, lowest period only between disjoint plateaus/peaks). Commit dcd5914a on all hosts.
 Summary: `summary_dryrun_plateau.json`.
 
-| host | arch | max abs ΔS | max abs ΔS_exact | best (P, D) differs | sigma_P differs | gate |
+| host | arch | max abs ΔS | max abs ΔS_exact | best (P, D) differs | P_grid_halfwidth differs | gate |
 |---|---|---|---|---|---|---|
 | h1 | x86_64 | 0 (reference) | 0 | 0 | 0 | pass |
 | h2 | arm64 | 7.1e-15 | 0 | 0 | 0 | **pass** |
 | h3 | x86_64 | 0 | 0 | 0 | 0 | pass |
 
 The 6 former switch stars resolve identically on all hosts: 38349319 and 611355482 are single plateaus (14 and 27
-grid steps, sigma_P 0.059 and 0.090 d); 51988338, 333557762, 353927437 and 365179665 have 6, 4, 9 and 17 disjoint
+grid steps, half-widths 0.059 and 0.090 d); 51988338, 333557762, 353927437 and 365179665 have 6, 4, 9 and 17 disjoint
 in-band plateaus/peaks (chosen plateau 1–2 steps). Still a dry run on the interim code; the registered statistic stays
 h1/h3-only until the gate passes on the v1.1 code.
 
@@ -94,10 +94,10 @@ Of the tied stars (more than one grid point in band) 68% (S70) and 71% (S105) ar
 disjoint peaks. Plateaus wider than one step occur almost only at n_tr ≤ 2: 16 of 64 (S70) and 27 of 100 (S105) stars
 with ≤ 2 transits, against 5 of 136 and 2 of 100 with ≥ 3 (max widths 36 and 35 steps at n_tr ≤ 2, ≤ 3 steps at
 n_tr ≥ 3). Distance from the lowest-edge period (the original rule) to the plateau centre, over plateau stars:
-median 0.0047 d (S70) / 0.0056 d (S105), p90 0.087 / 0.060 d, max 0.16 d; in units of sigma_P median 0.67, max 0.97
-(< 1 by construction, since sigma_P includes the half-steps at the edges). Widths are reported only; no grid change is
+median 0.0047 d (S70) / 0.0056 d (S105), p90 0.087 / 0.060 d, max 0.16 d; in units of the half-width median 0.67, max 0.97
+(< 1 by construction, since the half-width includes the half-steps at the edges). Widths are reported only; no grid change is
 proposed (any change follows the Ofir 2014 criterion and is registered before v1.1 production).
 
-**v1.0.0 cache flips:** all 26 S105 rows whose (P, D) changed between cached and freshly compiled kernels have both
-periods on the same in-band plateau (26/26 same plateau, 0 across disjoint peaks): the flips move P within a plateau,
-by less than sigma_P.
+**v1.0.0 cached vs fresh kernels:** the 26 S105 rows that differ differ only in the last bit of P (|ΔP| ≤ 1.8e-15 d,
+same grid point, identical D and T0); 26/26 stay inside one plateau and every shift is ≤ 5e-12 of the plateau
+half-width. (Earlier text called these (P, D) flips; corrected.)

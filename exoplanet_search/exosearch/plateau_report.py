@@ -25,6 +25,8 @@ def q(x):
 
 def one(d):
     d = d[d.status == "ok"].copy()
+    if "P_grid_halfwidth" not in d and "sigma_P" in d:           # files written before the rename
+        d["P_grid_halfwidth"] = d.sigma_P
     tie = d.n_tie_band.fillna(1) > 1
     plat = d.plateau_width > 1
     out = dict(n=int(len(d)), tie_band_gt1=int(tie.sum()),
@@ -45,9 +47,9 @@ def one(d):
     rho = d[["n_tr", "plateau_width_max"]].astype(float).corr(method="spearman").iloc[0, 1]
     out["spearman_n_tr_vs_width_max"] = None if rho != rho else float(rho)
     off = (d.period - d.P_lowest_edge)
-    out["lowest_edge_to_centre"] = dict(days=q(off[plat]), sigma_P=q((off / d.sigma_P)[plat]),
+    out["lowest_edge_to_centre"] = dict(days=q(off[plat]), in_halfwidths=q((off / d.P_grid_halfwidth)[plat]),
                                         note="plateau stars only (width > 1); 0 for single points by construction")
-    out["sigma_P_days"] = dict(all=q(d.sigma_P), plateau=q(d.sigma_P[plat]))
+    out["P_grid_halfwidth_days"] = dict(all=q(d.P_grid_halfwidth), plateau=q(d.P_grid_halfwidth[plat]))
     return out
 
 

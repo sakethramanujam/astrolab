@@ -30,7 +30,8 @@ function render(c, prev, next) {
   document.getElementById('title').textContent = `${name}`;
   document.getElementById('lede').innerHTML = `<span class="badge b-${c.status}">${LABEL[c.status] || c.status}</span> ` +
     (c.known ? `Our blind search re-found <b>${c.known}</b>. ` : c.toi_host ? `This star hosts TOI ${c.toi_host}, but this signal is at a different period. ` : 'No catalogue match at this period. ') +
-    `A ${fmt(c.depth_ppm)} ppm dip lasting ${fmt(c.duration_h, 1)} h, every ${fmt(c.period, 4)} days, seen ${c.n_transits} times in sector ${c.sector}.` +
+    `A ${fmt(c.depth_ppm)} ppm dip lasting ${fmt(c.duration_h, 1)} h, ${c.period_ambiguous ? `with a period of roughly ${fmt(c.period, 2)} days (ambiguous: only ${c.n_transits} transit${c.n_transits === 1 ? '' : 's'}, so P/2, P/3 … are possible)` : `every ${fmt(c.period, 4)} days`}, seen ${c.n_transits} times in sector ${c.sector}.` +
+    (c.P_grid_halfwidth_d != null ? ` Grid-degeneracy half-width ${fmt(c.P_grid_halfwidth_d, 5)} d (the range of trial periods that fit exactly as well; not a period error).` : '') +
     (c.status === 'needs_review' ? ` <b>Not a detection:</b> it passed our automated checks with S<sub>exact</sub> ${fmt(c.S, 1)} ≥ interim S* ${fmt(c.s_star, 1)}, which is where human vetting starts.` : '') +
     (c.status === 'uncalibrated' ? ` <b>Not calibrated:</b> ${c.calib_note || 'no interim S* comparison'}. It passed the v1.0.0 screens only.` : '');
   const mast = `https://mast.stsci.edu/portal/Mashup/Clients/Mast/Portal.html?searchQuery=${encodeURIComponent(`TIC ${c.tic}`)}`;
@@ -43,7 +44,7 @@ function render(c, prev, next) {
   const body = document.getElementById('body');
   const ro = readout([{ k: 'p', label: 'Period' }, { k: 'd', label: 'Depth' }, { k: 'dur', label: 'Duration' }, { k: 'rp', label: 'Radius' },
     { k: 'sde', label: 'SDE' }, { k: 'snr', label: 'SNR' }, { k: 'tmag', label: 'TESS mag' }, { k: 'star', label: 'Star' }]);
-  ro.set('p', `${fmt(c.period, 5)}${c.sigma_P_d != null ? ' ± ' + fmt(c.sigma_P_d, 5) : ''} d`); ro.set('d', `${fmt(c.depth_ppm)} ppm`); ro.set('dur', `${fmt(c.duration_h, 2)} h`);
+  ro.set('p', c.period_ambiguous ? `≈ ${fmt(c.period, 2)} d (ambiguous)` : `${fmt(c.period, 5)} d`, c.period_ambiguous ? 'badv' : ''); ro.set('d', `${fmt(c.depth_ppm)} ppm`); ro.set('dur', `${fmt(c.duration_h, 2)} h`);
   ro.set('rp', c.rp_earth != null ? `${fmt(c.rp_earth, 1)} R⊕` : '–', c.rp_rjup > 2 ? 'badv' : '');
   ro.set('sde', fmt(c.sde, 1), c.sde >= 9 ? 'good' : 'badv'); ro.set('snr', fmt(c.snr, 1), c.snr >= 7 ? 'good' : 'badv');
   ro.set('tmag', fmt(c.tmag, 2)); ro.set('star', c.radius_rsun ? `${fmt(c.radius_rsun, 2)} R☉${c.teff ? ` · ${fmt(c.teff)} K` : ''}` : '–');

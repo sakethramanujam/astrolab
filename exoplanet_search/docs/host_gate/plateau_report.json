@@ -111,7 +111,7 @@
     "p90": 0.08652624780073737,
     "max": 0.16365137025921683
    },
-   "sigma_P": {
+   "in_halfwidths": {
     "n": 21,
     "min": 0.49999973983959856,
     "median": 0.6666666389310825,
@@ -120,7 +120,7 @@
    },
    "note": "plateau stars only (width > 1); 0 for single points by construction"
   },
-  "sigma_P_days": {
+  "P_grid_halfwidth_days": {
    "all": {
     "n": 200,
     "min": 9.152681339247293e-06,
@@ -249,7 +249,7 @@
     "p90": 0.06042522582651663,
     "max": 0.16074443997883137
    },
-   "sigma_P": {
+   "in_halfwidths": {
     "n": 29,
     "min": 0.4999998294100391,
     "median": 0.6667537678148528,
@@ -258,7 +258,7 @@
    },
    "note": "plateau stars only (width > 1); 0 for single points by construction"
   },
-  "sigma_P_days": {
+  "P_grid_halfwidth_days": {
    "all": {
     "n": 200,
     "min": 7.772711806908195e-06,

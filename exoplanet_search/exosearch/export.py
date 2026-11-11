@@ -219,15 +219,16 @@ def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
         ok[(ok.state == "rejected") & (ok.passed == 1)].sort_values("sde", ascending=False),  # failed deep vetting
         ok[(ok.state == "rejected") & (ok.passed == 0) & (ok.depth < 0.05) & (ok.depth > 0)]
         .sort_values("sde", ascending=False).head(max_rejected)])
-    from . import sigma_p                       # plateau half-width at the stored P (tie_break.md, amendment 1)
-    sp = sigma_p.load()
+    from . import p_grid_halfwidth as pgh       # grid-degeneracy half-width at the stored P (tie_break.md, amendment 1)
+    sp = pgh.load()
     spd = {} if sp is None else {(int(a.tic), int(a.sector)): a for a in sp.itertuples()}
     cands = []
     for r in listed.itertuples():
         s_ = spd.get((int(r.tic), int(r.sector)))
         cands.append(dict(
-            sigma_P_d=None if s_ is None else _f(s_.sigma_P, 6),
-            sigma_P_in_band=None if s_ is None else bool(s_.sigma_P_in_band),
+            P_grid_halfwidth_d=None if s_ is None else _f(s_.P_grid_halfwidth, 6),
+            P_grid_halfwidth_in_band=None if s_ is None else bool(s_.P_grid_halfwidth_in_band),
+            period_ambiguous=bool(r.n_transits == r.n_transits and r.n_transits is not None and r.n_transits <= 2),
             tic=int(r.tic), sector=int(r.sector), status=r.state, known=_label(r),
             S=_f(r.S, 2), s_star=_f(r.s_star, 2) if r.S == r.S else None, calib_note=r.calib_note or None,
             toi_host=r.known_toi if r.known_toi and not r.toi_period_match else None,

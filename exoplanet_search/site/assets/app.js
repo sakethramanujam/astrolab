@@ -228,7 +228,8 @@ function candidates(d) {
   const detail = (c) => {
     const kv = [['Sector', c.sector], ['Match', c.known || (c.toi_host ? `TOI ${c.toi_host} host, other period` : 'none')], ['Duration', `${fmt(c.duration_h, 1)} h`],
       ['SNR', fmt(c.snr, 1)], ['Transits', c.n_transits], ['Tmag', fmt(c.tmag, 1)], ['Odd/even', `${fmt(c.odd_even_sigma, 1)}σ`], ['Phase 0.5', `${fmt(c.secondary_sigma, 1)}σ`],
-      ['Exact period', `${fmt(c.period, 5)}${c.sigma_P_d != null ? ' ± ' + fmt(c.sigma_P_d, 5) : ''} d`], ['Exact depth', `${fmt(c.depth_ppm)} ppm`]];
+      ['Period', c.period_ambiguous ? `≈ ${fmt(c.period, 2)} d, ambiguous (≤ 2 transits: P/2, P/3 … possible)` : `${fmt(c.period, 5)} d`],
+      ['Grid-degeneracy half-width', c.P_grid_halfwidth_d != null ? `${fmt(c.P_grid_halfwidth_d, 5)} d (not a period error)` : '–'], ['Exact depth', `${fmt(c.depth_ppm)} ppm`]];
     if (c.deep_vetted) kv.push(['Centroid offset', `${fmt(c.centroid_offset_px, 2)} px`], ['V-ratio', fmt(c.v_ratio, 2)], ['Size', `${fmt(c.rp_rjup, 2)} R_J`]);
     return el('div', { class: 'det' }, el('dl', {}, kv.map(([k, v]) => el('div', {}, el('dt', {}, k), el('dd', {}, String(v ?? '–'))))),
       el('a', { class: 'btn primary', href: `candidate.html#s${c.sector}/${c.tic}` }, 'Open light curve & checks →'),
@@ -250,7 +251,7 @@ function candidates(d) {
       const cells = {
         tic: `<a href="candidate.html#s${c.sector}/${c.tic}">${c.tic}</a><small>S${c.sector}${c.known ? ' · ' + c.known : ''}</small>`,
         status: `<span class="badge b-${c.status}">${LABEL[c.status] || c.status}</span>`,
-        period: per(c.period), depth_ppm: pct(c.depth_ppm), rp_earth: c.rp_earth == null ? '–' : c.rp_earth >= 10 ? fmt(c.rp_earth, 0) : fmt(c.rp_earth, 1),
+        period: c.period_ambiguous ? `≈${per(c.period)}<small>ambiguous</small>` : per(c.period), depth_ppm: pct(c.depth_ppm), rp_earth: c.rp_earth == null ? '–' : c.rp_earth >= 10 ? fmt(c.rp_earth, 0) : fmt(c.rp_earth, 1),
         sde: fmt(c.sde, 1), allflags: flagChips(c),
       };
       out.push(el('tr', { role: 'row', class: isOpen ? 'open' : '' }, el('td', { role: 'cell', class: 'c-x' }, btn),
