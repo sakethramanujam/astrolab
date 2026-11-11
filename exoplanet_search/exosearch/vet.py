@@ -1,11 +1,14 @@
 """Simple, transparent vetting metrics. These are screens, not validation."""
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 
 R_EARTH_PER_RSUN = 109.1
 
-THRESH = dict(sde=9.0, snr=7.0, min_transits=3, odd_even_sigma=3.0, secondary_sigma=3.0,
+THRESH = dict(min_transits=3, odd_even_sigma=3.0, secondary_sigma=3.0,
               max_depth=0.05, max_dur_ratio=1.5, max_rp_earth=25.0, variable_sigma=5.0,
               common_period_tol=0.005, common_period_min=4)
 
@@ -18,7 +21,18 @@ def expected_duration(period_d, radius_rsun):
     return (13.0 / 24.0) * (period_d / 365.25) ** (1 / 3) * rho ** (-1 / 3)
 
 
-def vet(st, bls_out, meta, t, f):
+THRESHOLD_FILE = Path(__file__).resolve().parents[1] / "configs" / "detection_threshold.json"
+
+
+def s_star(sector=None, camera=None):
+    """Detection threshold on S for (sector, camera); derived from inversions, so it lives outside THRESH
+    (and outside the frozen config hash). Returns (value, provisional)."""
+    cfg = json.loads(THRESHOLD_FILE.read_text())
+    v = cfg.get("per_sector_camera", {}).get(f"{sector}:{camera}", cfg["default"])
+    return float(v), bool(cfg.get("provisional", True))
+
+
+def vet(st, bls_out, meta, t, f, s_min=None):
     depth, depth_err = map(float, st["depth"])
     d_odd, e_odd = map(float, st["depth_odd"])
     d_even, e_even = map(float, st["depth_even"])
@@ -34,10 +48,10 @@ def vet(st, bls_out, meta, t, f):
     rp = np.sqrt(max(depth, 0)) * rstar * R_EARTH_PER_RSUN if rstar == rstar else np.nan
 
     flags = []
-    if bls_out["sde"] < THRESH["sde"]:
-        flags.append("low_sde")
-    if snr < THRESH["snr"]:
-        flags.append("low_snr")
+    if s_min is None:
+        s_min = s_star(meta.get("sector"), meta.get("camera"))[0]
+    if bls_out.get("S", 0.0) < s_min:
+        flags.append("low_s")               # detection threshold (SDE and white-noise SNR are logged only)
     if n_tr < THRESH["min_transits"]:
         flags.append("few_transits")
     if oe > THRESH["odd_even_sigma"]:

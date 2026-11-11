@@ -16,7 +16,7 @@ def test_vet_passes_clean_transit(synthetic_lc):
     t, f, e, truth = synthetic_lc
     tf, ff, ef, *_ = lightcurve.detrend(t, f, e)
     st = _stats(tf, ff, ef, truth)
-    out = dict(period=truth["period"], duration=truth["duration"], sde=15.0)
+    out = dict(period=truth["period"], duration=truth["duration"], sde=15.0, S=30.0)
     v = vet.vet(st, out, {"radius": 1.0}, tf, ff)
     assert v["passed"] == 1, v["flags"]
     assert v["snr"] > 20 and v["odd_even_sigma"] < 3 and v["n_transits"] >= 6
@@ -32,7 +32,7 @@ def test_vet_flags_eclipsing_binary(synthetic_lc):
     ph2 = ((t - t0) % P) - 0.5 * P
     f[np.abs(ph2) < dur / 2] -= 0.0015                           # secondary eclipse
     tf, ff, ef, *_ = lightcurve.detrend(t, f, e)
-    v = vet.vet(_stats(tf, ff, ef, truth), dict(period=P, duration=dur, sde=15.0), {"radius": 1.0}, tf, ff)
+    v = vet.vet(_stats(tf, ff, ef, truth), dict(period=P, duration=dur, sde=15.0, S=30.0), {"radius": 1.0}, tf, ff)
     assert "odd_even" in v["flags"] and "secondary" in v["flags"] and v["passed"] == 0
 
 

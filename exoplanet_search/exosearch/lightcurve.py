@@ -6,7 +6,8 @@ from astropy.io import fits
 from wotan import flatten
 
 
-def load_spoc(path):
+def load_spoc_raw(path):
+    """All cadences with finite TIME: t, flux, err, quality, meta (flux not normalised, nothing masked)."""
     with fits.open(path, memmap=False) as h:
         hdr = h[0].header
         d = h[1].data
@@ -16,8 +17,19 @@ def load_spoc(path):
         q = np.asarray(d["QUALITY"], int)
     meta = {k: hdr.get(h_) for k, h_ in [("tic", "TICID"), ("sector", "SECTOR"), ("tmag", "TESSMAG"),
                                           ("teff", "TEFF"), ("radius", "RADIUS"), ("logg", "LOGG"),
-                                          ("ra", "RA_OBJ"), ("dec", "DEC_OBJ")]}
-    m = np.isfinite(t) & np.isfinite(f) & np.isfinite(e) & (q == 0) & (e > 0)
+                                          ("ra", "RA_OBJ"), ("dec", "DEC_OBJ"), ("camera", "CAMERA"),
+                                          ("ccd", "CCD")]}
+    m = np.isfinite(t)
+    return t[m], f[m], e[m], q[m], meta
+
+
+def good_mask(f, e, q):
+    return np.isfinite(f) & np.isfinite(e) & (q == 0) & (e > 0)
+
+
+def load_spoc(path):
+    t, f, e, q, meta = load_spoc_raw(path)
+    m = good_mask(f, e, q)
     t, f, e = t[m], f[m], e[m]
     if len(f) == 0:
         return t, f, e, meta

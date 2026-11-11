@@ -9,7 +9,7 @@
 # EXO_LISTEN:${EXO_PORT:-8786} that GPU/MLX/CPU workers elsewhere can join. Default: localhost only.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-: "${DAY_WORKERS:=8}" "${NIGHT_WORKERS:=12}" "${MAX_LOAD:=14}" "${MIN_FREE_GB:=100}"
+: "${DAY_WORKERS:=8}" "${NIGHT_WORKERS:=12}" "${MAX_LOAD:=18}" "${MIN_FREE_GB:=100}"
 : "${DATA_DISK:=${EXO_DATA_ROOT:-/media/nfs01/astro_data/tess}}" "${PUBLISH:=1}" "${IDLE_SLEEP:=1800}"
 exec 9>/tmp/exosearch-run.lock
 flock -n 9 || { echo "another exosearch run holds the lock"; exit 0; }
@@ -25,9 +25,24 @@ wait_ok(){  # block until load and disk are fine
     return 0
   done
 }
+# Batch jobs (injection / null tests) claim workers by writing N into $CLAIM_DIR/<pid>.workers;
+# while any live claim exists the runner takes COMBINED_CAP - claimed (min 1) so the total stays capped.
+: "${CLAIM_DIR:=/tmp/exosearch-claims}" "${COMBINED_CAP:=16}"
+claimed(){
+  local n=0 f pid
+  for f in "$CLAIM_DIR"/*.workers; do
+    [[ -e "$f" ]] || continue
+    pid=$(basename "$f" .workers)
+    if kill -0 "$pid" 2>/dev/null; then n=$(( n + $(cat "$f") )); else rm -f "$f"; fi
+  done
+  echo "$n"
+}
 workers(){
-  local h; h=$(date +%-H)
-  if (( h >= 23 || h < 7 )) && awk -v l="$(load1)" 'BEGIN{exit !(l<6)}'; then echo "$NIGHT_WORKERS"; else echo "$DAY_WORKERS"; fi
+  local h w c; h=$(date +%-H)
+  if (( h >= 23 || h < 7 )) && awk -v l="$(load1)" 'BEGIN{exit !(l<6)}'; then w=$NIGHT_WORKERS; else w=$DAY_WORKERS; fi
+  c=$(claimed)
+  if (( c > 0 )); then w=$(( COMBINED_CAP - c )); (( w < 1 )) && w=1; (( w > DAY_WORKERS )) && w=$DAY_WORKERS; fi
+  echo "$w"
 }
 
 SCHED_ARGS=()

@@ -1,0 +1,7 @@
+{
+  "statistic": "S = depth_box / (CDPP_D / sqrt(N_tr))",
+  "provisional": true,
+  "default": 7.0,
+  "per_sector_camera": {},
+  "source": "placeholder before the inversion null run; replaced by the empirical 1/N_stars quantile of inverted-light-curve max S per sector and camera (still provisional until the analysis PR's GPD/Gumbel tail fit lands)"
+}

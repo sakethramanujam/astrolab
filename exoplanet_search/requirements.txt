@@ -12,3 +12,5 @@ dask[distributed]
 matplotlib
 requests
 tqdm
+batman-package
+setuptools   # batman imports distutils on Python 3.12

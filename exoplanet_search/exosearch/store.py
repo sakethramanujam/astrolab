@@ -17,6 +17,10 @@ COLS = {
     "flags": "TEXT", "passed": "INTEGER", "known_toi": "TEXT", "toi_disp": "TEXT",
     "toi_period_match": "INTEGER", "known_ctoi": "TEXT", "ctoi_period_match": "INTEGER",
     "known_planet": "TEXT", "planet_period_match": "INTEGER", "processed_at": "TEXT",
+    # v1.0.0: red-noise-aware detection statistic and provenance
+    "S": "REAL", "S_scan": "REAL", "n_tr": "REAL", "cdpp_d": "REAL", "beta_d": "REAL", "sigma_w": "REAL",
+    "depth_box": "REAL", "s_min": "REAL", "camera": "INTEGER", "ccd": "INTEGER",
+    "pipeline_version": "TEXT", "config_hash": "TEXT", "git_hash": "TEXT",
 }
 
 
@@ -26,6 +30,10 @@ def connect(path=None):
     con = sqlite3.connect(path)
     cols = ", ".join(f"{k} {v}" for k, v in COLS.items())
     con.execute(f"CREATE TABLE IF NOT EXISTS results ({cols}, PRIMARY KEY (tic, sector))")
+    have = {r[1] for r in con.execute("PRAGMA table_info(results)")}
+    for k, v in COLS.items():
+        if k not in have:
+            con.execute(f"ALTER TABLE results ADD COLUMN {k} {v}")
     con.execute("""CREATE TABLE IF NOT EXISTS runs (
         run_id INTEGER PRIMARY KEY AUTOINCREMENT, sector INTEGER, started_at TEXT, finished_at TEXT,
         n_selected INTEGER, n_searched INTEGER, n_errors INTEGER, search_wall_s REAL,

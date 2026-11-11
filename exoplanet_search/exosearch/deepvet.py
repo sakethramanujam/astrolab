@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import io
+import time
 import json
 import warnings
 
@@ -42,13 +43,16 @@ COLS = {
     "gaia_n_neighbours": "INTEGER", "gaia_n_can_mimic": "INTEGER", "gaia_mimic_min_sep": "REAL",
     "gaia_mimic_brightest_dm": "REAL", "eb_match": "TEXT", "v_ratio": "REAL", "v_sigma": "REAL",
     "duration_fine": "REAL", "sec_scan_sigma": "REAL", "sec_scan_phase": "REAL", "rp_rjup": "REAL",
+    "fit_k": "REAL", "fit_ar": "REAL", "fit_b": "REAL", "fit_chi2r": "REAL", "rho_transit": "REAL",
+    "rho_transit_logerr": "REAL", "rho_tic": "REAL", "rho_tic_err": "REAL", "rho_z": "REAL",
+    "ruwe": "REAL", "gaia_nss": "INTEGER",
     "deep_flags": "TEXT", "deep_notes": "TEXT", "updated_at": "TEXT",
 }
 R_JUP_RSUN = 0.10045
 VIZIER = ["https://vizier.cds.unistra.fr/viz-bin/asu-tsv", "https://vizier.cfa.harvard.edu/viz-bin/asu-tsv"]
 THRESH = dict(v_ratio=0.45, v_sigma=5.0, sec_scan_sigma=5.0, max_rp_rjup=2.0, eb_match_arcsec=42.0,
               centroid_px=1.0, centroid_warn_px=0.5, centroid_sigma=3.0, diff_dist_px=2.0, diff_snr=3.0, gaia_radius_px=2.0,
-              unresolved_arcsec=10.0)
+              unresolved_arcsec=10.0, rho_z=4.0, ruwe=1.4)
 
 
 def connect():
@@ -167,14 +171,20 @@ def _gaia_esa(ra, dec, radius_arcsec):
 
 
 def gaia_neighbours(ra, dec, radius_arcsec):
-    """Gaia DR3 cone (MAST mirror first, ESA archive as fallback), cached per position."""
-    cache = config.CATALOG_DIR / "gaia_cone" / f"{ra:.5f}_{dec:.5f}_{radius_arcsec:.0f}.csv"
+    """Gaia DR3 cone from the ESA archive, cached per position.
+    (v0 used astroquery's MAST 'Gaia' catalogue with version=3, which astroquery silently served as DR2;
+    those cones stay in catalogs/gaia_cone/ and are not reused.)"""
+    cache = config.CATALOG_DIR / "gaia_cone_dr3" / f"{ra:.5f}_{dec:.5f}_{radius_arcsec:.0f}.csv"
     if cache.exists():
         return pd.read_csv(cache)
-    try:
-        df = _gaia_mast(ra, dec, radius_arcsec)
-    except Exception:
-        df = _gaia_esa(ra, dec, radius_arcsec)
+    for attempt in range(4):
+        try:
+            df = _gaia_esa(ra, dec, radius_arcsec)
+            break
+        except Exception:
+            if attempt == 3:
+                raise
+            time.sleep(15 * (attempt + 1))
     df = df.dropna(subset=["phot_g_mean_mag"]).copy()
     cosd = np.cos(np.radians(dec))
     df["sep"] = 3600 * np.hypot((df.ra - ra) * cosd, df.dec - dec)
@@ -289,11 +299,15 @@ def eb_match(tic, ra, dec, period):
 
 
 def shape_and_secondary(row, lc_path):
-    from astropy.timeseries import BoxLeastSquares
     from .task import prepare
     d = prepare(lc_path)
     t, f, e = d["flat"]
-    P, t0 = float(row.period), float(row.t0)
+    return shape_metrics(t, f, e, float(row.period), float(row.t0))
+
+
+def shape_metrics(t, f, e, P, t0):
+    """V-ratio, fine duration and secondary scan on a detrended (unbinned) light curve."""
+    from astropy.timeseries import BoxLeastSquares
     durs = np.linspace(0.02, min(0.3, 0.2 * P), 40)
     bls = BoxLeastSquares(t, f, dy=e)
     pw = bls.power([P], durs, objective="likelihood")
@@ -306,7 +320,7 @@ def shape_and_secondary(row, lc_path):
     base = np.median(f[oot]) if oot.sum() > 10 else 1.0
     dc, do = base - np.mean(f[c]), base - np.mean(f[o])
     sc = np.std(f[oot]) / np.sqrt(max(c.sum(), 1)) if oot.sum() > 10 else np.nan
-    res = dict(duration_fine=dur, v_ratio=float(do / dc) if dc > 0 else None,
+    res = dict(duration_fine=dur, t0_fine=t0, v_ratio=float(do / dc) if dc > 0 else None,
                v_sigma=float(dc / sc) if sc and sc > 0 else None)
     # secondary scan: box of the same duration at every phase away from the primary
     ph = ((t - t0) / P) % 1.0
@@ -333,9 +347,11 @@ def shape_and_secondary(row, lc_path):
 
 
 # flags that turn a "needs review" signal into "rejected"; the rest are warnings
-REJECT = {"centroid_offset", "dip_off_target", "known_eb", "v_shape", "secondary_scan", "rp_gt_2rjup"}  # calibrated on S70 TOIs: each fires on <=3% of known planets
+# Each rejecting check fires on <=3% of known planets (v0: S70 TOIs; v1.0.0: density_mismatch tuned on the
+# non-held-out labelled stars of S70/S106/S107: |z|>4 flags 2% of planets, 14% of FPs/EBs).
+REJECT = {"centroid_offset", "dip_off_target", "known_eb", "v_shape", "secondary_scan", "rp_gt_2rjup", "density_mismatch"}
 BLEND = {"centroid_offset", "dip_off_target", "unresolved_neighbour"}
-EB = {"known_eb", "v_shape", "secondary_scan", "rp_gt_2rjup"}
+EB = {"known_eb", "v_shape", "secondary_scan", "rp_gt_2rjup", "density_mismatch"}
 
 
 # ---------------------------------------------------------------- driver
@@ -359,6 +375,12 @@ def flags_for(r):
         f.append("secondary_scan")
     if (r.get("rp_rjup") or 0) > THRESH["max_rp_rjup"]:
         f.append("rp_gt_2rjup")
+    if r.get("rho_z") is not None and abs(r["rho_z"]) > THRESH["rho_z"]:
+        f.append("density_mismatch")
+    if (r.get("ruwe") or 0) > THRESH["ruwe"]:
+        f.append("ruwe_high")                     # warning: astrometric excess noise -> possible binary
+    if (r.get("gaia_nss") or 0) > 0:
+        f.append("gaia_nss")                      # warning: Gaia DR3 non-single-star solution
     if r.get("gaia_n_can_mimic"):
         if (r.get("gaia_mimic_min_sep") or 99) < THRESH["unresolved_arcsec"]:
             f.append("unresolved_neighbour")      # too close for the centroid test to rule out
@@ -389,6 +411,11 @@ def vet_star(row, fname):
         out.update(shape_and_secondary(row, lc))
     except Exception as exc:
         notes.append(f"shape failed: {type(exc).__name__}: {exc}"[:160])
+    try:
+        out.update(stellar_checks(row, lc, out.get("t0_fine"), out.get("duration_fine")))
+    except Exception as exc:
+        notes.append(f"density/ruwe failed: {type(exc).__name__}: {exc}"[:160])
+    out.pop("t0_fine", None)
     if row.radius == row.radius and row.radius and row.depth > 0:
         out["rp_rjup"] = float(np.sqrt(row.depth) * row.radius / R_JUP_RSUN)
     else:
@@ -397,6 +424,34 @@ def vet_star(row, fname):
         notes.append(out["deep_notes"])
     out["deep_flags"] = ",".join(flags_for(out))
     out["deep_notes"] = "; ".join(notes) or None
+    return out
+
+
+def stellar_checks(row, lc_path, t0=None, dur=None):
+    """Transit-implied vs TIC density, and Gaia DR3 RUWE / non-single-star for the host."""
+    from . import density, stellar
+    from .task import prepare
+    tic = int(row.tic)
+    tp = stellar.tic_params([tic])
+    trow = tp.loc[tic].to_dict() if tic in tp.index else {}
+    out = {}
+    rho, erho = stellar.tic_rho(trow) if trow else (None, None)
+    out.update(rho_tic=rho, rho_tic_err=erho)
+    d = prepare(lc_path)
+    t, f, e = d["flat"]
+    u = stellar.quad_ld(trow.get("Teff"), trow.get("logg"))
+    fit = density.fit(t, f, e, float(row.period), float(t0 if t0 is not None else row.t0),
+                      float(dur or row.duration), float(row.depth), u, rho or 1.0)
+    if fit:
+        out.update({k: v for k, v in fit.items() if k in COLS})
+        out["rho_z"] = density.density_z(fit["rho_transit"], fit["rho_transit_logerr"], rho, erho)
+    g = str(trow.get("GAIA", ""))
+    if g.isdigit():
+        gd = stellar.gaia_dr3([g])
+        if int(g) in gd.index:
+            x = gd.loc[int(g)]
+            out["ruwe"] = None if pd.isna(x.ruwe) else float(x.ruwe)
+            out["gaia_nss"] = None if pd.isna(x.non_single_star) else int(x.non_single_star)
     return out
 
 

@@ -1,0 +1,16 @@
+{
+  "name": "injection_v1",
+  "spec": "Scientist injection spec, 2026-11-10",
+  "seed": 70106,
+  "sectors": [70, 106],
+  "hosts_per_sector": 4000,
+  "strata": {"tmag_edges": [0, 9, 10.5, 12, 13.5, 20], "rstar_edges": [0, 0.7, 1.2, 2.0, 100]},
+  "exclude": ["toi_hosts", "tess_eb_catalog"],
+  "draws": {"period": ["loguniform", 0.5, "half_baseline"], "rp_earth": ["loguniform", 0.5, 20.0],
+            "b": ["uniform", 0.0, 1.0], "ecc": 0.0, "t0": "uniform within one period of the data start"},
+  "model": {"code": "batman", "limb_darkening": "quadratic, Claret 2017 TESS at TIC Teff/logg",
+            "supersample": 1, "note": "2-min cadence: no supersampling (FFI cadences would need it)"},
+  "recovery": {"period_tol": 0.01, "t0_tol_durations": 0.5, "aliases": [2, 0.5, 3, 0.3333333333]},
+  "inject_into": "normalised PDCSAP flux, all cadences, before quality masking and detrending",
+  "one_injection_per_lc_per_run": true
+}
