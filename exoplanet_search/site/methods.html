@@ -34,7 +34,8 @@
   <section id="completeness" class="card lesson">
     <h2>2 · Completeness: what fraction of real planets would we find?</h2>
     <p>Each light curve gets one fake planet per run: random period, size and impact parameter, a limb-darkened <code>batman</code> transit,
-      put into the raw flux <i>before</i> any cleaning, then run through every step above. A cell shows the share of injected planets that were recovered (right period and epoch).</p>
+      put into the raw flux <i>before</i> any cleaning, then run through every step above. <i>Detected</i> means the right period and epoch with S at or above the
+      interim threshold S*; <i>passed vetting</i> means every check also passes. Stars failing the star-quality cut are left out here exactly as in the search and the noise tests.</p>
     <div class="stage"><div class="viz"><canvas id="cmap" aria-label="completeness map, period against planet radius"></canvas>
       <div id="cread"></div><canvas id="csnr" aria-label="completeness against expected S"></canvas></div>
       <div class="controls" id="cctl"><h3>Show</h3></div></div>
@@ -45,7 +46,8 @@
     <h2>3 · False alarms: what does pure noise look like?</h2>
     <p>Flip every light curve upside down (after removing flares) and a real planet becomes a brightening the search cannot fit; whatever the frozen search
       still finds is noise or instrument systematics. Scrambling day-long chunks destroys periodic signals too, but with one sector that test is limited.
-      The histogram is the best peak of every star. Drag the threshold to see how many noise peaks would pass.</p>
+      The histogram is the best peak of every star that passes the star-quality cut; the darker bars are noise peaks that pass every vetting check, which is
+      what sets the threshold. Drag it to see how many noise peaks would pass.</p>
     <div class="stage"><div class="viz"><canvas id="nhist" aria-label="histogram of noise-only best-peak S"></canvas><div id="nread"></div></div>
       <div class="controls" id="nctl"><h3>Null test</h3></div></div>
     <div id="nthr"></div>
@@ -69,6 +71,6 @@
     <div id="slist"></div>
   </section>
 </main>
-<footer class="wrap"><p>Numbers on this page are regenerated with each publish. Anything marked <b>provisional</b> waits on the statistical fits in the analysis code. Nothing here is a confirmed discovery.</p></footer>
+<footer class="wrap"><p>Numbers on this page are regenerated with each publish. Anything marked <b>interim</b> or <b>provisional</b> is replaced by the fits in the analysis code. Nothing here is a confirmed discovery.</p></footer>
 <script type="module" src="assets/methods.js"></script>
 </body></html>

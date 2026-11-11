@@ -29,11 +29,22 @@ if (J) {
     el('a', { href: `${REPO}/tree/exosearch-v${J.pipeline_version}/exoplanet_search` }, 'frozen code'),
     el('a', { href: `${REPO}/blob/exoplanet-search/exoplanet_search/reproduce.md` }, 'reproduce'),
     el('a', { href: `${REPO}/blob/exoplanet-search/exoplanet_search/analysis/SCHEMA.md` }, 'data schema'));
-  if (J.detection_threshold?.provisional) {
+  const DT = J.detection_threshold || {};
+  if (DT.interim || DT.provisional) {
     const p = document.getElementById('prov');
     p.hidden = false;
-    p.append(el('p', { html: `<b>Provisional.</b> The detection threshold S* is the empirical 1-in-N<sub>stars</sub> level of the flipped light curves; ` +
-      `the tail fit with error bars and the fitted completeness curve come with the analysis code. Counts below are exact; fits are not shown yet.` }));
+    const secs = Object.entries(DT.by_sector || {});
+    const ci = (a) => (a ? `${fmt(a[0], 1)}–${fmt(a[1], 1)}` : '–');
+    const pop = DT.population || {};
+    p.append(el('p', { html: DT.interim
+      ? `<b>Interim threshold.</b> ` + secs.map(([k, v]) => `Sector ${k}: <b>S* = ${fmt(v.s_star, 1)}</b> (68% interval ${ci(v.ci68)}, 95% ${ci(v.ci95)}), ` +
+          `from a generalized-Pareto fit to the tail of the flipped light curves that pass every vetting check, ` +
+          `${fmt(v.n_null)} tuning stars (${v.k_tail} vetted peaks in the tail), solved for one false alarm per ${fmt(v.n_stars)} searched stars.`).join(' ') +
+        ` False alarms are counted <i>after</i> vetting, and completeness below uses the same S* and the same vetting. ` +
+        `A star-quality cut registered in advance (${DT.quality_cut}) is applied to every population` +
+        (Object.keys(pop).length ? ` (${Object.entries(pop).filter(([, v]) => v.measured).map(([k, v]) => `S${k}: ${fmt(v.dropped)} of ${fmt(v.searched)} dropped`).join(', ')})` : '') +
+        `. The null run is still growing; the analysis code replaces these fits.`
+      : `<b>Provisional.</b> The detection threshold is not calibrated yet.` }));
   }
 } else {
   document.getElementById('main').prepend(el('div', { class: 'card' }, 'Reliability data not published yet.'));
@@ -146,7 +157,7 @@ if (N) {
   const keys = Object.keys(N.hist);
   const sectors = [...new Set(keys.map((k) => k.split('|')[0]))];
   const modes = [...new Set(keys.map((k) => k.split('|')[1]))];
-  const st = { sector: sectors[0], mode: modes.includes('invert') ? 'invert' : modes[0], thr: J.detection_threshold?.default ?? 7 };
+  const st = { sector: sectors[0], mode: modes.includes('invert') ? 'invert' : modes[0], thr: J.detection_threshold?.by_sector?.[sectors[0]]?.s_star ?? J.detection_threshold?.default ?? 12 };
   const ctl = document.getElementById('nctl');
   const ro = readout([{ k: 'n', label: 'Stars' }, { k: 'above', label: 'Noise peaks ≥ S*' }, { k: 'vet', label: '…passing all checks' }, { k: 'fa', label: 'False alarms / sector' }]);
   document.getElementById('nread').append(ro.el);
@@ -168,14 +179,21 @@ if (N) {
     ctx.strokeStyle = P.bad; ctx.beginPath(); ctx.moveTo(A.X(st.thr), 10); ctx.lineTo(A.X(st.thr), h - 40); ctx.stroke();
     let above = 0, vet = 0; H.all.forEach((c, i) => { if (E[i] >= st.thr) above += c; }); H.vetted.forEach((c, i) => { if (E[i] >= st.thr) vet += c; });
     const n = N.n_stars[`${st.sector}|${st.mode}`];
+    const nsec = N.threshold?.[st.sector]?.n_stars;
     ro.set('n', fmt(n)); ro.set('above', fmt(above / nr, nr > 1 ? 1 : 0)); ro.set('vet', fmt(vet / nr, nr > 1 ? 1 : 0), vet ? 'warnv' : 'good');
-    ro.set('fa', fmt(vet / nr, 1), vet / nr > 1 ? 'badv' : vet ? 'warnv' : 'good');
+    const fa = nsec && n ? (vet / nr) * (nsec / n) : vet / nr;      // scaled from the null sample to the whole sector
+    ro.set('fa', vet ? fmt(fa, 1) : `< ${fmt(nsec && n ? nsec / n : 1, 1)}`, fa > 1 ? 'badv' : vet ? 'warnv' : 'good');
     ctx.font = '12px Inter, sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = P.acc2; ctx.fillText('▮ passes every other check', w - 16, 22);
   }
   const t = document.getElementById('nthr');
-  const rows = Object.entries(N.threshold || {}).filter(([k]) => k.includes(':')).sort();
-  if (rows.length) t.append(el('p', { class: 'muted', html: `<b>Provisional S*</b> (1 false alarm per N stars, empirical, flipped light curves) by sector:camera: ` +
-    rows.map(([k, v]) => `${k} → <b>${v.s_star.toFixed(2)}</b> (N=${fmt(v.n)})`).join(' · ') + '. The fitted values with bootstrap errors come from the analysis code.' }));
+  const rows = Object.entries(N.threshold || {}).filter(([k]) => !k.includes(':') && N.threshold[k].ci68).sort();
+  const ci = (a) => (a ? `${fmt(a[0], 1)}–${fmt(a[1], 1)}` : '–');
+  for (const [k, v] of rows) {
+    const cams = Object.entries(v.per_camera || {}).map(([c, x]) => (x.s_star ? `camera ${c}: ${fmt(x.s_star, 1)} (${ci(x.ci68)})` : `camera ${c}: too few tail points`)).join(' · ');
+    t.append(el('p', { class: 'muted', html: `<b>Interim S* for sector ${k}: ${fmt(v.s_star, 1)}</b> (68% ${ci(v.ci68)}, 95% ${ci(v.ci95)}). ` +
+      `Fit: generalized Pareto above S = ${fmt(v.u, 0)} to ${v.k_tail} vetted noise peaks among ${fmt(v.n)} tuning stars (shape ξ = ${fmt(v.xi, 2)}); ` +
+      `the largest vetted noise peak so far is S = ${fmt(v.max_vetted, 1)}. Per camera: ${cams || '–'}. The histogram shows stars that pass the quality cut; the slider starts at S*.` }));
+  }
 } else document.getElementById('falsealarms').append(el('p', { class: 'muted' }, 'Null runs in progress.'));
 
 // ---------------------------------------------------------------- per-check rates
@@ -226,10 +244,10 @@ if (S) {
   sl.append(el('p', {}, S.note || ''));
   const g = el('div', { class: 'grid two' });
   for (const c of S.rows) {
-    const tone = c.status === 'survives' ? 'ok' : c.status === 'rejected' ? 'bad' : 'warn';
+    const tone = c.status === 'survives' ? 'ok' : c.status === 'rejected' ? 'bad' : c.status.startsWith('survives') ? 'warn' : '';
     g.append(el('a', { class: 'card scard', href: `candidate.html#s${c.sector}/${c.tic}` },
       el('div', { class: 'srow' }, el('b', {}, `TIC ${c.tic}`), el('span', { class: `pill ${tone}` }, c.status)),
-      el('div', { class: 'muted' }, `P ${fmt(c.period, 3)} d · ${c.rp_earth ? `${fmt(c.rp_earth, 1)} R⊕` : 'size ?'} · S ${fmt(c.S, 1)} · FAP ${c.fap != null ? (c.fap < 1e-3 ? c.fap.toExponential(1) : fmt(c.fap, 3)) : '–'}`),
+      el('div', { class: 'muted' }, `P ${fmt(c.period, 3)} d · ${c.rp_earth ? `${fmt(c.rp_earth, 1)} R⊕` : 'size ?'} · S ${fmt(c.S, 1)}${c.s_star ? ` (S* ${fmt(c.s_star, 1)})` : ''} · FAP ${c.fap != null ? (c.fap < 1e-3 ? c.fap.toExponential(1) : fmt(c.fap, 3)) : '–'}`),
       el('div', { class: 'muted' }, `ρ★ transit/TIC ${c.rho_transit != null && c.rho_tic ? fmt(c.rho_transit / c.rho_tic, 2) : '–'} (z ${fmt(c.rho_z, 1)}) · RUWE ${fmt(c.ruwe, 2)}`),
       c.flags?.length ? el('div', { class: 'fchips' }, c.flags.map((f) => el('span', { class: 'fchip' }, f))) : null));
   }
