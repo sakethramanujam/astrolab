@@ -221,15 +221,27 @@ layout are in [`reproduce.md`](reproduce.md); every output column is defined in
 * **Threshold S\* (interim analysis layer, `python -m exosearch.interim`).** S\* is set so that one star per
   sector produces a false alarm after vetting. It comes from a generalized-Pareto fit to the tail of the
   max S of *vetted* inverted-null peaks, i.e. peaks that pass every check except the threshold. Only tuning
-  stars that pass the star-quality cut are used, and a star-level bootstrap gives the CI. The current value,
-  the null sample size and the CI are in `configs/interim_threshold_v1.json`. The analysis code supersedes it.
+  stars that pass the star-quality cut are used, and a star-level bootstrap gives the CI. The tail starting
+  point u is chosen by a fixed parameter-stability rule (`exosearch.interim_review`), and S\* is quoted as
+  value (95% statistical CI) ± a systematic half-width over the stable u range. Cameras are pooled (no
+  per-camera S\* until the samples support it). S\* is **provisional** until both the flipped and the
+  scrambled nulls are complete; they are reported side by side. The current value, the null sample size
+  and the CI are in `configs/interim_threshold_v1.json`. The analysis code supersedes it.
   The `s_min` in `configs/detection_threshold.json` is only the frozen v1.0.0 in-pipeline screening floor
   that sets `low_s`/`passed` while the search runs. It is not a detection threshold. Every S is stored,
   and detections are scored downstream at S\*.
-* **Star-quality cut** (`configs/star_quality_v1.json`, registered before evaluation). Drop a star if
+* **Star-quality cut** (`configs/star_quality_v1.json`, frozen; **registered after unblinding**: written after
+  summary statistics of the flipped null had been seen, before the cut was evaluated on any population). Drop a star if
   beta_max > 3, measured on its own light curve (`python -m exosearch.quality`). The cut is applied
   identically to the real search population, the nulls and the injection hosts. In sector 70 it drops
-  2,553 of 12,797 stars.
+  2,553 of 12,797 stars (S106: 2,465 of 12,996). Sensitivity at beta_max 2.5/3/4/none and the known-planet
+  (TOI host) rate among dropped vs kept stars are in `products/.../analysis_layer/review/review.json` and on the
+  Methods page; TOI hosts are under-represented among dropped stars (odds ratio 0.27 in both sectors).
+* **Candidates are not detections.** Signals that pass every check at S >= S\* are listed for human vetting;
+  those whose expected post-vetting false alarms per sector at their S is >= 0.1 are labelled **marginal**
+  (e.g. TIC 318707987, see `docs/preregistration/tic318707987_ffi.md`).
+* **Reproduction data:** `data/reproduction/` holds gzipped CSV snapshots of the flipped-null, injection and
+  star-quality tables (columns as in `analysis/SCHEMA.md`, MANIFEST with hashes).
 * **Completeness and false-alarm rate are paired.** Detected = right period and epoch with S >= S\*.
   Passed = detected and every check passes. The false-alarm rate is quoted post-vetting at the same S\*.
 * **White-noise calibration** (`python -m exosearch.whitenoise`): see `docs/v1.1_odd_even_secondary.md`.

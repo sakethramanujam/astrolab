@@ -24,7 +24,7 @@ Package versions used for the published products are in each product's `provenan
 | held-out stars | `sha256("20261110:<tic>")/2**256 < 0.2` (`exosearch/holdout.py`, list in `holdout_tics.txt`) |
 | injection hosts | `configs/injection_v1.json` seed 70106; per injection `sha256("70106:<sector>:<run>:<tic>")[:4]` |
 | scramble realizations | `sha256("20261110:scramble:<r>:<sector>:<tic>")[:4]` |
-| star-quality cut | `configs/star_quality_v1.json` (beta_max > 3; registered before evaluation) |
+| star-quality cut | `configs/star_quality_v1.json` (beta_max > 3; frozen, registered after unblinding) |
 | detection threshold | `configs/interim_threshold_v1.json` (interim GPD fit, bootstrap seed 20261110, 2000 resamples); `configs/detection_threshold.json` holds only the v1.0.0 in-pipeline screening floor |
 | white-noise calibration | `sha256("20261110:white:<sector>:<tic>")[:4]`, 300 tuning stars drawn with seed 20261110 |
 
