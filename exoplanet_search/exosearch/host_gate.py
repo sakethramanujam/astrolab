@@ -45,7 +45,7 @@ def lib_versions():
     return v
 
 
-PLATEAU_KEYS = ("P_grid", "n_tie_band", "n_plateaus", "disjoint", "plateau_width", "plateau_width_max", "P_lowest_edge", "sigma_P", "plateaus")
+PLATEAU_KEYS = ("grid_df", "P_grid", "n_tie_band", "n_plateaus", "disjoint", "plateau_width", "plateau_width_max", "P_lowest_edge", "sigma_P", "plateaus")
 TIE_REL = 1e-9          # registered tie band: |S_i - S_max| <= TIE_REL * S_max (docs/preregistration/tie_break.md)
 
 
@@ -146,7 +146,8 @@ def choose_peak(per_d, periods):
                 S_scan=float(p[c]), cdpp_d=cd, beta_d=beta, n_tie_band=int(sum(len(v) for v in inb.values())),
                 n_plateaus=len(plats), disjoint=len(plats) > 1, plateau_width=ch["width"],
                 plateau_width_max=max(q["width"] for q in plats), P_lowest_edge=ch["P_lo"], sigma_P=ch["sigma_P"],
-                plateaus=json.dumps([[q["P_lo"], q["P_hi"], q["width"]] for q in plats]))
+                grid_df=float(1.0 / periods[0] - 1.0 / periods[1]),
+                plateaus=json.dumps([[q["P_lo"], q["P_hi"], q["width"], q["sigma_P"]] for q in plats]))
 
 
 def pick():
@@ -212,7 +213,7 @@ def run(host_id, workers, out, fixed=False, fresh_cache_dir=None, jobs=None, sec
         rows = list(pool.imap_unordered(_one, jobs))
     wall = time.time() - t0
     d = pd.DataFrame(rows).sort_values("tic")
-    meta = dict(host_id=host_id, arch=platform.machine(), system=platform.system(), lib_versions=lib_versions(),
+    meta = dict(host_id=host_id, sector=int(sector), arch=platform.machine(), system=platform.system(), lib_versions=lib_versions(),
                 workers=workers, wall_s=wall, fixes_applied=bool(fixed), fresh_numba_cache=bool(fresh_cache_dir),
                 tree_dirty=bool(dirty))
     d["host_id"], d["arch"], d["lib_versions"] = host_id, meta["arch"], json.dumps(meta["lib_versions"], sort_keys=True)
