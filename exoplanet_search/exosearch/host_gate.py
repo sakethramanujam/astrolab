@@ -205,7 +205,7 @@ def run(host_id, workers, out, fixed=False, fresh_cache_dir=None, jobs=None, sec
     dirty = worker_guard.require_clean(allow_dirty)
     if jobs is None:
         man = targets.fetch_manifest(sector).set_index("tic")
-        tics = [int(x) for x in Path(tics_file or TICS).read_text().split() if not x.startswith("#")]
+        tics = [int(l.split()[0]) for l in Path(tics_file or TICS).read_text().splitlines() if l.strip() and not l.startswith("#")]
         jobs = [(t, man.loc[t].fname, sector) for t in tics]
     t0 = time.time()
     with get_context("spawn").Pool(workers, initializer=_init, initargs=(fixed, fresh_cache_dir)) as pool:
