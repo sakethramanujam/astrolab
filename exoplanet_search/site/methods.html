@@ -24,7 +24,10 @@
       <div><p><b>Detrend.</b> Quality-flagged cadences dropped; biweight trend (0.75-day window) divided out; 0.3 days cut at each gap edge; upward outliers clipped; binned to 10 minutes.</p>
         <p><b>Search.</b> Box Least Squares over periods from 0.5 days to half the baseline and 8 durations (1–6 h). Each peak is scored with
         <code>S = δ / (CDPP<sub>D</sub> / √N<sub>tr</sub>)</code>: the box depth over the star's own noise on that duration, measured from the light curve,
-        so stars with correlated (red) noise are not over-trusted. SDE is still logged but no longer used as the threshold.</p></div>
+        so stars with correlated (red) noise are not over-trusted. SDE is still logged but no longer used as the threshold.</p>
+        <p><b>Depth audit (interim).</b> The frozen v1.0.0 pipeline took δ from BLS's fast approximation, which overstates the depth of some
+        noise peaks (mostly short periods with long boxes). The interim layer recomputes S at the same peak with the exact box depth, the depth
+        already used for planet radii and every screen. Real transits are unaffected; the noise tail drops, so the threshold falls.</p></div>
       <div><p><b>Screens.</b> At least 3 transits, odd/even depths agree, no secondary eclipse, not too deep or too long for the star, no brightening at half phase, not a period shared by many unrelated stars.</p>
         <p><b>Deep checks.</b> Difference-image centroid, Gaia DR3 neighbours, eclipsing-binary catalogues, V-shape, a secondary-eclipse scan, size limit, and new in v1: the
         star's density implied by the transit shape compared with the TIC catalogue, plus Gaia RUWE and non-single-star warnings.</p></div>

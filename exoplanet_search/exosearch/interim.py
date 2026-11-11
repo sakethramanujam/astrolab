@@ -175,7 +175,7 @@ def main():
         r["status"] = "provisional until both the flipped and the scrambled nulls are complete"
     out = dict(name="interim_threshold_v1", layer="interim analysis layer over frozen exosearch v1.0.0",
                pipeline_version=st["pipeline_version"], config_hash=st["config_hash"], git_hash=st["git_hash"],
-               statistic="S = depth_box / (CDPP_D / sqrt(N_tr))", interim=True,
+               statistic="S_exact = depth (compute_stats box depth) * sqrt(N_tr) / CDPP_D at the stored v1.0.0 peak (depth audit 2026-11-10; v1.0.0 S used the BLS fast-method depth_box); per-star lower bound", interim=True,
                definition=("S* solves N_null^-1 * #(vetted inverted-null max-S > S*) = 1/N_stars per sector, with a GPD tail fit "
                            "above u chosen per sector by the parameter-stability rule (u >= 6: all checks logged above it), quoted as value (95% stat CI) "
                            "+- systematic half-width over the stable u range, on tuning (non-holdout) stars passing {rule['name']}; "

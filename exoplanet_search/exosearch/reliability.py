@@ -248,7 +248,7 @@ def build():
         missed[Path(f).stem.split("_")[-1]] = json.loads(Path(f).read_text())
     layer = _layer()
     if layer is not None:
-        thr = dict(statistic="S = depth_box / (CDPP_D / sqrt(N_tr))", interim=True, provisional=True,
+        thr = dict(statistic="S_exact = depth * sqrt(N_tr) / CDPP_D (interim layer, see SCHEMA.md Depth columns)", interim=True, provisional=True,
                    status="provisional until both the flipped (inverted) and the scrambled nulls are complete",
                    nulls_complete=dict(invert=(PROD / "nulltests" / "invert" / "null_invert_maxS.parquet").exists(),
                                        scramble=bool(glob.glob(str(PROD / "nulltests" / "scramble_r*" / "null_*_maxS.parquet")))),
