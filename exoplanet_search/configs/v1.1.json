@@ -11,5 +11,11 @@
   "refine_min_sep_rel": 0.01,
   "vet": {"odd_even_sigma": 3.0, "odd_even_rel": 0.10, "secondary_sigma": 3.0, "secondary_rel": 0.10},
   "momentum_dump": {"quality_bit": 32, "window_d": 0.1, "reject_max_epochs": 2},
-  "s_floor_checks": 6.0
+  "s_floor_checks": 6.0,
+  "scramble": {
+    "gap_d": 0.5,
+    "gap_trim_d": 0.3,
+    "block_duration_multiplier": 3.0,
+    "longest_trial_duration_d": 0.25
+  }
 }

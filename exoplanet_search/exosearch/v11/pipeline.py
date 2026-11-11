@@ -18,7 +18,7 @@ import numpy as np
 
 from .. import batch, deepvet, density, lightcurve, nulltest, stellar
 from ..inject import G, MSUN, RSUN, DAY, R_EARTH_RSUN, t14, cdpp_at
-from . import kernels, search, settings, vet11
+from . import kernels, scramble, search, settings, vet11
 from .prewhiten import prewhiten
 
 KEEP_META = ("tmag", "teff", "radius", "ra", "dec", "camera", "ccd")
@@ -204,8 +204,11 @@ def run_job(job):
                                       tk.get("force_density", False)))
             else:
                 tg, fg, eg = t[good], f[good], e[good]
-                if tk["mode"] in ("invert", "scramble"):
+                if tk["mode"] == "invert":
                     tg, fg, eg = nulltest.transform(tk["mode"], tg, fg, eg, meta, tk["seed"])
+                elif tk["mode"] == "scramble":
+                    tg, fg, eg, scr_info = scramble.segment_rotate(tg, fg, eg, tk["seed"], job["cfg"])
+                    row.update(scr_info)
                 elif tk["mode"] != "real":
                     raise ValueError(tk["mode"])
                 d = prepare(tg, fg, eg, job["cfg"], pw_on, tk.get("comb_guard"))
