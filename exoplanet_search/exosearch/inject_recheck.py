@@ -95,7 +95,7 @@ def _star(job):
         _TIE.clear()
         row = inject.run_one(job, lc, r, sd)
         row.update(_TIE)
-        rows.append({k: row.get(k) for k in ("key", "tic", "run", "seed", "status", "P_inj", "P_rec", "t0_rec",
+        rows.append({k: row.get(k) for k in ("key", "tic", "run", "seed", "status", "error", "P_inj", "P_rec", "t0_rec",
                                              "dur_rec", "depth_rec", "S", "n_tr_rec", "cdpp_d_rec", "s_min",
                                              *FLAGS, "failed_checks", "n_tie_periods", "n_plateaus",
                                              "plateau_width_max")})
