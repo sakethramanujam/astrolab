@@ -196,3 +196,15 @@ def test_shard_assignment_stable():
     assert run.assign(1234, w) == run.assign(1234, w)
     share = {h: hs.count(h) / len(hs) for h in ("h1", "h2", "h3")}
     assert abs(share["h2"] - 0.7) < 0.03 and abs(share["h3"] - 0.1) < 0.02
+
+
+def test_candidate_order_ignores_last_bit_ties():
+    periods = np.linspace(1, 10, 1001)
+    p = np.zeros(1001)
+    p[100] = 20.0                         # global peak
+    p[700] = 10.0 * (1 + 1e-15)           # two disjoint, exactly tied (last bit) secondary peaks
+    p[300] = 10.0
+    c1, *_ = search.candidates([dict(D=0.1, p=p)], periods, 2, 0.01)
+    p2 = p.copy(); p2[700], p2[300] = 10.0, 10.0 * (1 + 1e-15)
+    c2, *_ = search.candidates([dict(D=0.1, p=p2)], periods, 2, 0.01)
+    assert c1[1]["idx"] == c2[1]["idx"] == 300   # lowest period among the tie, on either host

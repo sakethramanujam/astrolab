@@ -120,6 +120,21 @@ def local_plateau(smax, periods, i):
     return _plateau(periods, lo, hi)
 
 
+def _tie_order(loc, smax):
+    """Local maxima in descending order, where values within TIE_REL of the current maximum count as equal and go
+    lowest period first. A plain sort would order exact ties by last-bit differences, which differ between CPU
+    architectures (single-transit stars have many disjoint peaks with the same S)."""
+    rem = list(map(int, loc))                      # ascending index = ascending period
+    vals = {i: float(smax[i]) for i in rem}
+    while rem:
+        vmax = max(vals[i] for i in rem)
+        band = [i for i in rem if vals[i] >= vmax - TIE_REL * abs(vmax)]
+        for i in band:                             # already in ascending period order
+            yield i
+        bs = set(band)
+        rem = [i for i in rem if i not in bs]
+
+
 def candidates(per_d, periods, k, sep):
     """First: the registered tie-break choice. Then distinct local maxima of the max-over-D scan, descending."""
     plats, inb = plateaus_in_band(per_d, periods)
@@ -133,9 +148,8 @@ def candidates(per_d, periods, k, sep):
     if k <= 1:
         return out, plats, inb, smax
     loc = np.flatnonzero(np.isfinite(smax) & (smax >= np.r_[-np.inf, smax[:-1]]) & (smax >= np.r_[smax[1:], -np.inf]))
-    loc = loc[np.argsort(-smax[loc], kind="stable")]
     chosen_P = [0.5 * (ch["P_lo"] + ch["P_hi"])]
-    for i in loc:
+    for i in _tie_order(loc, smax):
         if len(out) >= k:
             break
         if any(abs(periods[i] / p - 1) <= sep for p in chosen_P):
