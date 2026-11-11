@@ -23,8 +23,12 @@ OUTROOT = DATA / "products" / "v1.1.0"
 STATUS = OUTROOT / "launch_status.json"
 WT = Path("/tmp/exo-v11-launch")                    # scratch worktree for registration commits
 PROD = Path("/tmp/exo-v11-prod")                    # coordinator production worktree, detached at the pinned commit
-WEIGHTS = "h1:0.14,h2:0.72,h3:0.07,h4:0.07"
-WORKERS = {"h1": 6, "h2": 13, "h3": 6, "h4": 6}              # <= 75% of cores; h1 also backs off above load 18
+# About 50% of cores per host, nice 19; h1 also pauses while its 5-min load is above 18.
+WORKERS = {"h1": 8, "h2": 9, "h3": 6, "h4": 6}
+# TIC shares proportional to measured throughput (tasks/h per worker x workers), so all hosts finish together.
+# Measured 2026-11-10 on the v1.1 gate / validation runs: h1 1251 (with the v1.0 lanes running), h2 3008
+# (mixed-task validation), h3 573, h4 771. Expected capacity: h1 10.0k, h2 27.1k, h3 3.4k, h4 4.6k tasks/h.
+WEIGHTS = "h1:0.222,h2:0.600,h3:0.076,h4:0.102"
 DONE = ["DONE  python -m exosearch.nulltest --mode invert --sectors 70,106",
         "DONE  python -m exosearch.nulltest --mode scramble --realization 0"]
 PRIVATE = re.compile(r"/(?:ho)me/|/(?:Us)ers/|192\.168\.|\.local\b")

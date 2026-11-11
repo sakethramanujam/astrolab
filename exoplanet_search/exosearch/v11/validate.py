@@ -115,7 +115,7 @@ def compare_arms(df, set_, arm_a, arm_b, by, bins, label, rng, judge="recovery")
     for k, idx in a.groupby(cat, observed=True).groups.items():
         ra, rb = a.loc[idx].recovered.values.astype(float), b.loc[idx].recovered.values.astype(float)
         dr, ci = _paired(ra, rb, rng)
-        both = a.loc[idx].matched.values & b.loc[idx].matched.values
+        both = a.loc[idx].matched.fillna(False).values.astype(bool) & b.loc[idx].matched.fillna(False).values.astype(bool)
         dd, dci = _paired_median(a.loc[idx].depth_ratio.values[both], b.loc[idx].depth_ratio.values[both], rng)
         n = int(len(idx))
         r = dict(bin=f"{label} {k}", n=n, rec_a=float(ra.mean()), rec_b=float(rb.mean()), d_rec=dr, d_rec_ci95=ci,
