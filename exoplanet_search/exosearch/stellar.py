@@ -179,3 +179,13 @@ def gaia_dr3(dr2_ids, chunk=300, log=print, strict=False):
     if have is None:
         return pd.DataFrame(columns=cols).set_index("dr2_source_id")
     return have.set_index("dr2_source_id")
+
+
+if __name__ == "__main__":       # warm the TIC / Gaia caches for whole sectors: python -m exosearch.stellar 70 106
+    import sys
+    from . import store
+    con = store.connect()
+    tics = pd.concat([store.frame(con, int(s)).tic for s in sys.argv[1:]]).unique()
+    tp = tic_params(tics, chunk=1000)
+    print("TIC rows", len(tp), flush=True)
+    print("Gaia rows", len(gaia_dr3(tp.GAIA.tolist(), chunk=500, strict=True)), flush=True)

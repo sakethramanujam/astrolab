@@ -65,7 +65,7 @@ def pmap(fn, tasks, out_dir, workers, key="key", task_key="key", part_size=500, 
             r = fu.result()
             buf.extend(r if isinstance(r, list) else [r])
             if len(buf) >= part_size or i == len(futs):
-                pd.DataFrame(buf).to_parquet(out_dir / f"part-{n:05d}.parquet", index=False)
+                pd.DataFrame(buf).to_parquet(out_dir / f"part-{n:05d}-{os.getpid()}.parquet", index=False)   # pid: lanes can share a dir
                 n += 1
                 buf = []
                 el = time.time() - t0
