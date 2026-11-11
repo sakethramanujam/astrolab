@@ -3,10 +3,10 @@
  "layer": "interim analysis layer over frozen exosearch v1.0.0",
  "pipeline_version": "1.0.0",
  "config_hash": "80ffc7f29943",
- "git_hash": "fe7057c53b",
+ "git_hash": "3452f94935",
  "statistic": "S = depth_box / (CDPP_D / sqrt(N_tr))",
  "interim": true,
- "definition": "S* solves N_null^-1 * #(vetted inverted-null max-S > S*) = 1/N_stars per sector, with a GPD tail fit above u=6.0 (all checks logged above u), on tuning (non-holdout) stars passing star_quality_v1; CI from 2000 star-level bootstrap resamples. False-alarm rate is post-vetting. Partial null: the sample grows as the inverted run proceeds.",
+ "definition": "S* solves N_null^-1 * #(vetted inverted-null max-S > S*) = 1/N_stars per sector, with a GPD tail fit above u chosen per sector by the parameter-stability rule (u >= 6: all checks logged above it), quoted as value (95% stat CI) +- systematic half-width over the stable u range, on tuning (non-holdout) stars passing {rule['name']}; CI from 2000 star-level bootstrap resamples. False-alarm rate is post-vetting. Partial null: the sample grows as the inverted run proceeds.",
  "quality_cut": "drop star if beta_max > 3.0",
  "population": {
   "70": {
@@ -28,27 +28,27 @@
  },
  "sectors": {
   "70": {
-   "n_null": 3377,
+   "n_null": 4410,
    "n_stars": 10244,
    "target_rate": 9.761811792268645e-05,
-   "u": 6.0,
-   "k_tail": 153,
-   "xi": 0.3036779449251956,
-   "sigma": 0.4589476213501547,
-   "s_star": 14.241890281585157,
+   "u": 6.25,
+   "k_tail": 129,
+   "xi": 0.20756630568995021,
+   "sigma": 0.5626190215056799,
+   "s_star": 12.393062745555328,
    "ci68": [
-    11.805060380353865,
-    17.121577251341563
+    10.803383880742524,
+    14.18007564712529
    ],
    "ci95": [
-    10.246748053182964,
-    21.702151522619026
+    9.746131844206667,
+    16.76621787368384
    ],
    "n_boot_ok": 2000,
-   "n_vetted": 153,
+   "n_vetted": 208,
    "vetted_exceed": {
-    "7": 25,
-    "8": 10,
+    "7": 35,
+    "8": 11,
     "10": 4,
     "12": 0,
     "15": 0,
@@ -56,34 +56,46 @@
    },
    "max_vetted": 11.322599095442307,
    "sensitivity": {
-    "6.0": 14.241890281585157,
-    "7.0": 12.350830212228196,
-    "8.0": 11.320043376241626
+    "6.0": 12.758537642277364,
+    "7.0": 11.806525106549595,
+    "8.0": 12.747558019193708
    },
-   "dropped_null_quality": 1244,
-   "held_out_excluded": 879,
+   "u_rule": "lowest u >= 6.0 with k >= 50 whose xi is within 1 bootstrap SE of xi at every higher u with k >= 30",
+   "u_stable": [
+    6.25,
+    6.5,
+    6.75,
+    7.0
+   ],
+   "sys_range": [
+    11.806525106549595,
+    12.765660717519058
+   ],
+   "sys_halfwidth": 0.47956780548473166,
+   "dropped_null_quality": 1467,
+   "held_out_excluded": 1123,
    "per_camera": {
     "1": {
-     "n_null": 1151,
-     "n_stars": 3491,
-     "target_rate": 0.00028640867439175683,
-     "u": 6.0,
-     "k_tail": 40,
-     "xi": 0.16719353838364853,
-     "sigma": 0.4727018113383943,
-     "s_star": 9.479378697517577,
+     "n_null": 1538,
+     "n_stars": 3572,
+     "target_rate": 0.00027990630691745593,
+     "u": 6.25,
+     "k_tail": 39,
+     "xi": -0.13253145028139351,
+     "sigma": 0.7337981699200753,
+     "s_star": 8.739725522765626,
      "ci68": [
-      8.516257173565972,
-      10.381080772187659
+      8.32511105722262,
+      8.984712178711218
      ],
      "ci95": [
-      7.856611862544584,
-      11.94892559567827
+      7.898251262792486,
+      9.516780844053404
      ],
      "n_boot_ok": 500,
-     "n_vetted": 40,
+     "n_vetted": 68,
      "vetted_exceed": {
-      "7": 6,
+      "7": 11,
       "8": 2,
       "10": 0,
       "12": 0,
@@ -92,32 +104,34 @@
      },
      "max_vetted": 8.517948063253433,
      "sensitivity": {
-      "6.0": 9.479378697517577,
-      "7.0": 8.471934473930633,
+      "6.0": 9.239207024377922,
+      "7.0": 8.498457698975985,
       "8.0": null
-     }
+     },
+     "alpha": "own (1/N_cam)",
+     "s_star_sector_alpha": 9.136758962431534
     },
     "2": {
-     "n_null": 425,
-     "n_stars": 1289,
-     "target_rate": 0.000775662080529205,
-     "u": 6.0,
+     "n_null": 895,
+     "n_stars": 2078,
+     "target_rate": 0.00048100100563022046,
+     "u": 6.25,
      "k_tail": 31,
-     "xi": 0.580044888517252,
-     "sigma": 0.3990705877930584,
-     "s_star": 14.91022300165031,
+     "xi": 0.2990182553597792,
+     "sigma": 0.5855126685545816,
+     "s_star": 11.326377953553806,
      "ci68": [
-      10.411655195747336,
-      22.372178379795244
+      9.314867428028148,
+      13.275789811937903
      ],
      "ci95": [
-      7.820670187510023,
-      68.60430783054046
+      7.770944869451946,
+      16.86004666632306
      ],
      "n_boot_ok": 500,
-     "n_vetted": 31,
+     "n_vetted": 49,
      "vetted_exceed": {
-      "7": 5,
+      "7": 8,
       "8": 3,
       "10": 2,
       "12": 0,
@@ -126,39 +140,41 @@
      },
      "max_vetted": 11.322599095442307,
      "sensitivity": {
-      "6.0": 14.91022300165031,
-      "7.0": 11.2331898688829,
+      "6.0": 11.480432422606816,
+      "7.0": 11.459815391482952,
       "8.0": null
-     }
+     },
+     "alpha": "own (1/N_cam)",
+     "s_star_sector_alpha": 15.624693121002977
     },
     "3": {
-     "n_null": 448,
-     "k_tail": 24,
+     "n_null": 547,
+     "k_tail": 18,
      "s_star": null,
      "note": "fewer than 30 vetted exceedances; sector value applies"
     },
     "4": {
-     "n_null": 1353,
-     "n_stars": 4104,
-     "target_rate": 0.0002436484731891442,
-     "u": 6.0,
-     "k_tail": 58,
-     "xi": 0.20909480036598826,
-     "sigma": 0.5682596082424873,
-     "s_star": 11.29349536853363,
+     "n_null": 1430,
+     "n_stars": 3321,
+     "target_rate": 0.0003010460839433897,
+     "u": 6.25,
+     "k_tail": 41,
+     "xi": 0.22216519937727075,
+     "sigma": 0.6039946168087724,
+     "s_star": 11.01269137111365,
      "ci68": [
-      9.558770641659395,
-      13.420477059581323
+      9.499194178171935,
+      12.83375639617409
      ],
      "ci95": [
-      8.206273491693095,
-      16.857902723487705
+      8.296707947108406,
+      16.193490133473784
      ],
      "n_boot_ok": 500,
-     "n_vetted": 58,
+     "n_vetted": 59,
      "vetted_exceed": {
-      "7": 11,
-      "8": 4,
+      "7": 12,
+      "8": 5,
       "10": 2,
       "12": 0,
       "15": 0,
@@ -166,10 +182,12 @@
      },
      "max_vetted": 10.983575458399773,
      "sensitivity": {
-      "6.0": 11.29349536853363,
-      "7.0": 11.426933682659723,
-      "8.0": null
-     }
+      "6.0": 10.974709312879773,
+      "7.0": 10.903138647453135,
+      "8.0": 11.6693229012291
+     },
+     "alpha": "own (1/N_cam)",
+     "s_star_sector_alpha": 13.13953460060905
     }
    }
   }
