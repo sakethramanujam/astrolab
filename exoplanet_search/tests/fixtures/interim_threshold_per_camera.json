@@ -1,0 +1,16 @@
+{
+  "name": "test fixture: per-camera S* schema used when the cross-check was first written",
+  "population": {"70": {"kept": 10244}},
+  "sectors": {
+    "70": {
+      "s_star": 14.241890281585157,
+      "u": 6.0,
+      "per_camera": {
+        "1": {"s_star": 9.479378697517577},
+        "2": {"s_star": 14.91022300165031},
+        "3": {"s_star": null},
+        "4": {"s_star": 11.29349536853363}
+      }
+    }
+  }
+}
