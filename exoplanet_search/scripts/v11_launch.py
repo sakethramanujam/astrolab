@@ -23,8 +23,8 @@ OUTROOT = DATA / "products" / "v1.1.0"
 STATUS = OUTROOT / "launch_status.json"
 WT = Path("/tmp/exo-v11-launch")                    # scratch worktree for registration commits
 PROD = Path("/tmp/exo-v11-prod")                    # coordinator production worktree, detached at the pinned commit
-WEIGHTS = "h1:0.15,h2:0.78,h3:0.07"
-WORKERS = {"h1": 6, "h2": 13, "h3": 6}              # <= 75% of cores; h1 also backs off above load 18
+WEIGHTS = "h1:0.14,h2:0.72,h3:0.07,h4:0.07"
+WORKERS = {"h1": 6, "h2": 13, "h3": 6, "h4": 6}              # <= 75% of cores; h1 also backs off above load 18
 DONE = ["DONE  python -m exosearch.nulltest --mode invert --sectors 70,106",
         "DONE  python -m exosearch.nulltest --mode scramble --realization 0"]
 PRIVATE = re.compile(r"/(?:ho)me/|/(?:Us)ers/|192\.168\.|\.local\b")

@@ -13,10 +13,11 @@ exact period, duration and P_grid_halfwidth for the primary and every option a-d
 | h1 | x86_64 | 200 | 0 | reference |
 | h2 | arm64 | 200 | 0 | 3.0e-11 |
 | h3 | x86_64 | 200 | 0 | 0 (bit-identical) |
+| h4 | x86_64 (WSL2, uv Python 3.12.3) | 200 | 0 | 3.1e-11 |
 
 **PASS.** The first run (bb805a95) failed on one h2 star: TIC 353927437, a single transit whose disjoint
 refinement peaks are exactly tied, so their order followed last-bit differences. 130df5dc orders local maxima with
-the registered 1e-9 tie band (lowest period first). After that fix all three hosts agree. Same 28 prewhitened stars,
+the registered 1e-9 tie band (lowest period first). After that fix all three hosts agree. h4 joined later and ran the same 200 stars at bc8c681e, which differs from 130df5dc only in allowing the host id h4 (no numerics); it passes and is in the production split. Same 28 prewhitened stars,
 24 stars with more than one peak in the tie band, and 19 with a plateau wider than one grid step on every host.
 
 ## Prewhitening and duration-cap validation (`validation.json`)

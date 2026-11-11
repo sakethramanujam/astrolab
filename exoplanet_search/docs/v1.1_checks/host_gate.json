@@ -351,6 +351,120 @@
    "prewhitened_stars": 28,
    "runtime_s_median": 5.954624644946307,
    "passes": true
+  },
+  {
+   "host_id": "h4",
+   "arch": "x86_64",
+   "lib_versions": {
+    "astropy": "8.0.2",
+    "batman-package": "2.5.3",
+    "llvmlite": "0.50.0",
+    "numba": "0.68.1",
+    "numpy": "2.5.4",
+    "pandas": "2.3.3",
+    "pyarrow": "26.0.1",
+    "python": "3.12.3",
+    "scipy": "1.18.1",
+    "wotan": "2.1"
+   },
+   "commit": "bc8c681e432a30bc0d7212a72cb3974cf8d197c2",
+   "n_rows": 200,
+   "n_ok": 200,
+   "n_err": 0,
+   "n_compared": 200,
+   "columns": {
+    "S": {
+     "max_abs_diff": 3.072031518058793e-11,
+     "n_fail": 0
+    },
+    "period": {
+     "n_differ": 0,
+     "max_abs_diff": 0.0
+    },
+    "P_grid": {
+     "n_differ": 0,
+     "max_abs_diff": 0.0
+    },
+    "duration": {
+     "n_differ": 0,
+     "max_abs_diff": 0.0
+    },
+    "P_grid_halfwidth": {
+     "n_differ": 0,
+     "max_abs_diff": 0.0
+    },
+    "S_opt_a": {
+     "max_abs_diff": 3.072031518058793e-11,
+     "n_fail": 0
+    },
+    "period_opt_a": {
+     "n_differ": 0,
+     "max_abs_diff": 0.0
+    },
+    "duration_opt_a": {
+     "n_differ": 0,
+     "max_abs_diff": 0.0
+    },
+    "P_grid_halfwidth_opt_a": {
+     "n_differ": 0,
+     "max_abs_diff": 0.0
+    },
+    "S_opt_b": {
+     "max_abs_diff": 3.072031518058793e-11,
+     "n_fail": 0
+    },
+    "period_opt_b": {
+     "n_differ": 0,
+     "max_abs_diff": 0.0
+    },
+    "duration_opt_b": {
+     "n_differ": 0,
+     "max_abs_diff": 0.0
+    },
+    "P_grid_halfwidth_opt_b": {
+     "n_differ": 0,
+     "max_abs_diff": 0.0
+    },
+    "S_opt_c": {
+     "max_abs_diff": 3.072031518058793e-11,
+     "n_fail": 0
+    },
+    "period_opt_c": {
+     "n_differ": 0,
+     "max_abs_diff": 0.0
+    },
+    "duration_opt_c": {
+     "n_differ": 0,
+     "max_abs_diff": 0.0
+    },
+    "P_grid_halfwidth_opt_c": {
+     "n_differ": 0,
+     "max_abs_diff": 0.0
+    },
+    "S_opt_d": {
+     "max_abs_diff": 3.0823343877273146e-11,
+     "n_fail": 0
+    },
+    "period_opt_d": {
+     "n_differ": 0,
+     "max_abs_diff": 0.0
+    },
+    "duration_opt_d": {
+     "n_differ": 0,
+     "max_abs_diff": 0.0
+    },
+    "P_grid_halfwidth_opt_d": {
+     "n_differ": 0,
+     "max_abs_diff": 0.0
+    }
+   },
+   "n_fail": 0,
+   "fail_keys": [],
+   "tie_band_gt1": 24,
+   "plateau_gt1": 19,
+   "prewhitened_stars": 28,
+   "runtime_s_median": 4.154809923500011,
+   "passes": true
   }
  ],
  "all_pass": true
