@@ -2,7 +2,7 @@
 
 The beta option is part of the configuration and of the hash. It is null until the registered selection rule has been
 applied (docs/preregistration/beta_treatment.md); production entry points refuse to start while it is null.
-Provenance carries an opaque host_id (h1, h2, h3; the mapping to machines lives outside the repo), the CPU
+Provenance carries an opaque host_id (h1-h4; the mapping to machines lives outside the repo), the CPU
 architecture, library versions and the full commit. Never a hostname, user name or path.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ from pathlib import Path
 PIPELINE_VERSION = "1.1.0"
 ROOT = Path(__file__).resolve().parents[2]            # exoplanet_search/
 CFG_FILE = ROOT / "configs" / "v1.1.json"
-HOST_IDS = ("h1", "h2", "h3")
+HOST_IDS = ("h1", "h2", "h3", "h4")
 BETA_OPTIONS = ("a", "b", "c", "d")
 LIBS = ("numpy", "scipy", "astropy", "numba", "llvmlite", "wotan", "batman-package", "pandas", "pyarrow")
 
