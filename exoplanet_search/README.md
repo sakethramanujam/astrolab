@@ -177,7 +177,9 @@ interrupted run resumes exactly where it stopped.
 user service (`scripts/systemd/exosearch-continuous.service`, lingering enabled, no root):
 
 * one instance (lock file shared with `nightly.sh`); `Nice=19`, `CPUSchedulingPolicy=idle`, idle I/O;
-* 8 workers 07:00-23:00 local, 12 overnight when the 1-minute load is below 6;
+* 8 workers 07:00-23:00 local, 12 overnight when the 1-minute load is below 6; when reliability batches hold
+  worker claims (`/tmp/exosearch-claims/<pid>.workers`) the runner takes `COMBINED_CAP` (16) minus the claimed
+  workers, read at each sector start, so runner + batches never exceed 16 single-threaded processes;
 * before each sector it waits while the 1-minute load is above 14 or the data disk has < 100 GB free;
 * the next sector's FITS are prefetched while the current sector is searched;
 * after each sector: FITS pruned, candidate deep vetting (`exosearch.deepvet --only-review`), site published.
@@ -202,7 +204,41 @@ difference-image centroid offset from the SPOC target-pixel file (flag > 0.5 px 
 pixel > 1.5 px away), Gaia DR3 neighbours within 42" bright enough to cause the depth if fully eclipsed
 (unresolvable inside 10"), TESS EB (Prša et al. 2022) / Kepler EB matches, V-shape ratio, a
 secondary-eclipse scan over phases 0.15-0.85 and the companion radius from the TIC stellar radius
-(flag > 2 R_Jup). Rejecting flags move a "needs review" signal to "rejected" on the site.
+(flag > 2 R_Jup), transit-implied vs TIC stellar density (reject |z| > 4) and Gaia DR3 RUWE / non-single-star
+(warnings). Rejecting flags move a "needs review" signal to "rejected" on the site.
+
+## Pipeline v1.0.0 and reliability measurements
+
+The pipeline is frozen at tag `exosearch-v1.0.0`. Every result row carries `pipeline_version`,
+`config_hash` (hash of all thresholds and grids) and `git_hash`. Full commands, seeds and the archive
+layout are in [`reproduce.md`](reproduce.md); every output column is defined in
+[`analysis/SCHEMA.md`](analysis/SCHEMA.md).
+
+* **Detection statistic.** For each trial duration D, `CDPP_D` = 1.48 x MAD of the running mean over D on
+  the detrended, unbinned flux (so correlated noise counts). The statistic is
+  `S = depth / (CDPP_D / sqrt(N_tr))`, with N_tr weighted by in-transit coverage. Signals are thresholded
+  on S. SDE is still logged but no longer gates. `beta_D`, `sigma_w`, `CDPP_D` and `N_tr` are saved per candidate.
+* **Threshold S\*.** S\* is the empirical level that one star per sector and camera exceeds on inverted
+  light curves (`configs/detection_threshold.json`). It is **provisional** until the tail fit with
+  bootstrap errors lands with the analysis code.
+* **Injection-recovery** (`exosearch.inject`). One batman transit per light curve per run goes into
+  normalised PDCSAP flux before masking and detrending. P, Rp, b and T0 are drawn as in
+  `configs/injection_v1.json`, with Claret (2017) TESS limb darkening. Every injection goes through the
+  full vetting chain. Each row records detected, passed-all-vetting, alias type and every failed check.
+* **False alarms** (`exosearch.nulltest`). Inverted light curves, with flares masked first, are the
+  primary null. Day-block scrambling is a limited secondary test with several seeded realizations. A
+  per-star max-S table is saved for each null, and pass/fail is logged for every check on every null detection.
+* **Stellar density and Gaia.** A batman fit gives a/R\*, and from it the transit-implied stellar
+  density, which is compared with the TIC density. `density_mismatch` rejects when |z| > 4. Gaia DR3
+  RUWE > 1.4 and non-single-star solutions are warnings.
+* **Holdout.** A seeded random 20% of TIC IDs is held out (`holdout_tics.txt`, seed 20261110) and excluded
+  from all tuning. Held-out metrics are reported separately for S70 and S106/107.
+* **Batches.** `scripts/reliability_lane.sh` runs a queue of commands as a transient systemd user unit
+  (`Nice=19`, idle CPU/I/O), backs off while the load is above 18 and retries. Batches are resumable
+  (parquet parts, finished tasks skipped).
+* **Summaries.** `python -m exosearch.reliability [--survivors]` writes `site/data/reliability.json` for
+  the site's Methods page. If `analysis/make_reliability_json.py` exists, it is used instead (the
+  hook for the analysis code: fits, GPD tail, bootstrap errors).
 
 ## One-command GPU / Mac workers
 
