@@ -1,4 +1,4 @@
-"""Star-quality table for the pre-registered cut in configs/star_quality_v1.json (analysis layer over v1.0.0).
+"""Star-quality table for the frozen cut (registered after unblinding) in configs/star_quality_v1.json (analysis layer over v1.0.0).
 
 For every searched star: sigma_w, CDPP_D and beta_D at each trial duration, measured on the star's own
 quality-masked PDCSAP light curve after the frozen detrend. `drop` = beta_max > threshold.

@@ -25,7 +25,7 @@ from scipy import stats
 from . import interim, labels, quality, store, vet
 
 OUT = interim.PROD / "analysis_layer" / "review"
-U_GRID = np.round(np.arange(5.5, 10.01, 0.25), 2)
+U_GRID = np.round(np.arange(6.0, 10.01, 0.25), 2)   # vetted peaks exist only at S >= 6 (checks_logged): lower u is censored
 MIN_K = 50                     # tail points needed at the chosen u
 SE_BOOT = 300
 CUTS = (2.5, 3.0, 4.0, None)
@@ -79,7 +79,7 @@ def choose_u(diag):
     return ok[0]["u"] if ok else interim.U_DEFAULT
 
 
-def gpd_diagnostics(x, n_stars, sector):
+def gpd_diagnostics(x, n_stars, sector, plot=True):
     Sv = x.S.values[x.vetted.values]
     n = len(x)
     p = 1.0 / n_stars
@@ -99,6 +99,8 @@ def gpd_diagnostics(x, n_stars, sector):
         diag.append(f)
     u0 = choose_u(diag)
     stable = [d for d in diag if d["u"] >= u0 and d["k"] >= 30]
+    if not plot:
+        return diag, u0, stable
     fig, ax = plt.subplots(1, 3, figsize=(12, 3.6), dpi=100)
     U = [d["u"] for d in diag]
     ax[0].errorbar(U, [d["mean_excess"] for d in diag], [2 * (d["me_se"] or 0) for d in diag], fmt="o", ms=3)

@@ -1,6 +1,6 @@
 """Interim analysis layer over the frozen v1.0.0 search (search code, config_hash and stored S unchanged).
 
-1. Star-quality cut (configs/star_quality_v1.json, registered before evaluation) applied identically to the
+1. Star-quality cut (configs/star_quality_v1.json, frozen; registered after unblinding) applied identically to the
    real search population, the inverted/scrambled nulls and the injection hosts.
 2. Interim detection threshold S*: generalized-Pareto tail fit to the max S of *vetted* inverted-null peaks
    (every check passes except the S threshold) on tuning (non-holdout) quality-passing stars, solved for a
@@ -128,33 +128,45 @@ def main():
     null = with_quality(load_null("invert"), q)
     sectors = sorted(int(s) for s in null.sector.unique())
     pop = search_population(sorted(set(sectors) | {70, 106}), q)
+    from . import interim_review as rv                     # lazy: rv imports this module
     res = {}
     for s in sectors:
         x = null[(null.sector == s) & ~null["drop"] & ~null.holdout.astype(bool)]
-        r = fit_sector(x, pop[s]["kept"])
+        _, u0, stable = rv.gpd_diagnostics(x, pop[s]["kept"], s, plot=False)
+        r = fit_sector(x, pop[s]["kept"], u=u0)
+        sysv = [d["s_star"] for d in stable if d.get("s_star")]
+        r.update(u_rule=f"lowest u >= {U_DEFAULT} with k >= {rv.MIN_K} whose xi is within 1 bootstrap SE of xi at every higher u with k >= 30",
+                 u_stable=[d["u"] for d in stable],
+                 sys_range=[float(min(sysv)), float(max(sysv))] if sysv else None,
+                 sys_halfwidth=float((max(sysv) - min(sysv)) / 2) if sysv else None)
         r["dropped_null_quality"] = int(((null.sector == s) & null["drop"]).sum())
         r["held_out_excluded"] = int(((null.sector == s) & null.holdout.astype(bool) & ~null["drop"]).sum())
         res[str(s)] = r
         cams = {}
         for cam, xc in x.groupby("camera"):
-            if (xc.vetted & (xc.S > U_DEFAULT)).sum() >= 30:
-                cams[str(int(cam))] = fit_sector(xc, pop[s]["kept"] * len(xc) / len(x), n_boot=500)
+            k_c = int((xc.vetted & (xc.S > u0)).sum())
+            if k_c >= 30:
+                c = fit_sector(xc, pop[s]["kept"] * len(xc) / len(x), u=u0, n_boot=500)      # own alpha = 1/N_cam
+                Svc = xc.S.values[xc.vetted.values]
+                c.update(alpha="own (1/N_cam)", s_star_sector_alpha=gpd_threshold(Svc, len(xc), 1.0 / pop[s]["kept"], u0)["s_star"])
+                cams[str(int(cam))] = c
             else:
-                cams[str(int(cam))] = dict(n_null=int(len(xc)), k_tail=int((xc.vetted & (xc.S > U_DEFAULT)).sum()),
+                cams[str(int(cam))] = dict(n_null=int(len(xc)), k_tail=k_c,
                                            s_star=None, note="fewer than 30 vetted exceedances; sector value applies")
         r["per_camera"] = cams
     out = dict(name="interim_threshold_v1", layer="interim analysis layer over frozen exosearch v1.0.0",
                pipeline_version=st["pipeline_version"], config_hash=st["config_hash"], git_hash=st["git_hash"],
                statistic="S = depth_box / (CDPP_D / sqrt(N_tr))", interim=True,
                definition=("S* solves N_null^-1 * #(vetted inverted-null max-S > S*) = 1/N_stars per sector, with a GPD tail fit "
-                           f"above u={U_DEFAULT} (all checks logged above u), on tuning (non-holdout) stars passing {rule['name']}; "
+                           "above u chosen per sector by the parameter-stability rule (u >= 6: all checks logged above it), quoted as value (95% stat CI) "
+                           "+- systematic half-width over the stable u range, on tuning (non-holdout) stars passing {rule['name']}; "
                            f"CI from {N_BOOT} star-level bootstrap resamples. False-alarm rate is post-vetting. "
                            "Partial null: the sample grows as the inverted run proceeds."),
                quality_cut=rule["rule"], population=pop, sectors=res)
     THR_FILE.write_text(json.dumps(out, indent=1, default=float))
     (PROD / "analysis_layer").mkdir(parents=True, exist_ok=True)
     (PROD / "analysis_layer" / "interim_threshold_v1.json").write_text(THR_FILE.read_text())
-    print(json.dumps({s: {k: r[k] for k in ("n_null", "n_stars", "k_tail", "xi", "s_star", "ci68", "ci95", "sensitivity", "vetted_exceed")}
+    print(json.dumps({s: {k: r[k] for k in ("n_null", "n_stars", "u", "k_tail", "xi", "s_star", "ci95", "sys_range", "sys_halfwidth", "vetted_exceed")}
                       for s, r in res.items()}, indent=1, default=float))
     print(json.dumps(pop))
 
