@@ -1,0 +1,12 @@
+{
+  "name": "star_quality_v1",
+  "layer": "interim analysis layer on top of the frozen exosearch v1.0.0 search (search code and config_hash 80ffc7f29943 unchanged)",
+  "registered": "2026-11-10, committed before the cut was evaluated on any population",
+  "rule": "drop star if beta_max > 3.0",
+  "beta_max": "max over the 8 trial durations D (0.04-0.25 d) of beta_D = CDPP_D * sqrt(D / cadence) / sigma_w",
+  "measured_on": "the star's own quality-masked PDCSAP light curve (no injection, no inversion), after the frozen v1.0.0 detrend (wotan biweight 0.75 d, gap trim 0.3 d, upward 4-sigma clip); exosearch.bls.noise_profile",
+  "applied_to": ["real search population", "inverted (flipped) null", "scrambled nulls", "injection hosts", "white-noise calibration stars (for reporting only)"],
+  "rationale": "S assumes the noise at transit timescales is characterised by CDPP_D. beta_D > 3 means the noise on 1-6 h is more than 3x the white-noise extrapolation, i.e. strongly correlated residuals (variability the 0.75 d biweight did not remove) where the box statistic is not calibrated without GP prewhitening. One threshold, chosen on physical grounds.",
+  "threshold": 3.0,
+  "disclosure": "Before registering this cut we had seen summary statistics of the partial inverted null (quantiles of max S, beta_D quantiles of the peaks, and the 25 highest-S null peaks, which are mostly single-epoch events on faint stars). We did not evaluate any candidate cut against the null before this file was committed."
+}
