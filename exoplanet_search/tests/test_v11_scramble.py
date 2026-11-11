@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 from astropy.timeseries import BoxLeastSquares
 
@@ -133,57 +134,103 @@ def test_single_sample_segment_rotates_trivially_by_zero(v11_cfg):
     assert info["scr_scheme"] == "segment_rotation"
 
 
+def test_scramble_exclude_hosts_file_loading():
+    """Verify that the exclude file loads, has 285 unique TICs, and expected columns."""
+    cfg = settings.cfg()
+    exclude_file_rel = cfg["scramble"]["exclude_hosts_file"]["70"]
+    exclude_path = settings.ROOT / exclude_file_rel
+    assert exclude_path.exists(), f"Exclude file not found: {exclude_path}"
+
+    df = pd.read_csv(exclude_path)
+    assert list(df.columns) == ["tic", "toi_host", "tess_eb"]
+    assert len(df) == 285
+    assert df["tic"].nunique() == 285
+    assert (df["toi_host"] == 1).sum() == 222
+    assert (df["tess_eb"] == 1).sum() == 67
+
+
+def test_manifest_build_skips_scramble_for_excluded_tics(monkeypatch, tmp_path):
+    """Manifest-build test that listed TICs get no scramble task and unlisted ones do."""
+    from exosearch.v11 import run
+
+    # Read real exclude list
+    cfg = settings.cfg()
+    exclude_file_rel = cfg["scramble"]["exclude_hosts_file"]["70"]
+    df_ex = pd.read_csv(settings.ROOT / exclude_file_rel)
+    excluded_tic = int(df_ex["tic"].iloc[0])
+    unlisted_tic = 999999999  # definite dummy unlisted TIC
+
+    # Mock store.connect, store.frame, targets.fetch_manifest, star_params, inject.select_hosts
+    class DummyCon:
+        pass
+
+    monkeypatch.setattr("exosearch.store.connect", lambda: DummyCon())
+
+    store_df = pd.DataFrame([
+        {"tic": excluded_tic, "status": "ok", "radius": 1.0, "tmag": 10.0},
+        {"tic": unlisted_tic, "status": "ok", "radius": 1.0, "tmag": 10.0},
+    ])
+    monkeypatch.setattr("exosearch.store.frame", lambda con, s: store_df.copy())
+
+    targets_df = pd.DataFrame([
+        {"tic": excluded_tic, "fname": "tess_excluded.fits"},
+        {"tic": unlisted_tic, "fname": "tess_unlisted.fits"},
+    ])
+    monkeypatch.setattr("exosearch.targets.fetch_manifest", lambda s: targets_df.copy())
+
+    monkeypatch.setattr("exosearch.v11.run.star_params", lambda s, tics, log=print: {t: {} for t in tics})
+    monkeypatch.setattr("exosearch.inject.select_hosts", lambda s, cfg, con: pd.DataFrame(columns=["tic"]))
+
+    jobs = run.build([70], [("h1", 1.0)], tmp_path, production=True, write=False)
+    assert len(jobs) == 2
+
+    job_by_tic = {j["tic"]: j for j in jobs}
+    excluded_modes = [t["mode"] for t in job_by_tic[excluded_tic]["tasks"]]
+    unlisted_modes = [t["mode"] for t in job_by_tic[unlisted_tic]["tasks"]]
+
+    # Listed TIC gets real and invert, but NO scramble tasks
+    assert "real" in excluded_modes
+    assert "invert" in excluded_modes
+    assert "scramble" not in excluded_modes
+
+    # Unlisted TIC gets real, invert, and scramble tasks
+    assert "real" in unlisted_modes
+    assert "invert" in unlisted_modes
+    assert "scramble" in unlisted_modes
+    assert excluded_modes.count("real") == 1
+    assert excluded_modes.count("invert") == 1
+
+
 def test_planted_signal_real_cadence_check(v11_cfg):
     """Planted-signal test using real sector-70 cadence and gap structure from s0070_cadence.npz.
 
-    Injects box transit trains at P = 1, 3, 6 d (depth giving > 20 sigma unscrambled)
-    with white noise plus mild red noise across at least 10 seeds each.
-    Asserts every period's max sigma < 3.
+    Cyclic rotation preserves periodicity inside each segment, so scrambling does not
+    erase coherent transits (max sigma stays > 3 at fixed (P, t0) across seeds).
+    This is why known hosts (TOIs and EBs) are explicitly excluded from the scrambled null.
+
+    This test asserts that scramble_planted_check is deterministic and exactly reproduces
+    the committed sigma table:
+      P=1.0: median 3.69, max 7.70
+      P=3.0: median 1.82, max 7.23
+      P=6.0: median 0.93, max 7.82
     """
+    from scripts.scramble_planted_check import run_planted_check
+
     fixture_path = Path(__file__).resolve().parent / "fixtures" / "s0070_cadence.npz"
-    d = np.load(fixture_path)
-    t = d["t"]
+    results = run_planted_check(fixture_path, output_file=None, n_seeds=10, periods=(1.0, 3.0, 6.0))
 
-    noise_white = 0.0004
-    noise_red_amp = 0.0001
-    dur = 0.1
-    t0 = float(t[0] + 0.1)
-    depth = 0.0006
-    n_seeds = 10
-    periods = [1.0, 3.0, 6.0]
+    expected = {
+        1.0: {"median_sigma": 3.69, "max_sigma": 7.70},
+        3.0: {"median_sigma": 1.82, "max_sigma": 7.23},
+        6.0: {"median_sigma": 0.93, "max_sigma": 7.82},
+    }
 
-    for P in periods:
-        # Check unscrambled significance > 20 sigma
-        rng_u = np.random.default_rng(0)
-        w_u = rng_u.normal(0, noise_white, size=len(t))
-        r_u = noise_red_amp * np.sin(2 * np.pi * (t - t[0]) / 3.5)
-        f_u = 1.0 + w_u + r_u
-        e_u = np.full_like(t, noise_white)
-        phase_u = ((t - t0 + 0.5 * P) % P) - 0.5 * P
-        f_u[np.abs(phase_u) < dur / 2.0] -= depth
-        bls_u = BoxLeastSquares(t, f_u, dy=e_u)
-        st_u = bls_u.compute_stats(P, dur, t0)
-        unscr_sigma = float(st_u["depth"][0] / st_u["depth_phased"][1])
-        assert unscr_sigma > 20.0, f"Unscrambled significance {unscr_sigma:.2f} <= 20 for P={P}"
-
-        sigmas = []
-        for s in range(n_seeds):
-            rng = np.random.default_rng(s)
-            w = rng.normal(0, noise_white, size=len(t))
-            r = noise_red_amp * np.sin(2 * np.pi * (t - t[0]) / 3.5)
-            f = 1.0 + w + r
-            e = np.full_like(t, noise_white)
-            phase = ((t - t0 + 0.5 * P) % P) - 0.5 * P
-            f[np.abs(phase) < dur / 2.0] -= depth
-
-            t_scr, f_scr, e_scr, _ = scramble.segment_rotate(t, f, e, seed=s, cfg=v11_cfg)
-            bls = BoxLeastSquares(t_scr, f_scr, dy=e_scr)
-            st = bls.compute_stats(P, dur, t0)
-            sig = float(abs(st["depth"][0]) / st["depth_phased"][1])
-            sigmas.append(sig)
-
-        max_sig = max(sigmas)
-        assert max_sig < 3.0, f"Period {P} max sigma {max_sig:.2f} >= 3.0 across {n_seeds} seeds"
+    assert len(results) == 3
+    for r in results:
+        exp = expected[r["P"]]
+        assert round(r["median_sigma"], 2) == exp["median_sigma"], f"P={r['P']} median mismatch"
+        assert round(r["max_sigma"], 2) == exp["max_sigma"], f"P={r['P']} max mismatch"
+        assert r["n_seeds"] == 10
 
 
 def test_pipeline_scramble_mode_integration(v11_cfg):

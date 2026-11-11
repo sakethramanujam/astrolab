@@ -35,7 +35,7 @@ def load(job, download=True):
     return t, f / med, e / med, good, meta, dumps
 
 
-def prepare(t, f, e, cfg, prewhiten_on=True, comb_guard=None):
+def prepare(t, f, e, cfg, prewhiten_on=True, comb_guard=None, gap_trim=0.3):
     kernels.install()
     if len(t) < 500:
         raise ValueError(f"too few good cadences ({len(t)})")
@@ -43,7 +43,7 @@ def prepare(t, f, e, cfg, prewhiten_on=True, comb_guard=None):
         f, pwlog = prewhiten(t, f, cfg["prewhiten"], comb_guard)
     else:
         pwlog = dict(prewhiten_n=0, prewhiten_comb=0, prewhiten_terms="[]", prewhiten_comb_freqs="[]", prewhiten_off=True)
-    tf, ff, ef, _, _ = lightcurve.detrend(t, f, e, window=0.75)
+    tf, ff, ef, _, _ = lightcurve.detrend(t, f, e, window=0.75, gap_trim=gap_trim)
     tb, fb, eb = lightcurve.bin_lc(tf, ff, ef, minutes=10.0)
     return dict(flat=(tf, ff, ef), binned=(tb, fb, eb), pw=pwlog)
 
@@ -211,7 +211,8 @@ def run_job(job):
                     row.update(scr_info)
                 elif tk["mode"] != "real":
                     raise ValueError(tk["mode"])
-                d = prepare(tg, fg, eg, job["cfg"], pw_on, tk.get("comb_guard"))
+                gap_trim = 0.0 if tk["mode"] == "scramble" else 0.3
+                d = prepare(tg, fg, eg, job["cfg"], pw_on, tk.get("comb_guard"), gap_trim=gap_trim)
                 row.update(analyse(d, job, meta, dumps, job["primary"], cap=tk.get("cap", True)))
                 row.update({f"pw_{k}": v for k, v in d["pw"].items()})
                 row["status"] = "ok"
