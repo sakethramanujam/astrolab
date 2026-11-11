@@ -41,7 +41,7 @@ def _deep(r):
 
 
 def _interim():
-    """Interim-layer re-flag: per-sector S* (sectors without their own null borrow sector 70) and the star-quality cut."""
+    """Interim-layer re-flag: per-sector S* (only sectors with their own flipped null; no borrowing) and the star-quality cut."""
     from . import interim, quality
     ss = interim.s_star_by_sector()
     try:
@@ -55,18 +55,19 @@ def _interim():
 
 def _reflag(ok, ss, drop, measured):
     """passed = v1.0.0 screens passed AND S measured (v1 rows) AND S >= interim S* AND star kept by the quality cut."""
-    ref = ss.get(70)
-    thr = ok.sector.map(lambda x: ss.get(int(x), ref))
+    thr = ok.sector.map(lambda x: ss.get(int(x), np.nan)).astype(float)     # no own null -> NaN -> not calibrated
     key = list(zip(ok.tic.astype(int), ok.sector.astype(int)))
     qd = pd.Series([k in drop for k in key], index=ok.index)
     qm = pd.Series([k in measured for k in key], index=ok.index)
     has_s = ok.S.notna()
     ok["s_star"] = thr
     ok["passed_screens_v10"] = (ok.passed == 1)
-    ok["passed"] = (ok.passed_screens_v10 & has_s & (ok.S >= thr) & ~(qd & qm)).astype(int)
+    own = thr.notna()
+    ok["passed"] = (ok.passed_screens_v10 & has_s & own & (ok.S >= thr) & ~(qd & qm)).astype(int)
     ok["calib_note"] = np.select(
-        [~ok.passed_screens_v10, ~has_s, ok.S < thr, qd & qm],
-        ["", "v0 row: no calibrated S (re-search with v1 pending)", "S below the interim S*", "dropped by the star-quality cut"], "")
+        [~ok.passed_screens_v10, ~has_s, ~own, ok.S < thr, qd & qm],
+        ["", "v0 row: no calibrated S (re-search with v1 pending)", "no flipped null for this sector yet, so no S* applies",
+         "S below the interim S*", "dropped by the star-quality cut"], "")
     return ok
 
 
@@ -198,9 +199,10 @@ def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
         sectors.append(dict(
             sector=int(s), n_targets=q.get(s, {}).get("n_targets"), n_searched=int(len(g)),
             n_errors=int((df[(df.sector == s)].status != "ok").sum()), status=q.get(s, {}).get("status"),
-            n_passed=int(g.passed.sum()), n_passed_screens_v10=int(g.passed_screens_v10.sum()), calibrated=bool(g.S.notna().any()),
-            s_star=_f(g.s_star.iloc[0], 2) if g.S.notna().any() else None, toi_hosts=int(len(toi)),
-            toi_hosts_calibrated=int(toi.S.notna().sum()),
+            n_passed=int(g.passed.sum()), n_passed_screens_v10=int(g.passed_screens_v10.sum()),
+            calibrated=bool(g.S.notna().any() and g.s_star.notna().any()), has_own_null=bool(g.s_star.notna().any()),
+            s_star=_f(g.s_star.iloc[0], 2) if g.s_star.notna().any() else None, toi_hosts=int(len(toi)),
+            toi_hosts_calibrated=int((toi.S.notna() & toi.s_star.notna()).sum()),
             toi_recovered=int(((toi.toi_period_match == 1) & (toi.passed == 1)).sum()),
             toi_period_found=int((toi.toi_period_match == 1).sum()),
             needs_review=int(((g.passed == 1) & ~g.apply(_known, axis=1) & ~(g.apply(_deep, axis=1).map(lambda x: bool(x & deepvet.REJECT)))).sum()),
@@ -271,13 +273,13 @@ def build(site=SITE, max_candidates=80, max_rejected=12, plots_on=True):
                     sectors_done=sum(1 for r in q.values() if r["status"] == "done"),
                     stars_searched=int(len(ok)), errors=int((df.status != "ok").sum()),
                     passed=int(ok.passed.sum()), passed_screens_v10=int(ok.passed_screens_v10.sum()),
-                    calibrated_rows=int(len(calib)), toi_hosts=int(len(toi)), toi_hosts_calibrated=int(toi.S.notna().sum()),
+                    calibrated_rows=int(len(calib)), toi_hosts=int(len(toi)), toi_hosts_calibrated=int((toi.S.notna() & toi.s_star.notna()).sum()),
                     toi_recovered=int(((toi.toi_period_match == 1) & (toi.passed == 1)).sum()),
                     toi_period_found=int((toi.toi_period_match == 1).sum()),
                     needs_review=int((ok.state == "needs_review").sum()),
                     uncalibrated=int((ok.state == "uncalibrated").sum()),
-                    passed_definition=("v1.0.0 screens passed, S measured (v1 rows), S >= interim S* of the sector (sector-70 value "
-                                       "where a sector has no null yet) and star kept by star_quality_v1. Not a detection."),
+                    passed_definition=("v1.0.0 screens passed, S measured (v1 rows), S >= the interim S* of that sector's own flipped null "
+                                       "(sectors without one are not calibrated) and star kept by star_quality_v1. Not a detection."),
                     submitted=int((ok.state == "submitted").sum()),
                     planet_archive_crossmatch=ps_ok),
         queue_next=sectorqueue.next_sectors(3),

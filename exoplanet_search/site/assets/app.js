@@ -32,7 +32,7 @@ function render(d) {
     (t.planet_archive_crossmatch ? '' : ' · NASA Exoplanet Archive cross-match pending (archive unavailable, no cached copy yet)') +
     Object.entries(d.catalogs || {}).map(([k, v]) => (v.fetched_at ? ` · ${k.replace('.csv', '')} ${v.fetched_at.slice(0, 10)}` : '')).join('');
   const nh = t.toi_hosts_calibrated ?? t.toi_hosts;
-  const pend = (d.sectors || []).filter((x) => x.calibrated && !x.toi_hosts).map((x) => x.sector);
+  const pend = (d.sectors || []).filter((x) => x.has_own_null && !x.toi_hosts).map((x) => x.sector);
   const rate = nh ? (100 * t.toi_recovered) / nh : 0;
   const S = document.getElementById('stats');
   for (const [k, v, s, c] of [

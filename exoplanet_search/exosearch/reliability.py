@@ -63,9 +63,8 @@ MARGINAL_EFA = 0.1      # expected post-vetting false alarms per sector at the s
 
 
 def s_star_for(layer, sector):
-    """(S*, borrowed_from) for a sector; sectors without their own null borrow the sector-70 value."""
-    v = layer["s_star"].get(int(sector))
-    return (v, None) if v else (layer["ref"], 70)
+    """(S*, None) for a sector with its own flipped null; (None, None) otherwise (no borrowing: not calibrated)."""
+    return layer["s_star"].get(int(sector)), None
 
 
 def _read(pattern):
@@ -260,12 +259,14 @@ def build():
                                                             sys_range=v.get("sys_range"), sys_halfwidth=v.get("sys_halfwidth"),
                                                             cameras="pooled: per-camera tails are too thin to fit (not published)")
                                               for k, v in layer["thr"]["sectors"].items()},
-                   borrowed_note="sectors without their own inverted null yet use the sector-70 value",
+                   borrowed_note="S* applies only to sectors with their own flipped null; others are not calibrated (no borrowing)",
                    pipeline_floor=json.loads(vet.THRESHOLD_FILE.read_text())["default"],
                    quality_cut=layer["thr"]["quality_cut"], population=layer["thr"]["population"])
         if not inj.empty:
             inj = inj[inj.status == "ok"]
             ss = {int(sec): s_star_for(layer, sec)[0] for sec in inj.sector.unique()}
+            ss = {k: v for k, v in ss.items() if v}
+            inj = inj[inj.sector.isin(list(ss))]                  # injections only where the sector has its own S*
             inj = layer["interim"].rescore_injections(inj, layer["q"], ss)
     else:
         thr = json.loads(vet.THRESHOLD_FILE.read_text())
