@@ -234,6 +234,7 @@ const M = J?.missed_tois;
 const ml = document.getElementById('mlist');
 for (const [sec, m] of Object.entries(M || {})) {
   ml.append(el('p', {}, `Sector ${+sec.replace('s', '')}: ${m.n} known TOI hosts where our best peak was not the TOI's period (first matching reason, in this order):`));
+  if (m.pre_v1_0) ml.append(el('p', { class: 'muted' }, `Pre-v1.0 search rows (${m.pre_v1_0.label}): ${m.pre_v1_0.toi_hosts} TOI hosts, ${m.pre_v1_0.period_matched} with the TOI period found, ${m.pre_v1_0.period_matched_and_screened} of those also passing the screens. Miss reasons use the v1.0 screening floor S = 7, not the interim S*.`));
   for (const [b, label] of Object.entries(BUCKETS)) {
     const k = m.buckets?.[b] || 0;
     ml.append(el('div', { class: 'brow two' }, el('div', {}, el('b', {}, label)), el('div', { class: 'bar fpb' }, el('i', { style: `width:${((100 * k) / m.n).toFixed(1)}%` }), el('span', {}, `${k} · ${pct(k, m.n)}`))));
