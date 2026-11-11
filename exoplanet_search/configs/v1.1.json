@@ -1,0 +1,15 @@
+{
+  "name": "exosearch_v1.1",
+  "beta_option": null,
+  "beta_option_note": "Set only by the dated registration that applies docs/preregistration/beta_treatment.md (a/b/c/d). Production refuses to start while this is null.",
+  "beta_prior_file": "configs/v1.1_beta_prior.json",
+  "prewhiten": {"fmin_cpd": 5.0, "snr_stop": 4.0, "max_terms": 20, "noise_window_cpd": 2.0, "oversample": 5,
+                "comb_guard": true, "comb_durations_d": [0.0416667, 0.25], "comb_multiples": [1, 2, 3], "comb_ratio_tol": 2.0,
+                "comb_min_snr": 4.0},
+  "duration_cap": {"margin": 3.0, "q_max_no_density": 0.1},
+  "refine_top_k": 5,
+  "refine_min_sep_rel": 0.01,
+  "vet": {"odd_even_sigma": 3.0, "odd_even_rel": 0.10, "secondary_sigma": 3.0, "secondary_rel": 0.10},
+  "momentum_dump": {"quality_bit": 32, "window_d": 0.1, "reject_max_epochs": 2},
+  "s_floor_checks": 6.0
+}
