@@ -18,6 +18,7 @@ from analysis.crosscheck import (
     json_safe,
     mann_whitney_auc,
     reliability_from_counts,
+    load_threshold,
     rescore_injections,
     run_crosscheck,
     wilson_interval,
@@ -27,6 +28,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_INJ = ROOT / "analysis" / "sample_injections.csv"
 SAMPLE_NULL = ROOT / "analysis" / "sample_null.csv"
 THRESH = ROOT / "configs" / "interim_threshold_v1.json"
+# Pinned copy of the per-camera S* schema the sample-run counts were first checked against.
+# The live interim file later switched to a pooled per_camera object and a different sector S*.
+THRESH_PER_CAMERA = ROOT / "tests" / "fixtures" / "interim_threshold_per_camera.json"
 
 
 def test_wilson_interval_known_value():
@@ -147,13 +151,67 @@ def test_auc_perfect_separation_and_ties():
     assert mann_whitney_auc(np.array([1.0, 1.0]), np.array([1.0, 1.0])) == pytest.approx(0.5)
 
 
+def test_load_threshold_accepts_per_camera_records_and_pooled_metadata(tmp_path):
+    table, population, raw, digest = load_threshold(THRESH_PER_CAMERA)
+    assert table[(70, None)] == pytest.approx(14.241890281585157)
+    assert table[(70, 1)] == pytest.approx(9.479378697517577)
+    assert table[(70, 2)] == pytest.approx(14.91022300165031)
+    assert (70, 3) not in table  # null s_star falls back to the sector value at resolve time
+    assert table[(70, 4)] == pytest.approx(11.29349536853363)
+    assert population["70"]["kept"] == 10244
+    assert digest
+
+    # Current interim schema: per_camera is pooled metadata, not camera records.
+    pooled = {
+        "population": {"70": {"kept": 10244}},
+        "sectors": {
+            "70": {
+                "s_star": 11.067632388390026,
+                "u": 7.0,
+                "per_camera": {
+                    "pooled": True,
+                    "note": "cameras pooled",
+                    "n_null": {"1": 1875, "2": 1887},
+                },
+            }
+        },
+    }
+    path = tmp_path / "pooled.json"
+    path.write_text(json.dumps(pooled))
+    table, population, raw, digest = load_threshold(path)
+    assert table == {(70, None): pytest.approx(11.067632388390026)}
+    assert population["70"]["kept"] == 10244
+    # boolean / note / count entries must not be treated as camera records
+    assert (70, 1) not in table
+
+
+def test_sample_run_loads_the_live_interim_config(tmp_path):
+    result = run_crosscheck(
+        injections=SAMPLE_INJ,
+        nulls=[SAMPLE_NULL],
+        out_dir=tmp_path / "live",
+        threshold_config=THRESH,
+        holdout_file=ROOT / "holdout_tics.txt",
+        n_boot=5,
+        seed=1,
+        make_figures=False,
+    )
+    assert result["small_sample"] is True
+    assert result["completeness"]["n_used"] == 31
+    # Live sector 70 S* is used for every camera when per_camera is pooled.
+    sources = {row["source"] for row in result["threshold"]["used"]}
+    assert "sector" in sources
+    assert result["completeness"]["n_detected_pipeline_flag"] == 14
+    assert result["completeness"]["n_detected"] >= 1
+
+
 def test_sample_run_excludes_holdout_and_writes_strict_outputs(tmp_path):
     out = tmp_path / "out"
     result = run_crosscheck(
         injections=SAMPLE_INJ,
         nulls=[SAMPLE_NULL],
         out_dir=out,
-        threshold_config=THRESH,
+        threshold_config=THRESH_PER_CAMERA,
         holdout_file=ROOT / "holdout_tics.txt",
         n_boot=30,
         seed=20261110,

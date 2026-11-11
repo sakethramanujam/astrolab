@@ -52,7 +52,8 @@ is not used; `s_min` is only the v1.0.0 screening floor.
 `S*` comes from `configs/interim_threshold_v1.json`: the per-camera value when that camera has one,
 otherwise the sector value, otherwise the sector-70 value (the same fallback the interim layer uses
 when a sector has no null of its own). A camera whose entry is null, because the interim fit had too
-few vetted exceedances, uses the sector value.
+few vetted exceedances, uses the sector value. If ``per_camera`` is a pooled
+metadata object (no per-camera ``s_star`` values), every camera uses the sector value.
 
 The gamma CDF is the two-parameter regularized gamma distribution function, fit by an unbinned
 Bernoulli likelihood. It asymptotes to 1. There is no extra plateau parameter, so a population that
@@ -84,7 +85,7 @@ the comparison is null.
 For each mode, and for the pooled rows, and for each sector, excesses of per-star max S over the
 sample 95th percentile are fit with a generalized Pareto distribution (scipy MLE, probability-weighted
 moments if the MLE falls outside ξ ∈ (−0.9, 1.5)). This is pre-vetting. It is not the interim layer's
-post-vetting fit above u = 6 on vetted inverted peaks, and the two S* values are not expected to
+post-vetting fit at its chosen u on vetted inverted peaks, and the two S* values are not expected to
 agree. The interim number is copied into `reference_interim_s_star` so the difference is visible.
 
 `S*` solves `P(S > S*) = 1/N_stars` for that sector. `N_stars` is `population.kept` in the interim
@@ -149,7 +150,7 @@ These are the choices above, collected in one place:
 
 - The middle dot in the SCHEMA definition of `snr_exp` is read as multiplication.
 - The tail requested here is the 95th percentile of pre-vetting per-star max S. The interim S* is a
-  different estimator (post-vetting, fixed u = 6, vetted inverted peaks only).
+  different estimator (post-vetting, at the interim layer's chosen u, vetted inverted peaks only).
 - On a partial null extract, `N_stars` is still the searched population in the interim config, when
   that sector is present. `S*` then usually lies far beyond the largest value in the extract, and the
   extrapolation flag says so.
@@ -158,4 +159,4 @@ These are the choices above, collected in one place:
 - `passed_all` on a null row is false whenever `S < s_min`. Effectiveness ignores that flag and
   recomputes vetting from the failure columns.
 - The candidates table is not in SCHEMA.md. The column names above are the ones this module accepts.
-- A camera with a null interim `s_star` uses the sector value, as that file's note says.
+- A camera with a null interim `s_star`, or a sector whose `per_camera` object is pooled metadata rather than per-camera records, uses the sector value.

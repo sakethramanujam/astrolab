@@ -736,14 +736,32 @@ def _two_sample(a, b, seed):
 
 # ---------------------------------------------------------------- threshold config
 def load_threshold(path: Path):
+    """Read sector and per-camera S* from the interim threshold config.
+
+    ``per_camera`` may be either a map of camera id -> record with ``s_star``
+    (possibly null, in which case the sector value is used) or a pooled
+    metadata object (``pooled: true`` and counts, with no per-camera S*).
+    Non-dict entries and non-integer keys are ignored.
+    """
     raw = json.loads(Path(path).read_text())
     table = {}
     for sector, rec in (raw.get("sectors") or {}).items():
+        if not isinstance(rec, dict):
+            continue
         if rec.get("s_star") is not None:
             table[(int(sector), None)] = float(rec["s_star"])
-        for cam, crec in (rec.get("per_camera") or {}).items():
+        pc = rec.get("per_camera") or {}
+        if not isinstance(pc, dict):
+            continue
+        for cam, crec in pc.items():
+            if not isinstance(crec, dict):
+                continue
+            try:
+                cam_i = int(cam)
+            except (TypeError, ValueError):
+                continue
             if crec.get("s_star") is not None:
-                table[(int(sector), int(cam))] = float(crec["s_star"])
+                table[(int(sector), cam_i)] = float(crec["s_star"])
     digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
     return table, raw.get("population") or {}, raw, digest
 
@@ -1031,7 +1049,9 @@ def run_crosscheck(*, injections=None, nulls=None, products_root=None, candidate
         fit["gumbel"] = gumbel
         fit["n_stars_source"] = src
         fit["reference_interim_s_star"] = interim
-        fit["reference_note"] = ("reference_interim_s_star is the interim layer's post-vetting GPD at u=6 on vetted "
+        u_ref = rec.get("u")
+        u_txt = f"u={u_ref}" if u_ref is not None else "its chosen u"
+        fit["reference_note"] = (f"reference_interim_s_star is the interim layer's post-vetting GPD at {u_txt} on vetted "
                                  "inverted peaks. The fit in this file is a pre-vetting GPD above the 95th percentile "
                                  "of per-star max S. The two numbers answer different questions.")
         return fit
@@ -1053,7 +1073,7 @@ def run_crosscheck(*, injections=None, nulls=None, products_root=None, candidate
     tail = {
         "definition": ("Generalized Pareto fit to per-star maximum S above that sample's 95th percentile, "
                        "separately for each null mode and for the pooled rows. S* solves P(S > S*) = 1/N_stars "
-                       "per sector. This is pre-vetting. It is not the interim post-vetting fit above u = 6."),
+                       "per sector. This is pre-vetting. It is not the interim post-vetting fit at that layer's chosen u."),
         "by_mode": tail_modes,
     }
 
