@@ -1,0 +1,391 @@
+{
+ "sector": 105,
+ "rows_v100": 11322,
+ "rows_dirty_stamped": 2610,
+ "n_dirty_hashes": 20,
+ "processes": [
+  {
+   "process_start": "2026-11-11T01:10:51+00:00",
+   "head_at_start": "37074a0063",
+   "rows": 378,
+   "dirty_rows_stamped": 273,
+   "first_stamp": "37074a0063-dirty",
+   "tree_dirty_at_load": true,
+   "uncommitted_became": "83eac4ddb8",
+   "uncommitted_committed_at": "2026-11-11T01:13:15+00:00",
+   "pipeline_files": [
+    "exosearch/bls.py",
+    "exosearch/lightcurve.py",
+    "exosearch/store.py",
+    "exosearch/task.py",
+    "exosearch/version.py",
+    "exosearch/vet.py"
+   ],
+   "other_files": [
+    "exosearch/batch.py",
+    "exosearch/deepvet.py",
+    "exosearch/density.py",
+    "exosearch/holdout.py",
+    "exosearch/inject.py",
+    "exosearch/labels.py",
+    "exosearch/missed.py",
+    "exosearch/nulltest.py",
+    "exosearch/stellar.py"
+   ],
+   "rows_flagged": 378
+  },
+  {
+   "process_start": "2026-11-11T01:14:25+00:00",
+   "head_at_start": "83eac4ddb8",
+   "rows": 10944,
+   "dirty_rows_stamped": 2337,
+   "first_stamp": "83eac4ddb8",
+   "tree_dirty_at_load": false,
+   "uncommitted_became": null,
+   "uncommitted_committed_at": null,
+   "pipeline_files": [],
+   "other_files": [],
+   "rows_flagged": 0
+  }
+ ],
+ "per_hash": [
+  {
+   "git_hash": "37074a0063-dirty",
+   "rows": 273,
+   "first": "2026-11-11T01:10:54+00:00",
+   "last": "2026-11-11T01:13:11+00:00",
+   "uncommitted_became": "83eac4ddb8",
+   "pipeline_files": [
+    "exosearch/bls.py",
+    "exosearch/lightcurve.py",
+    "exosearch/store.py",
+    "exosearch/task.py",
+    "exosearch/version.py",
+    "exosearch/vet.py"
+   ],
+   "other_files": [
+    "exosearch/batch.py",
+    "exosearch/deepvet.py",
+    "exosearch/density.py",
+    "exosearch/holdout.py",
+    "exosearch/inject.py",
+    "exosearch/labels.py",
+    "exosearch/missed.py",
+    "exosearch/nulltest.py",
+    "exosearch/stellar.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:10:51+00:00"
+   ],
+   "rows_flagged": 273
+  },
+  {
+   "git_hash": "83eac4ddb8-dirty",
+   "rows": 1057,
+   "first": "2026-11-11T01:16:26+00:00",
+   "last": "2026-11-11T01:41:27+00:00",
+   "uncommitted_became": "3282c6d523",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/deepvet.py",
+    "exosearch/labels.py",
+    "exosearch/reliability.py",
+    "exosearch/stellar.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "3282c6d523-dirty",
+   "rows": 10,
+   "first": "2026-11-11T01:41:47+00:00",
+   "last": "2026-11-11T01:41:58+00:00",
+   "uncommitted_became": "06c657e82f",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/batch.py",
+    "exosearch/stellar.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "06c657e82f-dirty",
+   "rows": 90,
+   "first": "2026-11-11T01:47:52+00:00",
+   "last": "2026-11-11T01:49:49+00:00",
+   "uncommitted_became": "9d651039e4",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/reliability.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "60f305edea-dirty",
+   "rows": 20,
+   "first": "2026-11-11T02:01:07+00:00",
+   "last": "2026-11-11T02:01:33+00:00",
+   "uncommitted_became": "857dcde22e",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/quality.py",
+    "exosearch/whitenoise.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "f8a8b04e00-dirty",
+   "rows": 10,
+   "first": "2026-11-11T02:23:25+00:00",
+   "last": "2026-11-11T02:23:37+00:00",
+   "uncommitted_became": "265f6ac330",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/reliability.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "265f6ac330-dirty",
+   "rows": 12,
+   "first": "2026-11-11T02:26:32+00:00",
+   "last": "2026-11-11T02:26:49+00:00",
+   "uncommitted_became": "fe7057c53b",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/nulldiag.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "dbd2272dcc-dirty",
+   "rows": 25,
+   "first": "2026-11-11T02:45:40+00:00",
+   "last": "2026-11-11T02:46:14+00:00",
+   "uncommitted_became": "cead39c397",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/ffi_check.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "cead39c397-dirty",
+   "rows": 99,
+   "first": "2026-11-11T02:46:19+00:00",
+   "last": "2026-11-11T02:48:34+00:00",
+   "uncommitted_became": "3452f94935",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/interim.py",
+    "exosearch/interim_review.py",
+    "exosearch/quality.py",
+    "exosearch/whitenoise_neff.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "25793951bd-dirty",
+   "rows": 6,
+   "first": "2026-11-11T02:50:59+00:00",
+   "last": "2026-11-11T02:51:07+00:00",
+   "uncommitted_became": "b5119772f5",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/reliability.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "8a47de9288-dirty",
+   "rows": 218,
+   "first": "2026-11-11T02:52:34+00:00",
+   "last": "2026-11-11T02:57:25+00:00",
+   "uncommitted_became": "601107f80c",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/export.py",
+    "exosearch/interim.py",
+    "exosearch/reliability.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "564f5e34da-dirty",
+   "rows": 7,
+   "first": "2026-11-11T03:15:56+00:00",
+   "last": "2026-11-11T03:16:03+00:00",
+   "uncommitted_became": "e9f71e1923",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/export.py",
+    "exosearch/reliability.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "d9db3158c5-dirty",
+   "rows": 234,
+   "first": "2026-11-11T03:41:49+00:00",
+   "last": "2026-11-11T03:47:23+00:00",
+   "uncommitted_became": "ba0c229d54",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/depth_audit.py",
+    "exosearch/export.py",
+    "exosearch/export_repro.py",
+    "exosearch/interim.py",
+    "exosearch/interim_review.py",
+    "exosearch/reliability.py",
+    "exosearch/stat_options.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "ba0c229d54-dirty",
+   "rows": 10,
+   "first": "2026-11-11T03:47:48+00:00",
+   "last": "2026-11-11T03:48:00+00:00",
+   "uncommitted_became": "5ea128fa9f",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/interim.py",
+    "exosearch/reliability.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "5ea128fa9f-dirty",
+   "rows": 363,
+   "first": "2026-11-11T03:54:33+00:00",
+   "last": "2026-11-11T04:03:37+00:00",
+   "uncommitted_became": "65f855e31a",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/stat_options.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "e0fdde34f4-dirty",
+   "rows": 14,
+   "first": "2026-11-11T04:15:43+00:00",
+   "last": "2026-11-11T04:16:02+00:00",
+   "uncommitted_became": "81ebe54d04",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/cut_sensitivity.py",
+    "exosearch/reliability.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "81ebe54d04-dirty",
+   "rows": 75,
+   "first": "2026-11-11T04:21:01+00:00",
+   "last": "2026-11-11T04:22:46+00:00",
+   "uncommitted_became": "4cc9c10916",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/host_gate.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "efdda30414-dirty",
+   "rows": 8,
+   "first": "2026-11-11T04:45:05+00:00",
+   "last": "2026-11-11T04:45:13+00:00",
+   "uncommitted_became": "1d7b8d8b5f",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/reliability.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "1234e996d4-dirty",
+   "rows": 29,
+   "first": "2026-11-11T04:54:24+00:00",
+   "last": "2026-11-11T04:55:05+00:00",
+   "uncommitted_became": "f29148bcb4",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/host_gate.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  },
+  {
+   "git_hash": "7cabc290e4-dirty",
+   "rows": 50,
+   "first": "2026-11-11T05:26:56+00:00",
+   "last": "2026-11-11T05:28:14+00:00",
+   "uncommitted_became": "dcd5914a1c",
+   "pipeline_files": [],
+   "other_files": [
+    "exosearch/host_gate.py",
+    "exosearch/worker_guard.py"
+   ],
+   "loaded_by_process": [
+    "2026-11-11T01:14:25+00:00"
+   ],
+   "rows_flagged": 0
+  }
+ ],
+ "rows_flagged": 378,
+ "rerun_queue": "rerun_queue_v1.0_s105_dirty.txt",
+ "rerun_launched": false
+}

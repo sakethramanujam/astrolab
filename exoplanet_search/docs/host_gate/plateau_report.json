@@ -1,0 +1,520 @@
+{
+ "S70_gate": {
+  "n": 200,
+  "tie_band_gt1": 25,
+  "single_point": 175,
+  "plateau_only": 17,
+  "disjoint": 8,
+  "disjoint_with_chosen_plateau": 4,
+  "frac_disjoint": 0.04,
+  "frac_plateau_only": 0.085,
+  "frac_of_tied_disjoint": 0.32,
+  "frac_of_tied_plateau_only": 0.68,
+  "plateau_width_steps_chosen": {
+   "n": 200,
+   "min": 1.0,
+   "median": 1.0,
+   "p90": 2.0,
+   "max": 36.0
+  },
+  "plateau_width_steps_max": {
+   "n": 200,
+   "min": 1.0,
+   "median": 1.0,
+   "p90": 2.0,
+   "max": 36.0
+  },
+  "width_vs_n_tr": [
+   {
+    "n_tr": "<=2",
+    "n": 64,
+    "n_width_gt1": 16,
+    "width_chosen": {
+     "n": 64,
+     "min": 1.0,
+     "median": 1.0,
+     "p90": 14.700000000000003,
+     "max": 36.0
+    },
+    "width_max": {
+     "n": 64,
+     "min": 1.0,
+     "median": 1.0,
+     "p90": 14.700000000000003,
+     "max": 36.0
+    }
+   },
+   {
+    "n_tr": "3-4",
+    "n": 32,
+    "n_width_gt1": 1,
+    "width_chosen": {
+     "n": 32,
+     "min": 1.0,
+     "median": 1.0,
+     "p90": 1.0,
+     "max": 2.0
+    },
+    "width_max": {
+     "n": 32,
+     "min": 1.0,
+     "median": 1.0,
+     "p90": 1.0,
+     "max": 2.0
+    }
+   },
+   {
+    "n_tr": "5-8",
+    "n": 16,
+    "n_width_gt1": 1,
+    "width_chosen": {
+     "n": 16,
+     "min": 1.0,
+     "median": 1.0,
+     "p90": 1.0,
+     "max": 3.0
+    },
+    "width_max": {
+     "n": 16,
+     "min": 1.0,
+     "median": 1.0,
+     "p90": 1.0,
+     "max": 3.0
+    }
+   },
+   {
+    "n_tr": ">=9",
+    "n": 88,
+    "n_width_gt1": 3,
+    "width_chosen": {
+     "n": 88,
+     "min": 1.0,
+     "median": 1.0,
+     "p90": 1.0,
+     "max": 2.0
+    },
+    "width_max": {
+     "n": 88,
+     "min": 1.0,
+     "median": 1.0,
+     "p90": 1.0,
+     "max": 2.0
+    }
+   }
+  ],
+  "spearman_n_tr_vs_width_max": -0.34816620948315136,
+  "lowest_edge_to_centre": {
+   "days": {
+    "n": 21,
+    "min": 1.5778844939862147e-05,
+    "median": 0.004676408515022601,
+    "p90": 0.08652624780073737,
+    "max": 0.16365137025921683
+   },
+   "sigma_P": {
+    "n": 21,
+    "min": 0.49999973983959856,
+    "median": 0.6666666389310825,
+    "p90": 0.9642917795822679,
+    "max": 0.9722111754014893
+   },
+   "note": "plateau stars only (width > 1); 0 for single points by construction"
+  },
+  "sigma_P_days": {
+   "all": {
+    "n": 200,
+    "min": 9.152681339247293e-06,
+    "median": 0.00048443261330205,
+    "p90": 0.00415260739713304,
+    "max": 0.168329036324474
+   },
+   "plateau": {
+    "n": 21,
+    "min": 3.155768993431951e-05,
+    "median": 0.009352821896513,
+    "p90": 0.0898547173871282,
+    "max": 0.168329036324474
+   }
+  }
+ },
+ "S105_v10": {
+  "n": 200,
+  "tie_band_gt1": 38,
+  "single_point": 162,
+  "plateau_only": 27,
+  "disjoint": 11,
+  "disjoint_with_chosen_plateau": 2,
+  "frac_disjoint": 0.055,
+  "frac_plateau_only": 0.135,
+  "frac_of_tied_disjoint": 0.2894736842105263,
+  "frac_of_tied_plateau_only": 0.7105263157894737,
+  "plateau_width_steps_chosen": {
+   "n": 200,
+   "min": 1.0,
+   "median": 1.0,
+   "p90": 2.0,
+   "max": 34.0
+  },
+  "plateau_width_steps_max": {
+   "n": 200,
+   "min": 1.0,
+   "median": 1.0,
+   "p90": 2.0,
+   "max": 35.0
+  },
+  "width_vs_n_tr": [
+   {
+    "n_tr": "<=2",
+    "n": 100,
+    "n_width_gt1": 27,
+    "width_chosen": {
+     "n": 100,
+     "min": 1.0,
+     "median": 1.0,
+     "p90": 4.1000000000000085,
+     "max": 34.0
+    },
+    "width_max": {
+     "n": 100,
+     "min": 1.0,
+     "median": 1.0,
+     "p90": 4.1000000000000085,
+     "max": 35.0
+    }
+   },
+   {
+    "n_tr": "3-4",
+    "n": 48,
+    "n_width_gt1": 1,
+    "width_chosen": {
+     "n": 48,
+     "min": 1.0,
+     "median": 1.0,
+     "p90": 1.0,
+     "max": 2.0
+    },
+    "width_max": {
+     "n": 48,
+     "min": 1.0,
+     "median": 1.0,
+     "p90": 1.0,
+     "max": 2.0
+    }
+   },
+   {
+    "n_tr": "5-8",
+    "n": 9,
+    "n_width_gt1": 0,
+    "width_chosen": {
+     "n": 9,
+     "min": 1.0,
+     "median": 1.0,
+     "p90": 1.0,
+     "max": 1.0
+    },
+    "width_max": {
+     "n": 9,
+     "min": 1.0,
+     "median": 1.0,
+     "p90": 1.0,
+     "max": 1.0
+    }
+   },
+   {
+    "n_tr": ">=9",
+    "n": 43,
+    "n_width_gt1": 1,
+    "width_chosen": {
+     "n": 43,
+     "min": 1.0,
+     "median": 1.0,
+     "p90": 1.0,
+     "max": 3.0
+    },
+    "width_max": {
+     "n": 43,
+     "min": 1.0,
+     "median": 1.0,
+     "p90": 1.0,
+     "max": 3.0
+    }
+   }
+  ],
+  "spearman_n_tr_vs_width_max": -0.47873492501756976,
+  "lowest_edge_to_centre": {
+   "days": {
+    "n": 29,
+    "min": 2.8394915656204667e-05,
+    "median": 0.005636122826389034,
+    "p90": 0.06042522582651663,
+    "max": 0.16074443997883137
+   },
+   "sigma_P": {
+    "n": 29,
+    "min": 0.4999998294100391,
+    "median": 0.6667537678148528,
+    "p90": 0.9333357232072158,
+    "max": 0.9705902254051563
+   },
+   "note": "plateau stars only (width > 1); 0 for single points by construction"
+  },
+  "sigma_P_days": {
+   "all": {
+    "n": 200,
+    "min": 7.772711806908195e-06,
+    "median": 0.001438203418153,
+    "p90": 0.004983877579140809,
+    "max": 0.1656151440343749
+   },
+   "plateau": {
+    "n": 29,
+    "min": 4.2592373563757335e-05,
+    "median": 0.0075132985363957,
+    "p90": 0.06537644372973993,
+    "max": 0.1656151440343749
+   }
+  },
+  "v10_cache_flips": {
+   "n": 26,
+   "same_plateau": 26,
+   "disjoint_peaks": 0,
+   "not_located": 0,
+   "rows": [
+    {
+     "tic": 44668035,
+     "P_cached": 12.239785674891081,
+     "P_fresh": 12.23978567489108,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 60969306,
+     "P_cached": 10.294455883597445,
+     "P_fresh": 10.294455883597443,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 88338698,
+     "P_cached": 7.8505991090116245,
+     "P_fresh": 7.850599109011624,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 101180944,
+     "P_cached": 11.046253028326241,
+     "P_fresh": 11.04625302832624,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 118585879,
+     "P_cached": 12.616716638173493,
+     "P_fresh": 12.616716638173491,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 122686725,
+     "P_cached": 6.6703696872062785,
+     "P_fresh": 6.670369687206279,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 142930285,
+     "P_cached": 6.6624382782415426,
+     "P_fresh": 6.662438278241543,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 142983341,
+     "P_cached": 12.355783807396083,
+     "P_fresh": 12.355783807396085,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 144481230,
+     "P_cached": 10.904894793442823,
+     "P_fresh": 10.904894793442825,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 147422354,
+     "P_cached": 11.808441813907281,
+     "P_fresh": 11.80844181390728,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 165165800,
+     "P_cached": 9.970997390332123,
+     "P_fresh": 9.970997390332125,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 166747777,
+     "P_cached": 12.035540974677387,
+     "P_fresh": 12.035540974677389,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 166790197,
+     "P_cached": 11.776693104095195,
+     "P_fresh": 11.776693104095196,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 175492350,
+     "P_cached": 9.971201269409411,
+     "P_fresh": 9.971201269409413,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 209453255,
+     "P_cached": 12.372600294878339,
+     "P_fresh": 12.37260029487834,
+     "plateau_cached": 1,
+     "plateau_fresh": 1,
+     "n_plateaus": 2,
+     "same_plateau": true
+    },
+    {
+     "tic": 219138810,
+     "P_cached": 1.2406599332127801,
+     "P_fresh": 1.24065993321278,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 278848684,
+     "P_cached": 12.698516102795239,
+     "P_fresh": 12.69851610279524,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 320940203,
+     "P_cached": 12.831744346025987,
+     "P_fresh": 12.831744346025989,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 321054947,
+     "P_cached": 9.157706319761473,
+     "P_fresh": 9.157706319761472,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 325707298,
+     "P_cached": 10.050371574529951,
+     "P_fresh": 10.050371574529953,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 389587663,
+     "P_cached": 12.732631066149379,
+     "P_fresh": 12.73263106614938,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 441315646,
+     "P_cached": 12.664341034096985,
+     "P_fresh": 12.664341034096983,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 616119496,
+     "P_cached": 12.034264114992677,
+     "P_fresh": 12.034264114992675,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 616224365,
+     "P_cached": 9.174028952688799,
+     "P_fresh": 9.1740289526888,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 616530544,
+     "P_cached": 10.792015433231121,
+     "P_fresh": 10.79201543323112,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    },
+    {
+     "tic": 631779286,
+     "P_cached": 9.965348169588557,
+     "P_fresh": 9.965348169588555,
+     "plateau_cached": 0,
+     "plateau_fresh": 0,
+     "n_plateaus": 1,
+     "same_plateau": true
+    }
+   ]
+  }
+ }
+}
