@@ -198,13 +198,14 @@ def _one(args):
         return dict(tic=tic, status="error", error=type(exc).__name__)
 
 
-def run(host_id, workers, out, fixed=False, fresh_cache_dir=None, jobs=None, sector=SECTOR, allow_dirty=False):
+def run(host_id, workers, out, fixed=False, fresh_cache_dir=None, jobs=None, sector=SECTOR, allow_dirty=False,
+        tics_file=None):
     from multiprocessing import get_context
     from . import targets, worker_guard
     dirty = worker_guard.require_clean(allow_dirty)
     if jobs is None:
-        man = targets.fetch_manifest(SECTOR).set_index("tic")
-        tics = [int(x) for x in TICS.read_text().split()]
+        man = targets.fetch_manifest(sector).set_index("tic")
+        tics = [int(x) for x in Path(tics_file or TICS).read_text().split() if not x.startswith("#")]
         jobs = [(t, man.loc[t].fname, sector) for t in tics]
     t0 = time.time()
     with get_context("spawn").Pool(workers, initializer=_init, initargs=(fixed, fresh_cache_dir)) as pool:
@@ -313,6 +314,8 @@ def main():
     r = sp.add_parser("run"); r.add_argument("--host-id", required=True); r.add_argument("--workers", type=int, default=4); r.add_argument("--out", required=True)
     r.add_argument("--fixed", action="store_true", help="apply the dry-run reproducibility fixes (grid, tie-break, wotan no fastmath/cache)")
     r.add_argument("--fresh-cache-dir", default=None, help="parent dir for per-process empty numba caches")
+    r.add_argument("--tics-file", default=None, help="TIC list (default: the gate list)")
+    r.add_argument("--sector", type=int, default=SECTOR)
     r.add_argument("--allow-dirty", action="store_true", help="dry runs only: start although tracked files differ from HEAD")
     v = sp.add_parser("v10check", help="recompute ~200 stored v1.0.0 S105 rows with fresh numba compiles; compare to the DB")
     v.add_argument("--workers", type=int, default=2); v.add_argument("--out", required=True); v.add_argument("--cache-dir", default="/tmp")
@@ -325,7 +328,8 @@ def main():
     elif a.cmd == "trace":
         trace(a.tics)
     elif a.cmd == "run":
-        run(a.host_id, a.workers, a.out, fixed=a.fixed, fresh_cache_dir=a.fresh_cache_dir, allow_dirty=a.allow_dirty)
+        run(a.host_id, a.workers, a.out, fixed=a.fixed, fresh_cache_dir=a.fresh_cache_dir, allow_dirty=a.allow_dirty,
+            tics_file=a.tics_file, sector=a.sector)
     elif a.cmd == "v10check":
         v10check(a.workers, a.out, a.cache_dir, fixed=a.fixed)
     else:
