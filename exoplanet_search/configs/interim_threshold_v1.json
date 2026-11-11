@@ -3,8 +3,8 @@
  "layer": "interim analysis layer over frozen exosearch v1.0.0",
  "pipeline_version": "1.0.0",
  "config_hash": "80ffc7f29943",
- "git_hash": "3452f94935",
- "statistic": "S = depth_box / (CDPP_D / sqrt(N_tr))",
+ "git_hash": "5ea128fa9f",
+ "statistic": "S_exact = depth (compute_stats box depth) * sqrt(N_tr) / CDPP_D at the stored v1.0.0 peak (depth audit 2026-11-10; v1.0.0 S used the BLS fast-method depth_box); per-star lower bound",
  "interim": true,
  "definition": "S* solves N_null^-1 * #(vetted inverted-null max-S > S*) = 1/N_stars per sector, with a GPD tail fit above u chosen per sector by the parameter-stability rule (u >= 6: all checks logged above it), quoted as value (95% stat CI) +- systematic half-width over the stable u range, on tuning (non-holdout) stars passing {rule['name']}; CI from 2000 star-level bootstrap resamples. False-alarm rate is post-vetting. Partial null: the sample grows as the inverted run proceeds.",
  "quality_cut": "drop star if beta_max > 3.0",
@@ -28,70 +28,68 @@
  },
  "sectors": {
   "70": {
-   "n_null": 4410,
+   "n_null": 7148,
    "n_stars": 10244,
    "target_rate": 9.761811792268645e-05,
-   "u": 6.25,
-   "k_tail": 129,
-   "xi": 0.20756630568995021,
-   "sigma": 0.5626190215056799,
-   "s_star": 12.393062745555328,
+   "u": 7.0,
+   "k_tail": 52,
+   "xi": 0.09552707204635065,
+   "sigma": 0.7625379092104483,
+   "s_star": 11.067632388390026,
    "ci68": [
-    10.803383880742524,
-    14.18007564712529
+    10.155351673883601,
+    11.996497140749593
    ],
    "ci95": [
-    9.746131844206667,
-    16.76621787368384
+    9.320819447275586,
+    13.321492493979497
    ],
    "n_boot_ok": 2000,
-   "n_vetted": 208,
+   "n_vetted": 316,
    "vetted_exceed": {
-    "7": 35,
-    "8": 11,
-    "10": 4,
+    "7": 52,
+    "8": 13,
+    "10": 3,
     "12": 0,
     "15": 0,
     "20": 0
    },
-   "max_vetted": 11.322599095442307,
+   "max_vetted": 11.344520541041696,
    "sensitivity": {
-    "6.0": 12.758537642277364,
-    "7.0": 11.806525106549595,
-    "8.0": 12.747558019193708
+    "6.0": 11.123438531059248,
+    "7.0": 11.067632388390026,
+    "8.0": 11.2827655969396
    },
    "u_rule": "lowest u >= 6.0 with k >= 50 whose xi is within 1 bootstrap SE of xi at every higher u with k >= 30",
    "u_stable": [
-    6.25,
-    6.5,
-    6.75,
-    7.0
+    7.0,
+    7.25,
+    7.5
    ],
    "sys_range": [
-    11.806525106549595,
-    12.765660717519058
+    10.991959991160208,
+    11.229067734955184
    ],
-   "sys_halfwidth": 0.47956780548473166,
-   "dropped_null_quality": 1467,
-   "held_out_excluded": 1123,
+   "sys_halfwidth": 0.1185538718974879,
+   "dropped_null_quality": 2536,
+   "held_out_excluded": 1816,
    "per_camera": {
     "pooled": true,
     "note": "cameras pooled: per-camera tails too thin for a stable GPD (not fitted or published until the samples grow)",
     "n_null": {
-     "1": 1538,
-     "2": 895,
-     "3": 547,
-     "4": 1430
+     "1": 1875,
+     "2": 1887,
+     "3": 1265,
+     "4": 2121
     },
     "k_tail": {
-     "1": 39,
-     "2": 31,
-     "3": 18,
-     "4": 41
+     "1": 12,
+     "2": 13,
+     "3": 11,
+     "4": 16
     }
    },
    "status": "provisional until both the flipped and the scrambled nulls are complete"
   }
- },
- "status": "provisional until both the flipped and the scrambled nulls are complete"
+ }
 }

@@ -47,6 +47,16 @@ with S: it inflates non-transit peaks, not transits. **`S_exact = depth·sqrt(n_
 `n_tr_rec`, `cdpp_d_rec`) is the interim-layer statistic. The peak is not re-chosen, so per-star `S_exact` is a lower
 bound on the max of that statistic. v1.0.0 products are unchanged; v1.1 computes S from the exact box depth in-search.
 
+## Planned v1.1 provenance columns (all products; not in v1.0.0 rows)
+
+| column | meaning |
+|---|---|
+| `host_id` | opaque worker id (`h1`, `h2`, `h3`); the mapping to machines is kept outside the repo |
+| `arch` | CPU architecture (`x86_64`, `arm64`) |
+| `lib_versions` | numpy / scipy / astropy / BLAS versions from the lockfile, as one string |
+| `statistic_id` | `S_cpu_f64` for the registered statistic; any GPU / float32 BLS is a separate id with its own nulls |
+| `prewhiten_n`, `prewhiten_freqs`, `prewhiten_comb` | prewhitening terms removed, their frequencies (c/d), peaks kept by the comb guard |
+
 ## Injections — `injections/injection_v1/part-*.parquet`
 
 One row per (sector, run, TIC); config `configs/injection_v1.json`.

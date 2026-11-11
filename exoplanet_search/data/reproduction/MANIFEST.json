@@ -1,5 +1,5 @@
 {
- "snapshot": "2026-11-11T02:49Z",
+ "snapshot": "2026-11-11T03:56Z",
  "note": "snapshot of products still being extended by running batches; re-export later for the full sets",
  "schema": "SCHEMA.md",
  "configs": [
@@ -8,10 +8,20 @@
   "configs/injection_v1.json",
   "configs/detection_threshold.json"
  ],
+ "derived_columns": {
+  "null_invert_maxS.csv.gz": [
+   "S_exact"
+  ],
+  "injections_v1.csv.gz": [
+   "depth_box_implied",
+   "S_exact"
+  ]
+ },
+ "depth_audit": "S uses depth_box (BLS fast-method depth); depth is the compute_stats box depth. S_exact = depth*sqrt(n_tr)/cdpp_d is the interim-layer statistic; see SCHEMA.md",
  "files": [
   {
    "file": "null_invert_maxS.csv.gz",
-   "rows": 7000,
+   "rows": 12000,
    "columns": [
     "key",
     "tic",
@@ -68,10 +78,11 @@
     "fail_ruwe_high",
     "fail_gaia_nss",
     "fail_common_period",
-    "passed_all"
+    "passed_all",
+    "S_exact"
    ],
-   "bytes_gz": 1257193,
-   "sha256_gz": "957d79d7f00c81705ed7f769ac7a3a94cda95e72303c732a60312d8ba3d9dc8a",
+   "bytes_gz": 2251767,
+   "sha256_gz": "b02b3a6069ebff1d5a75669588566f6699b6b559106dc53e82fa1e20f0d387d3",
    "pipeline_version": [
     "1.0.0"
    ],
@@ -84,7 +95,7 @@
   },
   {
    "file": "injections_v1.csv.gz",
-   "rows": 3500,
+   "rows": 6500,
    "columns": [
     "key",
     "tic",
@@ -158,10 +169,12 @@
     "passed_all",
     "failed_checks",
     "warnings",
-    "job"
+    "job",
+    "depth_box_implied",
+    "S_exact"
    ],
-   "bytes_gz": 1049762,
-   "sha256_gz": "7224f5795a73d35957ee5272f09549d7a2b18ebe41b487a6e04db225d6a01569",
+   "bytes_gz": 2065120,
+   "sha256_gz": "caca58ef0e2c1a74d3013e71ea344fe28c138787111a64507c8612755a10a55c",
    "pipeline_version": [
     "1.0.0"
    ],

@@ -15,7 +15,8 @@ Red-noise treatments on top of S_exact, beta' replacing beta (S' = S_exact * bet
                          star-quality beta_D of every kept star at that D; measurement variance sigma_beta^2)
 The peak is not re-chosen, so every S' is a lower bound on that variant's per-star max and each S* is a lower bound.
 Identical rule on the flipped null and on the injections.
-  python -m exosearch.stat_options   -> products/v<ver>/analysis_layer/stat_options/stat_options.json
+  python -m exosearch.stat_options [--no-cut]  -> products/v<ver>/analysis_layer/stat_options/stat_options[_nocut].json
+  (--no-cut: no star-quality cut on the null or the injections; alpha = 1 / all measured searched stars)
 """
 from __future__ import annotations
 
@@ -54,19 +55,19 @@ def variants(S, beta, D, n_cad, pri):
     return {k: S * beta / v for k, v in bp.items()}, sb
 
 
-def main(sector=70):
+def main(sector=70, cut=True):
     q = quality.load()
     pri = prior(q[q.sector == sector])
     null = interim.with_quality(interim.load_null("invert"), q)
-    x = null[(null.sector == sector) & ~null["drop"] & ~null.holdout.astype(bool)].copy()
+    x = null[(null.sector == sector) & (~null["drop"] if cut else True) & ~null.holdout.astype(bool)].copy()
     x = x.merge(q[["tic", "sector", "n_cad"]], on=["tic", "sector"], how="left")
     x["S_exact"] = x.depth * np.sqrt(x.n_tr) / x.cdpp_d
     thr = json.loads(interim.THR_FILE.read_text())["sectors"][str(sector)]
-    N = thr["n_stars"]
+    N = thr["n_stars"] if cut else int((q[q.sector == sector].status == "ok").sum())   # no cut: all measured searched stars
     inj = interim.read_parts(interim.PROD / "injections" / "*" / "part-*.parquet")
     inj = inj[(inj.status == "ok") & (inj.sector == sector) & ~inj.holdout.astype(bool)]
     inj = inj.merge(q[["tic", "sector", "beta_max", "status", "n_cad"]].rename(columns={"status": "q_status"}), on=["tic", "sector"], how="left")
-    inj = inj[inj.q_status.eq("ok") & (inj.beta_max <= quality.rule()["threshold"])].copy()
+    inj = inj[inj.q_status.eq("ok") & ((inj.beta_max <= quality.rule()["threshold"]) if cut else True)].copy()
     inj["S_exact"] = inj.depth_rec * np.sqrt(inj.n_tr_rec) / inj.cdpp_d_rec
     inj["allowed"] = (inj.depth_inj < rv.MAX_DEPTH) & (inj.rp_inj < rv.MAX_RP)
     failed = inj.failed_checks.fillna("").str.split(",").map(lambda f: set(f) - {"", "low_s"})
@@ -75,7 +76,7 @@ def main(sector=70):
     vi, _ = variants(inj.S_exact.values, inj.beta_d.values, inj.dur_rec.values, inj.n_cad.fillna(x.n_cad.median()).values, pri)
     opts = {"v1.0 S (stored)": (x.S_v10.values, inj.S.values), "a: exact depth, no floor": (vn["a"], vi["a"]),
             "b: hard floor": (vn["b"], vi["b"]), "c: 1-2 sigma_beta floor": (vn["c"], vi["c"]), "d: empirical Bayes": (vn["d"], vi["d"])}
-    res = dict(sector=sector, n_null=int(len(x)), n_inj=int(len(inj)), prior_by_D=pri,
+    res = dict(sector=sector, quality_cut=bool(cut), n_stars=int(N), n_null=int(len(x)), n_inj=int(len(inj)), prior_by_D=pri,
                sigma_beta_median=float(np.median(sbn)), note="S* values are lower bounds (stored peaks, not re-searched)",
                options={})
     for name, (sn, si) in opts.items():
@@ -102,8 +103,9 @@ def main(sector=70):
         print(name, json.dumps({k: v for k, v in res["options"][name].items() if k != "completeness_allowed"}, default=float), flush=True)
     out = interim.PROD / "analysis_layer" / "stat_options"
     out.mkdir(parents=True, exist_ok=True)
-    (out / "stat_options.json").write_text(json.dumps(res, indent=1, default=float))
+    (out / ("stat_options.json" if cut else "stat_options_nocut.json")).write_text(json.dumps(res, indent=1, default=float))
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    main(cut="--no-cut" not in sys.argv)
