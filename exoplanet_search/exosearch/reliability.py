@@ -21,6 +21,19 @@ import pandas as pd
 from . import config, deepvet, holdout, nulltest, store, vet
 from .version import PIPELINE_VERSION, config_hash, stamp
 
+
+def _clean(o):
+    """JSON-safe copy: NaN/inf -> null, numpy scalars -> Python (browsers reject bare NaN)."""
+    if isinstance(o, dict):
+        return {str(k): _clean(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_clean(v) for v in o]
+    if isinstance(o, np.generic):
+        o = o.item()
+    if isinstance(o, float) and not math.isfinite(o):
+        return None
+    return o
+
 ROOT = Path(__file__).resolve().parents[1]
 SITE_JSON = ROOT / "site" / "data" / "reliability.json"
 PROD = config.DATA_ROOT / "products" / f"v{PIPELINE_VERSION}"
@@ -178,7 +191,7 @@ def build():
     cand = PROD / "summary" / "survivors.json"
     if cand.exists():
         out["survivors"] = json.loads(cand.read_text())
-    SITE_JSON.write_text(json.dumps(out, separators=(",", ":"), default=lambda o: None if o != o else o))
+    SITE_JSON.write_text(json.dumps(_clean(out), separators=(",", ":"), allow_nan=False, default=str))
     (PROD / "summary").mkdir(parents=True, exist_ok=True)
     (PROD / "summary" / "reliability.json").write_text(SITE_JSON.read_text())
     return out
@@ -217,7 +230,7 @@ def survivors(sector=70):
                      f"reaching that S (N={n_null}, provisional, before vetting)."),
                rows=sorted(rows, key=lambda x: (x["status"] != "survives", -(x["S"] or 0))))
     (PROD / "summary").mkdir(parents=True, exist_ok=True)
-    (PROD / "summary" / "survivors.json").write_text(json.dumps(out, indent=1, default=lambda o: None if o != o else o))
+    (PROD / "summary" / "survivors.json").write_text(json.dumps(_clean(out), indent=1, allow_nan=False, default=str))
     return out
 
 
