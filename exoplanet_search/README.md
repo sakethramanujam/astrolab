@@ -236,7 +236,9 @@ layout are in [`reproduce.md`](reproduce.md); every output column is defined in
   identically to the real search population, the nulls and the injection hosts. In sector 70 it drops
   2,553 of 12,797 stars (S106: 2,465 of 12,996). Sensitivity at beta_max 2.5/3/4/none and the known-planet
   (TOI host) rate among dropped vs kept stars are in `products/.../analysis_layer/review/review.json` and on the
-  Methods page; TOI hosts are under-represented among dropped stars (odds ratio 0.27 in both sectors).
+  Methods page. In S70 the cut drops 5 of the 124 re-found TOIs (~4% recovery cost) while removing ~20% of stars.
+  TOI hosts are rarer among dropped stars (odds ratio 0.27), but TOIs are biased toward quiet stars, so that does not
+  show the cut is harmless for active stars: occurrence-rate claims are scoped to the kept (beta_max <= 3) population.
 * **Candidates are not detections.** Signals that pass every check at S >= S\* are listed for human vetting;
   those whose expected post-vetting false alarms per sector at their S is >= 0.1 are labelled **marginal**
   (e.g. TIC 318707987, see `docs/preregistration/tic318707987_ffi.md`).

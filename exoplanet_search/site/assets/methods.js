@@ -281,7 +281,15 @@ if (rvb && RV) {
   rvb.append(tbl('Known planets (TOI hosts) among dropped and kept stars', ['Sector', 'Dropped: hosts, re-found', 'Kept: hosts, re-found', 'Odds ratio (p)'],
     ts.map(([s, v]) => [s, `${v.dropped.toi_hosts} (${fmt(100 * v.dropped.toi_host_rate, 2)}%), ${v.dropped.recovered}`, `${v.kept.toi_hosts} (${fmt(100 * v.kept.toi_host_rate, 2)}%), ${v.kept.recovered}`,
       `${fmt(v.fisher_overrep.odds_ratio, 2)} (${v.fisher_overrep.p.toExponential(0)})`])),
-    el('p', { class: 'muted' }, 'Known planets are under-represented among dropped stars, not over-represented.'));
+    (() => {
+      const v = RV.toi_dropped_vs_kept?.['70'];
+      if (!v) return null;
+      const lost = v.dropped.recovered, tot = v.dropped.recovered + v.kept.recovered, nst = v.dropped.stars + v.kept.stars;
+      return el('p', { html: `In sector 70 the cut has a <b>~${fmt(100 * lost / tot, 0)}% recovery cost</b>: it drops ${lost} of the ${tot} TOIs we re-found ` +
+        `while removing ${fmt(100 * v.dropped.stars / nst, 0)}% of stars (${fmt(v.dropped.stars)} of ${fmt(nst)}). ` +
+        `TOI hosts are rarer among dropped stars (odds ratio ${fmt(v.fisher_overrep.odds_ratio, 2)}), but TOIs are themselves biased toward quiet stars, ` +
+        `so this does not show the cut is harmless for active stars. Any occurrence-rate statement from this search applies only to the kept population (β_max ≤ 3).` });
+    })());
   const ca = RV.completeness_allowed?.tuning || {};
   const hs = RV.high_snr_failures || {};
   rvb.append(el('h3', {}, 'Completeness inside the allowed size range'), el('p', { html:
