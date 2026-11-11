@@ -141,3 +141,17 @@ sha256, pipeline/config/git hashes present). Derived interim-layer columns, list
 `derived_columns`: `S_exact` (null, injections) and `depth_box_implied` (injections). Vetted null (interim layer): `status == ok`, `flags` minus `low_s`
 empty, `fail_common_period` false, no `deep_flags` in the rejecting set `v_shape secondary_scan rp_gt_2rjup
 density_mismatch centroid_offset dip_off_target known_eb` (`exosearch/deepvet.py` REJECT), `checks_logged` true.
+
+## Period uncertainty sigma_P (interim layer, tie_break.md amendment 1)
+
+`sigma_p_v1.csv.gz` (reproduction export) and the `sigma_P_d` / `sigma_P_in_band` columns of the site's
+`candidates.csv`: one row per candidate-table star (tic, sector).
+
+| column | meaning |
+|---|---|
+| `period_v10` | stored v1.0.0 period (d) |
+| `sigma_P` | half-width (d) of the in-band plateau (abs(S_i − S_max) ≤ 1e-9·S_max, adjacent grid indices) that contains `period_v10`, edges extended by half a grid step; from the interim fixed-grid search on an x86_64 host |
+| `sigma_P_in_band` | false when `period_v10` is not inside the tie band of that search; `sigma_P` is then half the local grid step P²·df/2 |
+| `plateau_width` | plateau width in grid steps (1 = single grid point) |
+| `plateau_centre` | plateau centre (d), the period v1.1 would report |
+| `n_plateaus`, `disjoint` | number of separate in-band plateaus/peaks for the star; disjoint = more than one |

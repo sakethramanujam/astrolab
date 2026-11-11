@@ -66,12 +66,20 @@ def main():
     files.append(write(clean(inj.sort_values(["sector", "run", "tic"])), "injections_v1.csv.gz"))
     q = interim.read_parts(P / "analysis_layer" / "star_quality_s*_parts" / "part-*.parquet")
     files.append(write(clean(q.sort_values(["sector", "tic"])), "star_quality_v1.csv.gz"))
+    from . import sigma_p
+    sp = sigma_p.load()
+    if sp is not None:                          # plateau half-width at the stored P of each candidate-table row
+        files.append(write(clean(sp.sort_values(["sector", "tic"])), "sigma_p_v1.csv.gz"))
     man = dict(snapshot=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),
                note="snapshot of products still being extended by running batches; re-export later for the full sets",
                schema="SCHEMA.md", configs=["configs/star_quality_v1.json", "configs/interim_threshold_v1.json",
                                             "configs/injection_v1.json", "configs/detection_threshold.json"],
                derived_columns={"null_invert_maxS.csv.gz": ["S_exact"],
-                                "injections_v1.csv.gz": ["depth_box_implied", "S_exact"]},
+                                "injections_v1.csv.gz": ["depth_box_implied", "S_exact"],
+                                "sigma_p_v1.csv.gz": ["sigma_P", "sigma_P_in_band", "plateau_width", "plateau_centre"]},
+               sigma_P="half-width (days) of the in-band plateau containing the stored v1.0.0 period, from the interim "
+                       "fixed-grid search (docs/preregistration/tie_break.md amendment 1); half a grid step when the "
+                       "stored period is not in the tie band (sigma_P_in_band false)",
                depth_audit="S uses depth_box (BLS fast-method depth); depth is the compute_stats box depth. "
                            "S_exact = depth*sqrt(n_tr)/cdpp_d is the interim-layer statistic; see SCHEMA.md",
                files=files)

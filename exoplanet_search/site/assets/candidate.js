@@ -43,7 +43,7 @@ function render(c, prev, next) {
   const body = document.getElementById('body');
   const ro = readout([{ k: 'p', label: 'Period' }, { k: 'd', label: 'Depth' }, { k: 'dur', label: 'Duration' }, { k: 'rp', label: 'Radius' },
     { k: 'sde', label: 'SDE' }, { k: 'snr', label: 'SNR' }, { k: 'tmag', label: 'TESS mag' }, { k: 'star', label: 'Star' }]);
-  ro.set('p', `${fmt(c.period, 5)} d`); ro.set('d', `${fmt(c.depth_ppm)} ppm`); ro.set('dur', `${fmt(c.duration_h, 2)} h`);
+  ro.set('p', `${fmt(c.period, 5)}${c.sigma_P_d != null ? ' ± ' + fmt(c.sigma_P_d, 5) : ''} d`); ro.set('d', `${fmt(c.depth_ppm)} ppm`); ro.set('dur', `${fmt(c.duration_h, 2)} h`);
   ro.set('rp', c.rp_earth != null ? `${fmt(c.rp_earth, 1)} R⊕` : '–', c.rp_rjup > 2 ? 'badv' : '');
   ro.set('sde', fmt(c.sde, 1), c.sde >= 9 ? 'good' : 'badv'); ro.set('snr', fmt(c.snr, 1), c.snr >= 7 ? 'good' : 'badv');
   ro.set('tmag', fmt(c.tmag, 2)); ro.set('star', c.radius_rsun ? `${fmt(c.radius_rsun, 2)} R☉${c.teff ? ` · ${fmt(c.teff)} K` : ''}` : '–');

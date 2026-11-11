@@ -228,7 +228,7 @@ function candidates(d) {
   const detail = (c) => {
     const kv = [['Sector', c.sector], ['Match', c.known || (c.toi_host ? `TOI ${c.toi_host} host, other period` : 'none')], ['Duration', `${fmt(c.duration_h, 1)} h`],
       ['SNR', fmt(c.snr, 1)], ['Transits', c.n_transits], ['Tmag', fmt(c.tmag, 1)], ['Odd/even', `${fmt(c.odd_even_sigma, 1)}σ`], ['Phase 0.5', `${fmt(c.secondary_sigma, 1)}σ`],
-      ['Exact period', `${fmt(c.period, 5)} d`], ['Exact depth', `${fmt(c.depth_ppm)} ppm`]];
+      ['Exact period', `${fmt(c.period, 5)}${c.sigma_P_d != null ? ' ± ' + fmt(c.sigma_P_d, 5) : ''} d`], ['Exact depth', `${fmt(c.depth_ppm)} ppm`]];
     if (c.deep_vetted) kv.push(['Centroid offset', `${fmt(c.centroid_offset_px, 2)} px`], ['V-ratio', fmt(c.v_ratio, 2)], ['Size', `${fmt(c.rp_rjup, 2)} R_J`]);
     return el('div', { class: 'det' }, el('dl', {}, kv.map(([k, v]) => el('div', {}, el('dt', {}, k), el('dd', {}, String(v ?? '–'))))),
       el('a', { class: 'btn primary', href: `candidate.html#s${c.sector}/${c.tic}` }, 'Open light curve & checks →'),
