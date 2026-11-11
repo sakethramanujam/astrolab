@@ -58,5 +58,16 @@
     "exclude_hosts_file": {
       "70": "configs/scramble_exclude_s0070_2026-11-11.csv"
     }
+  },
+  "validation_pw2": {
+    "frequency_match_tol": 0.01,
+    "harmonic_match_tol": 0.01,
+    "harmonics": [
+      1,
+      2,
+      3,
+      0.5,
+      0.3333333333333333
+    ]
   }
 }
