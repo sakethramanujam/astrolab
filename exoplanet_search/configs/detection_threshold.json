@@ -3,5 +3,6 @@
   "provisional": true,
   "default": 7.0,
   "per_sector_camera": {},
-  "source": "placeholder before the inversion null run; replaced by the empirical 1/N_stars quantile of inverted-light-curve max S per sector and camera (still provisional until the analysis PR's GPD/Gumbel tail fit lands)"
+  "source": "placeholder floor chosen before any null run; kept unchanged so rows made during the v1.0.0 runs stay comparable",
+  "role": "v1.0.0 in-pipeline screening floor only: sets the low_s flag / passed column while the frozen search runs. NOT the detection threshold. Every S is stored; detections are scored downstream at the interim S* in configs/interim_threshold_v1.json (exosearch.interim), later at the analysis code's fitted S*."
 }

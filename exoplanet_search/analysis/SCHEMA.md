@@ -22,7 +22,7 @@ radii, R☉/M☉ for stars, solar units for densities.
 | `sigma_w` | white noise per 2-min cadence: 1.4826·MAD of detrended residuals |
 | `sde` | SDE of the max-over-D S periodogram. Logged only, never thresholded. |
 | `snr` | white-noise BLS depth/depth_err (astropy compute_stats). Logged only. |
-| `s_min` | threshold applied when the row was made (`configs/detection_threshold.json`; `provisional` there) |
+| `s_min` | v1.0.0 in-pipeline screening floor when the row was made (`configs/detection_threshold.json`). Not the detection threshold: re-score at S* from `configs/interim_threshold_v1.json` |
 | `camera`, `ccd` | TESS camera/CCD from the light-curve header (S* is per sector and camera) |
 
 ## Injections — `injections/injection_v1/part-*.parquet`
@@ -68,7 +68,7 @@ One row per searched star per null realization (the per-star max-S table).
 | `key`, `tic`, `sector`, `camera`, `ccd`, `tmag`, `holdout` | identity |
 | `mode`, `realization`, `seed` | `invert` (flares masked first, flux → 2 − flux; one realization) or `scramble` (~1-day cadence blocks permuted; realizations with their own seeds) |
 | `period`, `t0`, `duration`, `S`, `S_scan`, `n_tr`, `cdpp_d`, `beta_d`, `sigma_w`, `depth_box`, `sde`, `snr`, `depth`, `n_transits`, `rp_earth`, `radius`, `s_min` | best null peak |
-| `flags`, `passed` | per-star screens (incl. `low_s` at the provisional S*) |
+| `flags`, `passed` | per-star screens (`low_s` here is relative to the screening floor `s_min`, not S*) |
 | `checks_logged` | deep checks evaluated (`S >= 6` or passed screens) |
 | `fail_<check>` | as for injections, plus `fail_common_period` from the null run's own common-period list |
 | `deep_flags`, `rho_z`, `v_ratio`, `v_sigma`, `sec_scan_sigma`, `rp_rjup` | deep-check outputs |

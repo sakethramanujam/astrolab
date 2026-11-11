@@ -218,9 +218,21 @@ layout are in [`reproduce.md`](reproduce.md); every output column is defined in
   the detrended, unbinned flux (so correlated noise counts). The statistic is
   `S = depth / (CDPP_D / sqrt(N_tr))`, with N_tr weighted by in-transit coverage. Signals are thresholded
   on S. SDE is still logged but no longer gates. `beta_D`, `sigma_w`, `CDPP_D` and `N_tr` are saved per candidate.
-* **Threshold S\*.** S\* is the empirical level that one star per sector and camera exceeds on inverted
-  light curves (`configs/detection_threshold.json`). It is **provisional** until the tail fit with
-  bootstrap errors lands with the analysis code.
+* **Threshold S\* (interim analysis layer, `python -m exosearch.interim`).** S\* is set so that one star per
+  sector produces a false alarm after vetting. It comes from a generalized-Pareto fit to the tail of the
+  max S of *vetted* inverted-null peaks, i.e. peaks that pass every check except the threshold. Only tuning
+  stars that pass the star-quality cut are used, and a star-level bootstrap gives the CI. The current value,
+  the null sample size and the CI are in `configs/interim_threshold_v1.json`. The analysis code supersedes it.
+  The `s_min` in `configs/detection_threshold.json` is only the frozen v1.0.0 in-pipeline screening floor
+  that sets `low_s`/`passed` while the search runs. It is not a detection threshold. Every S is stored,
+  and detections are scored downstream at S\*.
+* **Star-quality cut** (`configs/star_quality_v1.json`, registered before evaluation). Drop a star if
+  beta_max > 3, measured on its own light curve (`python -m exosearch.quality`). The cut is applied
+  identically to the real search population, the nulls and the injection hosts. In sector 70 it drops
+  2,553 of 12,797 stars.
+* **Completeness and false-alarm rate are paired.** Detected = right period and epoch with S >= S\*.
+  Passed = detected and every check passes. The false-alarm rate is quoted post-vetting at the same S\*.
+* **White-noise calibration** (`python -m exosearch.whitenoise`): see `docs/v1.1_odd_even_secondary.md`.
 * **Injection-recovery** (`exosearch.inject`). One batman transit per light curve per run goes into
   normalised PDCSAP flux before masking and detrending. P, Rp, b and T0 are drawn as in
   `configs/injection_v1.json`, with Claret (2017) TESS limb darkening. Every injection goes through the
