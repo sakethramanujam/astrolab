@@ -1,0 +1,149 @@
+{
+ "name": "interim_threshold_v1",
+ "layer": "interim analysis layer over frozen exosearch v1.0.0",
+ "pipeline_version": "1.0.0",
+ "config_hash": "80ffc7f29943",
+ "git_hash": "f8a8b04e00",
+ "statistic": "S = depth_box / (CDPP_D / sqrt(N_tr))",
+ "interim": true,
+ "definition": "S* solves N_null^-1 * #(vetted inverted-null max-S > S*) = 1/N_stars per sector, with a GPD tail fit above u=6.0 (all checks logged above u), on tuning (non-holdout) stars passing star_quality_v1; CI from 2000 star-level bootstrap resamples. False-alarm rate is post-vetting. Partial null: the sample grows as the inverted run proceeds.",
+ "quality_cut": "drop star if beta_max > 3.0",
+ "population": {
+  "70": {
+   "searched": 12797,
+   "measured": 12797,
+   "dropped": 2553,
+   "dropped_beta": 2553,
+   "dropped_unmeasured": 0,
+   "kept": 10244
+  },
+  "106": {
+   "searched": 12996,
+   "measured": 0,
+   "dropped": 12996,
+   "dropped_beta": 0,
+   "dropped_unmeasured": 12996,
+   "kept": 0
+  }
+ },
+ "sectors": {
+  "70": {
+   "n_null": 3005,
+   "n_stars": 10244,
+   "target_rate": 9.761811792268645e-05,
+   "u": 6.0,
+   "k_tail": 139,
+   "xi": 0.28454478205417016,
+   "sigma": 0.4590477333181049,
+   "s_star": 13.698807106387628,
+   "ci68": [
+    11.41033102046581,
+    16.488232174969212
+   ],
+   "ci95": [
+    9.892825939765826,
+    21.058899264711137
+   ],
+   "n_boot_ok": 2000,
+   "n_vetted": 139,
+   "vetted_exceed": {
+    "7": 23,
+    "8": 9,
+    "10": 3,
+    "12": 0,
+    "15": 0,
+    "20": 0
+   },
+   "max_vetted": 10.983575458399773,
+   "sensitivity": {
+    "6.0": 13.698807106387628,
+    "7.0": 11.571126681043273,
+    "8.0": 11.802287487795114
+   },
+   "dropped_null_quality": 1194,
+   "held_out_excluded": 801,
+   "per_camera": {
+    "1": {
+     "n_null": 819,
+     "n_stars": 2791,
+     "target_rate": 0.0003581714827322012,
+     "u": 6.0,
+     "k_tail": 31,
+     "xi": 0.2475613267134125,
+     "sigma": 0.4480452280712241,
+     "s_star": 9.927363633768284,
+     "ci68": [
+      8.604342633875868,
+      11.149349118985636
+     ],
+     "ci95": [
+      7.784782197550059,
+      13.181976518603335
+     ],
+     "n_boot_ok": 500,
+     "n_vetted": 31,
+     "vetted_exceed": {
+      "7": 5,
+      "8": 2,
+      "10": 0,
+      "12": 0,
+      "15": 0,
+      "20": 0
+     },
+     "max_vetted": 8.517948063253433,
+     "sensitivity": {
+      "6.0": 9.927363633768284,
+      "7.0": 8.515905508015523,
+      "8.0": null
+     }
+    },
+    "2": {
+     "n_null": 385,
+     "k_tail": 26,
+     "s_star": null,
+     "note": "fewer than 30 vetted exceedances; sector value applies"
+    },
+    "3": {
+     "n_null": 448,
+     "k_tail": 24,
+     "s_star": null,
+     "note": "fewer than 30 vetted exceedances; sector value applies"
+    },
+    "4": {
+     "n_null": 1353,
+     "n_stars": 4612,
+     "target_rate": 0.00021680890196428142,
+     "u": 6.0,
+     "k_tail": 58,
+     "xi": 0.20909480036598826,
+     "sigma": 0.5682596082424873,
+     "s_star": 11.491401791664945,
+     "ci68": [
+      9.654395224623883,
+      13.775207658821074
+     ],
+     "ci95": [
+      8.236596767266779,
+      17.568523944322113
+     ],
+     "n_boot_ok": 500,
+     "n_vetted": 58,
+     "vetted_exceed": {
+      "7": 11,
+      "8": 4,
+      "10": 2,
+      "12": 0,
+      "15": 0,
+      "20": 0
+     },
+     "max_vetted": 10.983575458399773,
+     "sensitivity": {
+      "6.0": 11.491401791664945,
+      "7.0": 11.612154966933257,
+      "8.0": null
+     }
+    }
+   }
+  }
+ }
+}

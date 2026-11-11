@@ -48,6 +48,23 @@ ALL_CHECKS = (["few_transits", "odd_even", "secondary", "too_deep", "too_long", 
                "rp_gt_2rjup", "density_mismatch", "unresolved_neighbour", "centroid_shift_minor", "ruwe_high", "gaia_nss"])
 
 
+def _layer():
+    """Interim analysis layer (quality cut + vetted-null S*), or None before exosearch.interim has run."""
+    from . import interim, quality
+    if not interim.THR_FILE.exists():
+        return None
+    thr = json.loads(interim.THR_FILE.read_text())
+    ss = interim.s_star_by_sector()
+    ref = ss.get(70) or (next(iter(ss.values())) if ss else None)
+    return dict(thr=thr, q=quality.load(), s_star=ss, ref=ref, interim=interim)
+
+
+def s_star_for(layer, sector):
+    """(S*, borrowed_from) for a sector; sectors without their own null borrow the sector-70 value."""
+    v = layer["s_star"].get(int(sector))
+    return (v, None) if v else (layer["ref"], 70)
+
+
 def _read(pattern):
     fs = sorted(glob.glob(str(pattern)))
     return pd.concat([pd.read_parquet(f) for f in fs], ignore_index=True) if fs else pd.DataFrame()
@@ -101,10 +118,13 @@ def completeness(inj):
 
 
 # ---------------------------------------------------------------- null tests
-def nulls(n_df):
+def nulls(n_df, layer=None):
     if n_df.empty:
         return None
     d = n_df[n_df.status == "ok"].copy()
+    if layer is not None:                  # same star-quality cut as the search population and injections
+        d = layer["interim"].with_quality(d, layer["q"])
+        d = d[~d["drop"]].copy()
     fl = d["flags"].fillna("").str.split(",").map(lambda x: set(x) - {"", "low_s"})
     dfl = d.deep_flags.fillna("").str.split(",").map(set)
     # passes every check except the S threshold (deep checks are logged for S >= S_FLOOR)
@@ -117,6 +137,14 @@ def nulls(n_df):
         h_vet, _ = np.histogram(x[x.vet_ok].S.clip(0, 39.99), S_EDGES)
         out["hist"][key] = dict(all=h_all.tolist(), vetted=h_vet.tolist(), n_real=int(x.realization.nunique()))
         out["n_stars"][key] = int(len(x) / max(x.realization.nunique(), 1))
+    if layer is not None:
+        for sec, r in layer["thr"]["sectors"].items():
+            out["threshold"][sec] = dict(n=r["n_null"], n_stars=r["n_stars"], s_star=r["s_star"], ci68=r["ci68"], ci95=r["ci95"],
+                                         k_tail=r["k_tail"], u=r["u"], xi=r["xi"], max_vetted=r["max_vetted"],
+                                         per_camera={c: dict(n=v.get("n_null"), k_tail=v.get("k_tail"), s_star=v.get("s_star"),
+                                                             ci68=v.get("ci68")) for c, v in r.get("per_camera", {}).items()})
+        out["threshold_kind"] = "interim GPD fit, vetted inverted null, tuning stars passing the quality cut"
+        return out
     inv = d[d["mode"] == "invert"]
     for (s, cam), x in inv.groupby(["sector", "camera"]):
         n = len(x)
@@ -129,12 +157,23 @@ def nulls(n_df):
     return out
 
 
-def fap(S, sector, n_df):
+def fap(S, sector, n_df, layer=None):
+    """Empirical FAP. With the analysis layer: post-vetting, on quality-passing tuning stars of the inverted null
+    (k = null stars whose vetted max S reaches S). Without it: raw (pre-vetting) fraction."""
+    if S is None:
+        return None
+    if layer is not None:
+        x = layer["interim"].with_quality(layer["interim"].load_null("invert"), layer["q"])
+        x = x[(x.sector == sector) & ~x["drop"] & ~x.holdout.astype(bool)]
+        if x.empty:
+            return None
+        k = int((x.vetted & (x.S >= S)).sum())
+        return dict(k=k, n=int(len(x)), fap=round((k + 1) / (len(x) + 1), 6), post_vetting=True)
     x = n_df[(n_df["mode"] == "invert") & (n_df.sector == sector) & (n_df.status == "ok")]
-    if x.empty or S is None:
+    if x.empty:
         return None
     k = int((x.S >= S).sum())
-    return dict(k=k, n=int(len(x)), fap=round((k + 1) / (len(x) + 1), 6))
+    return dict(k=k, n=int(len(x)), fap=round((k + 1) / (len(x) + 1), 6), post_vetting=False)
 
 
 # ---------------------------------------------------------------- per-check rates (labelled signals)
@@ -183,10 +222,25 @@ def build():
     missed = {}
     for f in glob.glob(str(PROD / "missed_tois" / "*.json")):
         missed[Path(f).stem.split("_")[-1]] = json.loads(Path(f).read_text())
-    thr = json.loads(vet.THRESHOLD_FILE.read_text())
-    out = dict(stamp(), generated_by="exosearch.reliability (provisional binned summaries)",
+    layer = _layer()
+    if layer is not None:
+        thr = dict(statistic="S = depth_box / (CDPP_D / sqrt(N_tr))", interim=True, provisional=True,
+                   kind="interim: GPD tail fit to the vetted inverted null (tuning stars passing the quality cut), "
+                        "post-vetting false-alarm rate 1/N_stars per sector; bootstrap CI",
+                   default=layer["ref"], by_sector={k: dict(s_star=v["s_star"], ci68=v["ci68"], ci95=v["ci95"], n_null=v["n_null"],
+                                                            n_stars=v["n_stars"], k_tail=v["k_tail"]) for k, v in layer["thr"]["sectors"].items()},
+                   borrowed_note="sectors without their own inverted null yet use the sector-70 value",
+                   pipeline_floor=json.loads(vet.THRESHOLD_FILE.read_text())["default"],
+                   quality_cut=layer["thr"]["quality_cut"], population=layer["thr"]["population"])
+        if not inj.empty:
+            inj = inj[inj.status == "ok"]
+            ss = {int(sec): s_star_for(layer, sec)[0] for sec in inj.sector.unique()}
+            inj = layer["interim"].rescore_injections(inj, layer["q"], ss)
+    else:
+        thr = json.loads(vet.THRESHOLD_FILE.read_text())
+    out = dict(stamp(), generated_by="exosearch.reliability (interim analysis layer)" if layer else "exosearch.reliability (provisional binned summaries)",
                holdout=dict(seed=holdout.SEED, fraction=holdout.FRACTION),
-               detection_threshold=thr, completeness=completeness(inj), nulls=nulls(nl),
+               detection_threshold=thr, completeness=completeness(inj), nulls=nulls(nl, layer),
                check_rates=check_rates(lab), missed_tois=missed)
     cand = PROD / "summary" / "survivors.json"
     if cand.exists():
@@ -210,6 +264,9 @@ def survivors(sector=70):
     c = c[fl.map(lambda x: not (x & v0_reject))].copy()
     man = targets.fetch_manifest(sector).set_index("tic")
     nl = _read(PROD / "nulltests" / "invert" / "parts" / "part-*.parquet")
+    layer = _layer()
+    sstar = s_star_for(layer, sector)[0] if layer else None
+    qs = layer["q"][layer["q"].sector == sector].set_index("tic") if layer else None
     rows = []
     for r in c.itertuples():
         flags = sorted(set((r.deep_flags or "").split(",")) - {""})
@@ -217,17 +274,27 @@ def survivors(sector=70):
         same = abs(res["period"] / r.period - 1) < 0.01
         rej = sorted(set(flags) & deepvet.REJECT)
         status = "rejected" if rej else ("survives" if not flags else "survives, warnings")
-        f = fap(res["S"], sector, nl) if same else None
+        f = fap(res["S"], sector, nl, layer) if same else None
+        qd = bool(qs.loc[r.tic, "drop"]) if qs is not None and r.tic in qs.index else None
+        bmax = float(qs.loc[r.tic, "beta_max"]) if qs is not None and r.tic in qs.index else None
+        if not rej and qd:
+            status = "dropped (star-quality cut)"
+        elif not rej and sstar is not None and same and res["S"] < sstar:
+            status = "below S*"
         rows.append(dict(tic=int(r.tic), sector=sector, period=float(r.period), rp_earth=None if r.rp_earth != r.rp_earth else float(r.rp_earth),
                          S=float(res["S"]) if same else None, v1_period=float(res["period"]), v1_same_peak=bool(same),
                          beta_d=float(res["beta_d"]), fap=None if f is None else f["fap"], fap_k=None if f is None else f["k"],
                          fap_n=None if f is None else f["n"], rho_transit=r.rho_transit, rho_tic=r.rho_tic, rho_z=r.rho_z,
-                         ruwe=r.ruwe, gaia_nss=r.gaia_nss, flags=flags, status=status))
+                         ruwe=r.ruwe, gaia_nss=r.gaia_nss, flags=flags, status=status, s_star=sstar,
+                         above_s_star=None if sstar is None or not same else bool(res["S"] >= sstar),
+                         beta_max=bmax, quality_drop=qd))
     n_null = int(len(nl[(nl.sector == sector)])) if not nl.empty else 0
     out = dict(stamp(), sector=sector, n=len(rows), n_null=n_null,
                note=(f"The {len(rows)} sector-{sector} signals that survived the v0 deep checks, re-vetted with the v1 density and Gaia checks. "
-                     f"S is the v1 statistic at the same peak; FAP = (k+1)/(N+1) with k of N flipped light curves in sector {sector} "
-                     f"reaching that S (N={n_null}, provisional, before vetting)."),
+                     f"S is the v1 statistic at the same peak. " + (
+                         f"Interim S* = {sstar:.1f} (vetted inverted null). FAP = (k+1)/(N+1), k of N quality-passing tuning flipped light "
+                         f"curves whose max S passes every check and reaches that S (post-vetting, partial null)." if sstar else
+                         f"FAP = (k+1)/(N+1) with k of N flipped light curves reaching that S (N={n_null}, before vetting).")),
                rows=sorted(rows, key=lambda x: (x["status"] != "survives", -(x["S"] or 0))))
     (PROD / "summary").mkdir(parents=True, exist_ok=True)
     (PROD / "summary" / "survivors.json").write_text(json.dumps(_clean(out), indent=1, allow_nan=False, default=str))
