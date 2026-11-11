@@ -31,7 +31,7 @@ function render(c, prev, next) {
   document.getElementById('lede').innerHTML = `<span class="badge b-${c.status}">${LABEL[c.status] || c.status}</span> ` +
     (c.known ? `Our blind search re-found <b>${c.known}</b>. ` : c.toi_host ? `This star hosts TOI ${c.toi_host}, but this signal is at a different period. ` : 'No catalogue match at this period. ') +
     `A ${fmt(c.depth_ppm)} ppm dip lasting ${fmt(c.duration_h, 1)} h, every ${fmt(c.period, 4)} days, seen ${c.n_transits} times in sector ${c.sector}.` +
-    (c.status === 'needs_review' ? ` <b>Not a detection:</b> it passed our automated checks with S ${fmt(c.S, 1)} ≥ interim S* ${fmt(c.s_star, 1)}, which is where human vetting starts.` : '') +
+    (c.status === 'needs_review' ? ` <b>Not a detection:</b> it passed our automated checks with S<sub>exact</sub> ${fmt(c.S, 1)} ≥ interim S* ${fmt(c.s_star, 1)}, which is where human vetting starts.` : '') +
     (c.status === 'uncalibrated' ? ` <b>Not calibrated:</b> ${c.calib_note || 'no interim S* comparison'}. It passed the v1.0.0 screens only.` : '');
   const mast = `https://mast.stsci.edu/portal/Mashup/Clients/Mast/Portal.html?searchQuery=${encodeURIComponent(`TIC ${c.tic}`)}`;
   document.getElementById('links').append(

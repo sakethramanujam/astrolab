@@ -125,6 +125,7 @@ def nulls(n_df, layer=None):
         return None
     d = n_df[n_df.status == "ok"].copy()
     if layer is not None:                  # same star-quality cut as the search population and injections
+        d = layer["interim"].exact_s(d)    # interim statistic S_exact (depth audit)
         d = layer["interim"].with_quality(d, layer["q"])
         d = d[~d["drop"]].copy()
     fl = d["flags"].fillna("").str.split(",").map(lambda x: set(x) - {"", "low_s"})
@@ -276,7 +277,9 @@ def build():
                check_rates=check_rates(lab), missed_tois=missed)
     extra = {"review": PROD / "analysis_layer" / "review" / "review.json",
              "whitenoise_neff": PROD / "calibration" / "whitenoise_neff_s0070.json",
-             "ffi_check_318707987": PROD / "analysis_layer" / "ffi_check" / "TIC318707987" / "ffi_check.json"}
+             "ffi_check_318707987": PROD / "analysis_layer" / "ffi_check" / "TIC318707987" / "ffi_check.json",
+             "cut_sensitivity": PROD / "analysis_layer" / "cut_sensitivity" / "cut_sensitivity.json",
+             "depth_audit": PROD / "analysis_layer" / "depth_audit" / "depth_audit.json"}
     for k, f in extra.items():
         if f.exists():
             j = json.loads(f.read_text())

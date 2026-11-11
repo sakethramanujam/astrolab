@@ -290,6 +290,26 @@ if (rvb && RV) {
         `TOI hosts are rarer among dropped stars (odds ratio ${fmt(v.fisher_overrep.odds_ratio, 2)}), but TOIs are themselves biased toward quiet stars, ` +
         `so this does not show the cut is harmless for active stars. Any occurrence-rate statement from this search applies only to the kept population (β_max ≤ 3).` });
     })());
+  const CS = J?.cut_sensitivity;
+  if (CS) {
+    const sx = Object.entries(CS.sectors || {});
+    const pc = (v) => (v == null ? '–' : `${fmt(100 * v, 0)}%`);
+    const r105 = CS.s105_not_calibrated;
+    rvb.append(el('h3', {}, 'Headline numbers with and without the quality cut'), el('p', { html:
+      `All on the interim statistic S<sub>exact</sub> (S recomputed with the exact box depth; see the depth audit in section 1). ` +
+      `"Without cut" uses every measured star in the sector, with its own threshold at one expected false alarm per sector.` }),
+      tbl('Sector thresholds, false alarms and completeness (tuning stars)', ['Sector', 'Population', 'S* (95%)', 'Expected false alarms / sector at S*', 'Found / vetted, S_exp 15–25'],
+        sx.flatMap(([k, v]) => [['with_cut', 'quality cut'], ['without_cut', 'no cut']].map(([a, lab]) => {
+          const r = v[a]; const c = r.completeness_15_25 || {};
+          return [k, `${lab} (${fmt(r.n_stars)} stars)`, `${fmt(r.s_star, 2)} (${ci(r.ci95)})`,
+            fmt(r.efa_per_sector_at_own_s_star, 2) + (a === 'without_cut' ? ` (at the with-cut S*: ${fmt(r.efa_per_sector_at_with_cut_s_star, 2)})` : ''),
+            `${pc(c.detected)} / ${pc(c.vetted)}`];
+        }))),
+      r105 ? tbl('Sector 105 (not calibrated: no own noise-only run; counted against the sector 70 thresholds)', ['Population', 'Rows', 'Passed v1.0.0 screens', 'and S_exact ≥ S*'],
+        [['no cut', fmt(r105.rows), fmt(r105.passed_screens_v10), `${fmt(r105.ge_s_star_without_cut)} (S* ${fmt(r105.s_star_ref.without_cut, 2)})`],
+         ['quality cut', r105.ge_s_star_with_cut == null ? 'not measured yet' : fmt(r105.quality_measured), '–',
+          r105.ge_s_star_with_cut == null ? 'pending' : `${fmt(r105.ge_s_star_with_cut)} (S* ${fmt(r105.s_star_ref.with_cut, 2)})`]]) : null);
+  }
   const ca = RV.completeness_allowed?.tuning || {};
   const hs = RV.high_snr_failures || {};
   rvb.append(el('h3', {}, 'Completeness inside the allowed size range'), el('p', { html:
