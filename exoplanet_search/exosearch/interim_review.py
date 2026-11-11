@@ -119,7 +119,7 @@ def gpd_diagnostics(x, n_stars, sector, plot=True):
 
 
 def completeness(inj, q, cut, s_star, sector=70):
-    d = inj[(inj.status == "ok") & (inj.sector == sector)].merge(q[["tic", "sector", "beta_max", "status"]].rename(columns={"status": "q_status"}),
+    d = interim.exact_s(inj[(inj.status == "ok") & (inj.sector == sector)], "inj").merge(q[["tic", "sector", "beta_max", "status"]].rename(columns={"status": "q_status"}),
                                                                  on=["tic", "sector"], how="left")
     ok = d.q_status.eq("ok")
     d = d[ok if cut is None else ok & (d.beta_max <= cut)].copy()

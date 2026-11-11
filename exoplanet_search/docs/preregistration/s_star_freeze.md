@@ -40,6 +40,21 @@ for the fit, for completeness and for the candidates must apply the floor CDPP_D
 same sample. If the floor is implemented in the search (v1.1) rather than post hoc, the frozen S* is derived from
 that run instead. Nothing is frozen by this file.
 
+## Amendment 2026-11-10: the frozen S* comes from v1.1
+
+v1.0.0 cannot produce the frozen S*: its statistic uses the BLS fast-method depth (inflated on some non-transit
+peaks; depth audit), applies no red-noise floor and does not prewhiten pulsators. Post-hoc corrections on stored
+peaks only give lower bounds. Therefore:
+
+* **The frozen S* is derived from a v1.1 re-search** in which S uses the exact box depth, the chosen beta treatment
+  (floor at 1 − 2·sigma_beta) and pulsator prewhitening are inside the statistic, and the peak is chosen with them.
+* It uses **fresh v1.1 nulls at the registered sizes above** (full flipped null + three scrambled realizations per
+  sector, same tuning + quality star counts), and v1.1 injections re-scored with the same statistic.
+* **The v1.0 nulls feed only the interim layer** (diagnostics, provisional S*, completeness lower bounds). They are
+  capped at the flipped null for S70 and S106 plus one scrambled realization (r0); see `docs/interim_lane_cap.md`.
+
+The red-noise section above is superseded by the v1.1 statistic; the computation section is unchanged.
+
 ## Until then
 
 The current value in `configs/interim_threshold_v1.json` is labelled provisional. It comes from a partial flipped null

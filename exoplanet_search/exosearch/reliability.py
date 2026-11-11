@@ -324,6 +324,8 @@ def survivors(sector=70):
     for r in c.itertuples():
         flags = sorted(set((r.deep_flags or "").split(",")) - {""})
         res = task.search_prepared(task.prepare(batch.lc_path(sector, man.loc[r.tic].fname)))
+        res["S_v10"] = res["S"]
+        res["S"] = res["depth"] * np.sqrt(res["n_tr"]) / res["cdpp_d"]        # interim statistic (depth audit)
         same = abs(res["period"] / r.period - 1) < 0.01
         rej = sorted(set(flags) & deepvet.REJECT)
         efa = float(tail(res["S"])) if tail and same else None

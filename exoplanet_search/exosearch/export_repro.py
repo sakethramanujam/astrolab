@@ -16,6 +16,7 @@ import json
 import re
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from . import interim, nulltest
@@ -57,8 +58,11 @@ def main():
     files = []
     fin = P / "nulltests" / "invert" / "null_invert_maxS.parquet"
     null = pd.read_parquet(fin) if fin.exists() else nulltest.finalize(interim.read_parts(P / "nulltests" / "invert" / "parts" / "part-*.parquet"))
+    null["S_exact"] = null.depth * np.sqrt(null.n_tr) / null.cdpp_d          # interim-layer derived (depth audit)
     files.append(write(clean(null.sort_values(["sector", "tic"])), "null_invert_maxS.csv.gz"))
     inj = interim.read_parts(P / "injections" / "*" / "part-*.parquet")
+    inj["depth_box_implied"] = inj.S * inj.cdpp_d_rec / np.sqrt(inj.n_tr_rec)   # not stored by v1.0.0 injections
+    inj["S_exact"] = inj.depth_rec * np.sqrt(inj.n_tr_rec) / inj.cdpp_d_rec
     files.append(write(clean(inj.sort_values(["sector", "run", "tic"])), "injections_v1.csv.gz"))
     q = interim.read_parts(P / "analysis_layer" / "star_quality_s*_parts" / "part-*.parquet")
     files.append(write(clean(q.sort_values(["sector", "tic"])), "star_quality_v1.csv.gz"))
@@ -66,6 +70,10 @@ def main():
                note="snapshot of products still being extended by running batches; re-export later for the full sets",
                schema="SCHEMA.md", configs=["configs/star_quality_v1.json", "configs/interim_threshold_v1.json",
                                             "configs/injection_v1.json", "configs/detection_threshold.json"],
+               derived_columns={"null_invert_maxS.csv.gz": ["S_exact"],
+                                "injections_v1.csv.gz": ["depth_box_implied", "S_exact"]},
+               depth_audit="S uses depth_box (BLS fast-method depth); depth is the compute_stats box depth. "
+                           "S_exact = depth*sqrt(n_tr)/cdpp_d is the interim-layer statistic; see SCHEMA.md",
                files=files)
     (OUT / "MANIFEST.json").write_text(json.dumps(man, indent=1))
     print(json.dumps([{k: f[k] for k in ("file", "rows", "bytes_gz")} for f in files]))

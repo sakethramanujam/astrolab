@@ -59,6 +59,8 @@ def _reflag(ok, ss, drop, measured):
     key = list(zip(ok.tic.astype(int), ok.sector.astype(int)))
     qd = pd.Series([k in drop for k in key], index=ok.index)
     qm = pd.Series([k in measured for k in key], index=ok.index)
+    ok["S_v10"] = ok.S
+    ok["S"] = ok.depth * np.sqrt(ok.n_tr) / ok.cdpp_d     # interim statistic (depth audit); NaN for v0 rows
     has_s = ok.S.notna()
     ok["s_star"] = thr
     ok["passed_screens_v10"] = (ok.passed == 1)

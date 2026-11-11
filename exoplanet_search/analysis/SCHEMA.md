@@ -15,7 +15,7 @@ radii, R☉/M☉ for stars, solar units for densities.
 |---|---|
 | `S` | detection statistic at the star's best peak: `depth_box · sqrt(n_tr) / cdpp_d`. Thresholded (`S >= s_min`). |
 | `S_scan` | same statistic as the scan saw it (astropy BLS `snr` objective with σ_D = CDPP_D·sqrt(D/bin), fractional N_tr). Peak = argmax over (P, D, T0). |
-| `depth_box` | BLS box depth δ̂ at the peak |
+| `depth_box` | depth reported by astropy BLS `fast` method at the S-scan peak. Enters `S` only. Can exceed the depth of any box at the reported (P, D, T0) when D/P is large: see *Depth columns* |
 | `n_tr` | coverage-weighted number of transits with data: Σ_epochs min(1, n_in / n_expected) on the 10-min binned flux |
 | `cdpp_d` | CDPP at the peak duration D: 1.4826·MAD of the running mean of detrended residuals over D (unbinned 2-min, windows need ≥½ the expected cadences) |
 | `beta_d` | red-noise factor at D: `cdpp_d · sqrt(D/cadence) / sigma_w` (1 = white) |
@@ -23,7 +23,29 @@ radii, R☉/M☉ for stars, solar units for densities.
 | `sde` | SDE of the max-over-D S periodogram. Logged only, never thresholded. |
 | `snr` | white-noise BLS depth/depth_err (astropy compute_stats). Logged only. |
 | `s_min` | v1.0.0 in-pipeline screening floor when the row was made (`configs/detection_threshold.json`). Not the detection threshold: re-score at S* from `configs/interim_threshold_v1.json` |
-| `camera`, `ccd` | TESS camera/CCD from the light-curve header (S* is per sector and camera) |
+| `camera`, `ccd` | TESS camera/CCD from the light-curve header (logged; S* pools cameras) |
+
+## Depth columns (audit 2026-11-10, interim layer)
+
+All depths are fractional flux decrements (1e-6 = 1 ppm). Two estimators exist at the same peak (P, D, T0):
+
+| column | where | meaning | consumers |
+|---|---|---|---|
+| `depth_box` | results DB (v1.0.0 rows), nulls | BLS `fast`-method depth at the S peak (10-min binned flux, phase-binned) | **`S` only** |
+| `depth`, `depth_err` | results DB, nulls, labels | astropy `compute_stats` box depth at (P, D, T0): out-of-transit minus in-transit weighted mean, binned flux | `snr`; screens `too_deep` (> 0.05), `no_dip` (≤ 0), `rp_too_large` via `rp_earth`; deep checks `rp_gt_2rjup`, density fit, Gaia dilution test; site `depth_ppm`; rejected-list filter |
+| `depth_odd`, `depth_even`, `secondary_depth` | results DB | `compute_stats` odd/even/phase-0.5 depths | `odd_even`, `secondary` screens |
+| `rp_earth` | results DB, nulls | `sqrt(depth)·R★·109.1` | `rp_too_large` (> 25), candidate pages |
+| `depth_inj` | injections | injected model depth, 1 − min(model) | `snr_exp`, completeness bins, "allowed" range (`depth_inj < 0.05`, `rp_inj < 25`) |
+| `depth_rec` | injections | `compute_stats` depth at the recovered peak (same as `depth`) | injection screens and deep checks; not used for matching (P, T0 only) |
+| `depth_box_implied` | reproduction export only | `S·cdpp_d_rec/sqrt(n_tr_rec)`: the `depth_box` the v1.0.0 injection rows do not store | audit |
+| `depth_ppm` | site JSON, labels | `depth·1e6` (labels: TOI catalogue "Depth (ppm)") | display |
+
+Findings (`python -m exosearch.depth_audit`): Rp, all vetoes, the site and injection matching use `depth` (correct).
+`depth_box`/`depth` has median 1.01 on the S70 flipped null (p99 1.71; 0.9% of rows > 2× or `depth` ≤ 0), 1.09 on the
+S105 real search (p99 2.35; 1.5%) and 1.000 on matched injections (p99 1.06; none > 2×). The excess grows with D/P and
+with S: it inflates non-transit peaks, not transits. **`S_exact = depth·sqrt(n_tr)/cdpp_d`** (injections: `depth_rec`,
+`n_tr_rec`, `cdpp_d_rec`) is the interim-layer statistic. The peak is not re-chosen, so per-star `S_exact` is a lower
+bound on the max of that statistic. v1.0.0 products are unchanged; v1.1 computes S from the exact box depth in-search.
 
 ## Injections — `injections/injection_v1/part-*.parquet`
 
@@ -105,6 +127,7 @@ drop if `beta_max > 3.0` or `status != ok`.
 
 `exosearch/export_repro.py` writes gzipped CSVs of the tables above (null `invert` max-S, injections, star quality)
 with the profiling, error-text and file-path columns removed, plus `MANIFEST.json` (snapshot time, row counts,
-sha256, pipeline/config/git hashes present). Vetted null (interim layer): `status == ok`, `flags` minus `low_s`
+sha256, pipeline/config/git hashes present). Derived interim-layer columns, listed in `MANIFEST.json`
+`derived_columns`: `S_exact` (null, injections) and `depth_box_implied` (injections). Vetted null (interim layer): `status == ok`, `flags` minus `low_s`
 empty, `fail_common_period` false, no `deep_flags` in the rejecting set `v_shape secondary_scan rp_gt_2rjup
 density_mismatch centroid_offset dip_off_target known_eb` (`exosearch/deepvet.py` REJECT), `checks_logged` true.

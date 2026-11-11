@@ -39,6 +39,20 @@ def read_parts(pattern):
     return pd.concat([pd.read_parquet(f) for f in fs], ignore_index=True) if fs else pd.DataFrame()
 
 
+def exact_s(d, kind="row"):
+    """Interim-layer statistic (depth audit 2026-11-10): S from the compute_stats box depth instead of the BLS
+    fast-method depth_box. v1.0.0 value kept as S_v10. Peak not re-chosen: a lower bound on the per-star max."""
+    if "S_v10" in d:
+        return d
+    d = d.copy()
+    d["S_v10"] = d["S"]
+    if kind == "inj":
+        d["S"] = d.depth_rec * np.sqrt(d.n_tr_rec) / d.cdpp_d_rec
+    else:
+        d["S"] = d.depth * np.sqrt(d.n_tr) / d.cdpp_d
+    return d
+
+
 def load_null(tag="invert"):
     fin = PROD / "nulltests" / tag / f"null_{tag}_maxS.parquet"
     if fin.exists():
@@ -51,7 +65,7 @@ def load_null(tag="invert"):
     dfl = d.deep_flags.fillna("").str.split(",").map(set)
     d["vetted"] = (fl.map(len) == 0) & ~d.fail_common_period.fillna(False).astype(bool) \
         & dfl.map(lambda x: not (x & deepvet.REJECT)) & d.checks_logged.fillna(False).astype(bool)
-    return d
+    return exact_s(d)
 
 
 def with_quality(d, q):
@@ -109,7 +123,7 @@ def search_population(sectors, q):
 
 
 def rescore_injections(inj, q, s_star_by_sector):
-    d = inj[inj.status == "ok"].copy()
+    d = exact_s(inj[inj.status == "ok"], "inj")
     d = d.merge(q[["tic", "sector", "drop"]], on=["tic", "sector"], how="left")
     d["drop"] = d["drop"].fillna(True).astype(bool)
     d = d[~d["drop"]].copy()
