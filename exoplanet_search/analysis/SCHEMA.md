@@ -86,3 +86,25 @@ Put analysis code here (gamma-CDF completeness with bootstrap, GPD/Gumbel tail f
 ROC, vetting effectiveness E, reliability). The site reads `site/data/reliability.json`; if
 `analysis/` provides `make_reliability_json.py` writing that file, `scripts/publish_site.sh` picks it up
 unchanged. Until then the harness writes provisional binned summaries there.
+
+## Star quality (interim layer) — `analysis_layer/star_quality_s<sector>.parquet`
+
+One row per searched star (real light curve, no injection or inversion), measured after the frozen detrend
+with `exosearch.bls.noise_profile`. Cut: `configs/star_quality_v1.json` (frozen; registered after unblinding):
+drop if `beta_max > 3.0` or `status != ok`.
+
+| column | meaning |
+|---|---|
+| `key`, `tic`, `sector`, `holdout`, `tmag`, `camera`, `ccd` | identity |
+| `sigma_w`, `n_cad` | white noise per cadence, cadences after the quality mask |
+| `cdpp_<D>`, `beta_<D>` | CDPP and red-noise factor at each trial duration D (days) |
+| `beta_max` | max over D of `beta_<D>` |
+| `status` | `ok` or `error` |
+
+## Reproduction export — `data/reproduction/` (in the repo)
+
+`exosearch/export_repro.py` writes gzipped CSVs of the tables above (null `invert` max-S, injections, star quality)
+with the profiling, error-text and file-path columns removed, plus `MANIFEST.json` (snapshot time, row counts,
+sha256, pipeline/config/git hashes present). Vetted null (interim layer): `status == ok`, `flags` minus `low_s`
+empty, `fail_common_period` false, no `deep_flags` in the rejecting set `v_shape secondary_scan rp_gt_2rjup
+density_mismatch centroid_offset dip_off_target known_eb` (`exosearch/deepvet.py` REJECT), `checks_logged` true.
