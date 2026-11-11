@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Methods &amp; reliability · Transit Hunt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='22' fill='%23ffb86b'/%3E%3Ccircle cx='20' cy='30' r='7' fill='%2305070f'/%3E%3C/svg%3E"></head><body><a class="skip" href="#main">Skip to content</a><canvas id="stars" aria-hidden="true"></canvas>
+<nav><div class="wrap"><a class="brand" href="./"><span class="orb"></span>Transit Hunt</a>
+<div class="links"><a href="./">Dashboard</a><a href="learn.html">Learn</a><a class="on" href="methods.html">Methods</a><a href="contribute.html">Run it yourself</a></div></div></nav>
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">Methods &amp; reliability</div>
+  <h1>How much should you trust a candidate?</h1>
+  <p class="lede">We measure the pipeline instead of assuming it works: thousands of fake planets injected into real light curves
+    (completeness), the same search run on flipped and scrambled light curves where no planet can exist (false alarms), and every
+    vetting check scored against known planets and known false positives. The pipeline is frozen and versioned, so the numbers belong to exact code.</p>
+  <div id="ver" class="toc"></div>
+</div></header>
+<main class="wrap" id="main" tabindex="-1">
+  <div id="prov" class="card lesson" hidden></div>
+
+  <section id="pipeline" class="card lesson">
+    <h2>1 · The frozen pipeline</h2>
+    <div class="grid two">
+      <div><p><b>Detrend.</b> Quality-flagged cadences dropped; biweight trend (0.75-day window) divided out; 0.3 days cut at each gap edge; upward outliers clipped; binned to 10 minutes.</p>
+        <p><b>Search.</b> Box Least Squares over periods from 0.5 days to half the baseline and 8 durations (1–6 h). Each peak is scored with
+        <code>S = δ / (CDPP<sub>D</sub> / √N<sub>tr</sub>)</code>: the box depth over the star's own noise on that duration, measured from the light curve,
+        so stars with correlated (red) noise are not over-trusted. SDE is still logged but no longer used as the threshold.</p></div>
+      <div><p><b>Screens.</b> At least 3 transits, odd/even depths agree, no secondary eclipse, not too deep or too long for the star, no brightening at half phase, not a period shared by many unrelated stars.</p>
+        <p><b>Deep checks.</b> Difference-image centroid, Gaia DR3 neighbours, eclipsing-binary catalogues, V-shape, a secondary-eclipse scan, size limit, and new in v1: the
+        star's density implied by the transit shape compared with the TIC catalogue, plus Gaia RUWE and non-single-star warnings.</p></div>
+    </div>
+  </section>
+
+  <section id="completeness" class="card lesson">
+    <h2>2 · Completeness: what fraction of real planets would we find?</h2>
+    <p>Each light curve gets one fake planet per run: random period, size and impact parameter, a limb-darkened <code>batman</code> transit,
+      put into the raw flux <i>before</i> any cleaning, then run through every step above. A cell shows the share of injected planets that were recovered (right period and epoch).</p>
+    <div class="stage"><div class="viz"><canvas id="cmap" aria-label="completeness map, period against planet radius"></canvas>
+      <div id="cread"></div><canvas id="csnr" aria-label="completeness against expected S"></canvas></div>
+      <div class="controls" id="cctl"><h3>Show</h3></div></div>
+    <div id="cnote"></div>
+  </section>
+
+  <section id="falsealarms" class="card lesson">
+    <h2>3 · False alarms: what does pure noise look like?</h2>
+    <p>Flip every light curve upside down (after removing flares) and a real planet becomes a brightening the search cannot fit; whatever the frozen search
+      still finds is noise or instrument systematics. Scrambling day-long chunks destroys periodic signals too, but with one sector that test is limited.
+      The histogram is the best peak of every star. Drag the threshold to see how many noise peaks would pass.</p>
+    <div class="stage"><div class="viz"><canvas id="nhist" aria-label="histogram of noise-only best-peak S"></canvas><div id="nread"></div></div>
+      <div class="controls" id="nctl"><h3>Null test</h3></div></div>
+    <div id="nthr"></div>
+  </section>
+
+  <section id="checks" class="card lesson">
+    <h2>4 · How good is each vetting check?</h2>
+    <p>For signals we can label (our peak matches a confirmed or known planet, or a known false positive or eclipsing binary) we count how often each check fires.
+      A good check fires on false positives (amber bar) and almost never on planets (teal bar). Thresholds were tuned only on the <i>tuning</i> stars; the randomly held-out 20% of stars test them.</p>
+    <div id="kctl" class="filters"></div>
+    <div id="klist" class="bars"></div>
+  </section>
+
+  <section id="missed" class="card lesson">
+    <h2>5 · Why we missed known planets</h2>
+    <div id="mlist" class="bars"></div>
+  </section>
+
+  <section id="survivors" class="card lesson">
+    <h2>6 · Our candidates after the new checks</h2>
+    <div id="slist"></div>
+  </section>
+</main>
+<footer class="wrap"><p>Numbers on this page are regenerated with each publish. Anything marked <b>provisional</b> waits on the statistical fits in the analysis code. Nothing here is a confirmed discovery.</p></footer>
+<script type="module" src="assets/methods.js"></script>
+</body></html>
