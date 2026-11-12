@@ -60,14 +60,15 @@
     }
   },
   "validation_pw2": {
-    "frequency_match_tol": 0.01,
-    "harmonic_match_tol": 0.01,
-    "harmonics": [
-      1,
-      2,
-      3,
-      0.5,
-      0.3333333333333333
-    ]
+    "snr_stop": 4.0,
+    "max_terms": 20,
+    "noise_window_cpd": 2.0,
+    "fmin_cpd": 0.1,
+    "max_k": 20,
+    "residual_snr_threshold": 4.0,
+    "frequency_file": null
+  },
+  "known_planets": {
+    "frozen_eligibility_file": null
   }
 }

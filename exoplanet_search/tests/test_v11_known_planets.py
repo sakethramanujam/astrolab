@@ -2,54 +2,21 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from exosearch.v11 import known_planets, grid
+from exosearch.v11 import known_planets, grid, settings
 
 
 def test_grid_halfwidth():
-    """Verify plateau half-width calculation from grid spacing."""
+    """Verify plateau half-width calculation from grid spacing fallback."""
     P = 3.0
     baseline = 27.0
     hw = known_planets.calculate_grid_halfwidth(P, baseline=baseline)
-    # df = min(durations) / baseline^2 = 0.04 / (27^2)
-    # hw = 0.5 * P^2 * df
     df = 0.04 / (27.0 ** 2)
     expected_hw = 0.5 * (3.0 ** 2) * df
     assert np.isclose(hw, expected_hw)
 
 
-def test_contamination_factor_pdcsap():
-    """Verify contamination factor is 1.0 for PDCSAP and crowdsap is tracked."""
-    assert known_planets.CONTAMINATION_FACTOR_PDCSAP == 1.0
-
-    targets_df = pd.DataFrame([{
-        "tic": 123456,
-        "name": "TOI 100.01",
-        "period": 3.0,
-        "duration_hours": 2.4,
-        "depth_ppm": 1000.0,
-        "crowdsap": 0.85,
-        "n_tr": 3,
-        "n_raw": 3,
-        "cdpp_d": 1e-4,
-    }])
-    search_df = pd.DataFrame([{
-        "tic": 123456,
-        "period": 3.0,
-        "S": 20.0
-    }])
-    s_star = 10.0
-    out_df, summary = known_planets.evaluate_known_planets(targets_df, search_df, s_star=s_star)
-    assert len(out_df) == 1
-    row = out_df.iloc[0]
-    assert row["contamination_factor"] == 1.0
-    assert row["crowdsap"] == 0.85
-    # depth_exp = depth_cat * 1.0 = 1e-3
-    # expected S = 1e-3 * sqrt(3) / 1e-4 = 17.3205
-    assert np.isclose(row["expected_S"], 1e-3 * np.sqrt(3) / 1e-4)
-
-
-def test_alias_handling():
-    """Verify exact match within halfwidth, 2x alias, 0.5x alias, and unrecovered."""
+def test_alias_handling_exact_tolerance():
+    """Spec A4: 2x and 0.5x aliases use the EXACT same half-width tolerance and are flagged."""
     P_cat = 4.0
     hw = known_planets.calculate_grid_halfwidth(P_cat)
 
@@ -57,94 +24,93 @@ def test_alias_handling():
     rec, alias = known_planets.check_recovery(P_cat, P_cat + 0.5 * hw, hw)
     assert rec and alias is None
 
-    # 2. 2x alias
-    rec_2x, alias_2x = known_planets.check_recovery(P_cat, 2.0 * P_cat, hw)
+    # 2. 2x alias within exact half-width
+    rec_2x, alias_2x = known_planets.check_recovery(P_cat, 2.0 * P_cat + 0.5 * hw, hw)
     assert rec_2x and alias_2x == "2x"
 
-    # 3. 0.5x alias
-    rec_half, alias_half = known_planets.check_recovery(P_cat, 0.5 * P_cat, hw)
+    # 3. 0.5x alias within exact half-width
+    rec_half, alias_half = known_planets.check_recovery(P_cat, 0.5 * P_cat + 0.5 * hw, hw)
     assert rec_half and alias_half == "0.5x"
 
-    # 4. Unrecovered period (e.g. 1.33x)
-    rec_bad, alias_bad = known_planets.check_recovery(P_cat, 1.33 * P_cat, hw)
-    assert not rec_bad and alias_bad is None
+    # 4. Alias beyond half-width fails even if within 1% of period
+    rec_bad_alias, _ = known_planets.check_recovery(P_cat, 2.0 * P_cat + 2.0 * hw, hw)
+    assert not rec_bad_alias
 
 
-def test_required_set_logic():
-    """Target is required iff expected S >= S* and n_tr >= 2."""
+def test_s_star_required():
+    """Spec B3: S* is required as argument; error if not supplied or non-positive."""
+    df_tgt = pd.DataFrame([{"tic": 1, "period": 3.0, "dur_h": 2.0, "depth_ppm": 1000.0, "aperture_contamination": 0.9}])
+    df_search = pd.DataFrame([{"tic": 1, "period": 3.0, "S": 15.0}])
+
+    with pytest.raises(ValueError, match="s_star must be provided"):
+        known_planets.evaluate_known_planets(df_tgt, df_search, s_star=None)
+
+    with pytest.raises(ValueError, match="s_star must be provided"):
+        known_planets.evaluate_known_planets(df_tgt, df_search, s_star=-1.0)
+
+
+def test_b4_contamination_model_and_flag():
+    """Spec B4: Aperture contamination primary; no aperture value -> ineligible with reason;
+    flag > 20% difference vs TIC contratio."""
+    s_star = 10.0
     targets = [
-        # TIC 1: expected S >= 10, n_tr = 3 -> Required
-        {"tic": 1, "name": "T1", "period": 2.0, "dur_h": 2.0, "depth_ppm": 2000.0, "n_tr": 3, "n_raw": 3, "cdpp_d": 1e-4, "crowdsap": 0.95},
-        # TIC 2: expected S < 10, n_tr = 3 -> Not required
-        {"tic": 2, "name": "T2", "period": 2.0, "dur_h": 2.0, "depth_ppm": 500.0, "n_tr": 3, "n_raw": 3, "cdpp_d": 1e-4, "crowdsap": 0.95},
-        # TIC 3: expected S >= 10, n_tr = 1 -> Not required (few transits)
-        {"tic": 3, "name": "T3", "period": 15.0, "dur_h": 2.0, "depth_ppm": 2000.0, "n_tr": 1, "n_raw": 1, "cdpp_d": 1e-4, "crowdsap": 0.95},
+        # Star 1: aperture present, contratio matches well (0.95 vs 1/(1+0.05) ~ 0.952)
+        {"tic": 1, "name": "P1", "period": 3.0, "t0": 1.0, "dur_h": 2.4, "depth_ppm": 2000.0, "aperture_contamination": 0.95, "contratio": 0.05, "n_tr": 3, "cdpp_d": 1e-4},
+        # Star 2: aperture present, but differs by > 20% vs contratio (0.50 vs 1/(1+0.01) ~ 0.99) -> flag True
+        {"tic": 2, "name": "P2", "period": 3.0, "t0": 1.0, "dur_h": 2.4, "depth_ppm": 2000.0, "aperture_contamination": 0.50, "contratio": 0.01, "n_tr": 3, "cdpp_d": 1e-4},
+        # Star 3: no aperture contamination -> ineligible with reason
+        {"tic": 3, "name": "P3", "period": 3.0, "t0": 1.0, "dur_h": 2.4, "depth_ppm": 2000.0, "aperture_contamination": None, "contratio": 0.05, "n_tr": 3, "cdpp_d": 1e-4},
     ]
     df_tgt = pd.DataFrame(targets)
-    # Search recovers TIC 1 and 2, but misses TIC 3
     df_search = pd.DataFrame([
-        {"tic": 1, "period": 2.0, "S": 15.0},
-        {"tic": 2, "period": 2.0, "S": 8.0},
-        {"tic": 3, "period": 0.8, "S": 6.0},
+        {"tic": 1, "period": 3.0, "S": 15.0},
+        {"tic": 2, "period": 3.0, "S": 15.0},
+        {"tic": 3, "period": 3.0, "S": 15.0},
     ])
-    s_star = 10.0
+
     out_df, summary = known_planets.evaluate_known_planets(df_tgt, df_search, s_star=s_star)
-    
-    assert out_df.loc[out_df.tic == 1, "required"].iloc[0] == True
-    assert out_df.loc[out_df.tic == 2, "required"].iloc[0] == False
-    assert out_df.loc[out_df.tic == 3, "required"].iloc[0] == False
 
-    # Summary: only TIC 1 is required, and it was recovered -> Pass
-    assert summary["pass"] == True
-    assert summary["required_targets"] == 1
-    assert summary["required_recovered"] == 1
-    assert summary["required_missed"] == 0
+    r1 = out_df[out_df.tic == 1].iloc[0]
+    assert r1["eligible"] == True
+    assert not r1["contamination_flag"]
+
+    r2 = out_df[out_df.tic == 2].iloc[0]
+    assert r2["eligible"] == True
+    assert r2["contamination_flag"] == True
+
+    r3 = out_df[out_df.tic == 3].iloc[0]
+    assert r3["eligible"] == False
+    assert r3["ineligible_reason"] == "missing_aperture_contamination"
 
 
-def test_miss_causes_and_pass_fail():
-    """Verify bucket classification logic and pass/fail gate: any required missed fails."""
-    # Build 5 missed targets covering different causes
+def test_b5_no_excused_misses_missing_lc_or_runtime_error_is_failure():
+    """Spec B5: No excused misses: any eligible miss, including missing LC or runtime error,
+    is a FAILURE row with diagnosed cause."""
+    s_star = 10.0
     targets = [
-        # 1. few_transits: n_raw < 2
-        {"tic": 10, "name": "T10", "period": 18.0, "duration_hours": 3.0, "depth_ppm": 2000.0, "n_raw": 1, "n_tr": 1, "cdpp_d": 1e-4},
-        # 2. long_duration: duration > 0.25 d (6 hours); expected S < 10 so not required
-        {"tic": 20, "name": "T20", "period": 5.0, "duration_hours": 7.0, "depth_ppm": 200.0, "n_raw": 3, "n_tr": 3, "cdpp_d": 1e-4},
-        # 3. masked: n_raw >= 2, but n_tr surviving < 2
-        {"tic": 30, "name": "T30", "period": 8.0, "duration_hours": 2.0, "depth_ppm": 2000.0, "n_raw": 2, "n_tr": 1, "cdpp_d": 1e-4},
-        # 4. below_threshold: expected S < s_star
-        {"tic": 40, "name": "T40", "period": 3.0, "duration_hours": 2.0, "depth_ppm": 400.0, "n_raw": 5, "n_tr": 5, "cdpp_d": 1e-4},
-        # 5. outcompeted: required (S >= 10, n_tr >= 2), but search found completely different peak
-        {"tic": 50, "name": "T50", "period": 3.0, "duration_hours": 2.0, "depth_ppm": 1500.0, "n_raw": 5, "n_tr": 5, "cdpp_d": 1e-4},
+        # Star 1: Eligible (expected S >= 10, n_tr >= 2), but search missed it
+        {"tic": 1, "name": "P1", "period": 2.0, "t0": 0.5, "dur_h": 2.0, "depth_ppm": 2000.0, "aperture_contamination": 1.0, "n_tr": 4, "cdpp_d": 1e-4},
+        # Star 2: Runtime error during pipeline preparation
+        {"tic": 2, "name": "P2", "period": 3.0, "t0": 0.5, "dur_h": 2.0, "depth_ppm": 2000.0, "aperture_contamination": 1.0, "n_tr": 4, "cdpp_d": 1e-4, "error": "FITS corrupted"},
     ]
     df_tgt = pd.DataFrame(targets)
-    # Search found wrong period for all
     df_search = pd.DataFrame([
-        {"tic": 10, "period": 0.5, "S": 5.0},
-        {"tic": 20, "period": 0.5, "S": 5.0},
-        {"tic": 30, "period": 0.5, "S": 5.0},
-        {"tic": 40, "period": 0.5, "S": 5.0},
-        {"tic": 50, "period": 0.5, "S": 25.0},
+        {"tic": 1, "period": 0.5, "S": 5.0},
+        {"tic": 2, "period": 0.5, "S": 5.0},
     ])
-    s_star = 10.0
+
     out_df, summary = known_planets.evaluate_known_planets(df_tgt, df_search, s_star=s_star)
+    assert not summary["pass"]
+    assert summary["eligible_missed"] == 2
 
-    row10 = out_df[out_df.tic == 10].iloc[0]
-    assert row10["miss_cause"] == "few_transits"
+    r1 = out_df[out_df.tic == 1].iloc[0]
+    assert r1["miss_cause"] == "outcompeted"
 
-    row20 = out_df[out_df.tic == 20].iloc[0]
-    assert row20["miss_cause"] == "long_duration"
+    r2 = out_df[out_df.tic == 2].iloc[0]
+    assert "runtime_error: FITS corrupted" in r2["miss_cause"]
 
-    row30 = out_df[out_df.tic == 30].iloc[0]
-    assert row30["miss_cause"] == "masked"
 
-    row40 = out_df[out_df.tic == 40].iloc[0]
-    assert row40["miss_cause"] == "below_threshold"
-
-    row50 = out_df[out_df.tic == 50].iloc[0]
-    assert row50["miss_cause"] == "outcompeted"
-    assert row50["required"] == True
-    assert row50["recovered"] == False
-
-    # Because TIC 50 is required and missed, summary['pass'] must be False
-    assert summary["pass"] == False
-    assert summary["required_missed"] == 1
+def test_b5_report_refuses_without_frozen_eligibility_file(tmp_path):
+    """Spec B5: Report refuses without frozen eligibility file."""
+    with pytest.raises(RuntimeError, match="Frozen eligibility file required"):
+        known_planets.run_known_planet_recovery(s_star=10.0, out_dir=tmp_path, frozen_eligibility_file=None)
