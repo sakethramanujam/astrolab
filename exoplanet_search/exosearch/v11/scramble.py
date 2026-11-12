@@ -1,0 +1,148 @@
+"""v1.1 scrambled-null transform: per-segment cyclic rotation rule.
+
+REVISED v1.1 SCRAMBLE RULE (Scientist ruling 2026-11-11, supersedes the fallback):
+(1) Input is the quality-masked light curve; apply lightcurve.gap_edge_mask
+    (gap=0.5 d, trim=0.3 d) BEFORE scrambling and drop those cadences.
+(2) Split into contiguous segments at gaps > 0.5 d.
+(3) Rotate EVERY segment, regardless of length, by its own independent random
+    cyclic offset from a numpy default_rng seeded by the task seed; flux and flux_err
+    move together, time stamps fixed, no sample crosses a gap.
+(4) There is NO block-shuffle fallback and NO leave-unrotated path: both deleted.
+    A 1-sample segment has no non-zero rotation and stays as is (the only unrotated case);
+    for longer segments the offset is drawn from 1..n_seg-1, i.e. a zero offset is redrawn.
+(5) Return per-segment offsets so the pipeline records them (scr_offsets,
+    scr_scheme='segment_rotation').
+(6) Parameters in configs/v1.1.json 'scramble' section.
+(7) JOIN GAP (post-hoc amendment 2026-11-12, docs/preregistration/v1.1_amendment_join_gap_2026-11-12.md): after
+    rotating, a time offset JOIN_GAP_D = BREAK_TOLERANCE_D + cadence is inserted at every wrap point (the cadence
+    where the rotated segment's original first sample now sits): that cadence and every later one move later by the
+    offset (cumulative over wraps), so the wrap becomes a gap the detrender breaks at, as at a real gap. cadence is the
+    median spacing of the gap-edge-masked input. No mask, no taper; flux and flux_err are unchanged by (7).
+(8) JOIN-GAP TRIM (post-hoc amendment 2026-11-12, docs/preregistration/v1.1_amendment_join_gap_trim_2026-11-12.md):
+    each inserted wrap gap gets the SAME edge trim real gaps get in rule (1): lightcurve.gap_edge_mask's rule with the
+    same parameters (scramble.gap_d, scramble.gap_trim_d = 0.3 d), i.e. cadences with t > t_before - trim up to the
+    last cadence before the inserted gap and with t < t_after + trim from the first cadence after it are dropped.
+    Copies the existing rule; no new parameter. Real gaps are not trimmed a second time.
+"""
+from __future__ import annotations
+
+from typing import Any, Dict, List, Tuple
+
+import numpy as np
+
+from .. import lightcurve
+
+# lightcurve.detrend calls wotan flatten(..., break_tolerance=0.5); wotan splits where diff(t) > break_tolerance.
+# tests/test_v11_scramble.py asserts this constant equals the value in lightcurve.detrend's source.
+BREAK_TOLERANCE_D = 0.5
+
+
+def inserted_gap_keep(t: np.ndarray, wrap_idx: List[int], gap: float, trim: float) -> np.ndarray:
+    """Rule (8): lightcurve.gap_edge_mask's decision on the shifted time stamps, used only in the trim window of each
+    inserted gap (the window is gap_edge_mask's own rule: [t_after, t_after + trim) and (t_before - trim, t_before]).
+    Real gaps (trimmed before scrambling) and the series ends are not trimmed again."""
+    full = lightcurve.gap_edge_mask(t, gap=gap, trim=trim)
+    keep = np.ones(t.size, bool)
+    for i in wrap_idx:                                  # inserted gap between cadences i-1 and i
+        keep[i:] &= ~((t[i:] >= t[i]) & (t[i:] < t[i] + trim)) | full[i:]
+        keep[:i] &= ~((t[:i] <= t[i - 1]) & (t[:i] > t[i - 1] - trim)) | full[:i]
+    return keep
+
+
+def join_gap_d(t: np.ndarray) -> Tuple[float, float]:
+    """-> (offset inserted at each wrap = BREAK_TOLERANCE_D + cadence, cadence = median diff of t)."""
+    cad = float(np.median(np.diff(t))) if t.size > 1 else 0.0
+    return BREAK_TOLERANCE_D + cad, cad
+
+
+def segment_rotate(
+    t: np.ndarray,
+    f: np.ndarray,
+    e: np.ndarray,
+    seed: int,
+    cfg: Dict[str, Any],
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Dict[str, Any]]:
+    """Apply the v1.1 scrambled-null transform (segment rotation rule).
+
+    Parameters
+    ----------
+    t : np.ndarray
+        Time stamps (quality-masked).
+    f : np.ndarray
+        Flux values.
+    e : np.ndarray
+        Flux error values.
+    seed : int
+        Seed for the random number generator.
+    cfg : dict
+        Configuration dictionary (contains 'scramble' section).
+
+    Returns
+    -------
+    t_out : np.ndarray
+        Time stamps after gap-edge cadences are dropped.
+    f_out : np.ndarray
+        Scrambled flux array.
+    e_out : np.ndarray
+        Scrambled flux error array.
+    info : dict
+        Dictionary containing 'scr_offsets' and 'scr_scheme' (and segment metadata).
+    """
+    scr_cfg = cfg.get("scramble", {})
+    gap_d = scr_cfg.get("gap_d", 0.5)
+    gap_trim_d = scr_cfg.get("gap_trim_d", 0.3)
+
+    # Rule (1): Quality-masked input; apply gap_edge_mask BEFORE scrambling and drop cadences
+    keep = lightcurve.gap_edge_mask(t, gap=gap_d, trim=gap_trim_d)
+    t = t[keep]
+    f = f[keep]
+    e = e[keep]
+
+    if t.size == 0:
+        return t, f, e, {"scr_offsets": [], "scr_scheme": "segment_rotation", "n_segments": 0,
+                         "scr_join_gap_d": None, "scr_cadence_d": None, "scr_wrap_t0": [], "scr_wrap_t1": []}
+
+    # Rule (2): Split into contiguous segments at gaps > 0.5 d
+    dt = np.diff(t)
+    split_indices = np.where(dt > gap_d)[0] + 1
+    seg_indices = np.split(np.arange(t.size), split_indices)
+
+    rng = np.random.default_rng(seed)
+
+    f_out = np.zeros_like(f)
+    e_out = np.zeros_like(e)
+
+    offsets: List[int] = []
+    gap, cad = join_gap_d(t)
+    shift = np.zeros(t.size)
+    wrap_idx: List[int] = []
+
+    # Rule (3): Rotate EVERY segment, regardless of length, by its own independent random cyclic offset.
+    # Rule (4): a 1-sample segment cannot rotate (offset 0, documented); otherwise offsets are 1..n_seg-1.
+    for seg_idx in seg_indices:
+        n_seg = len(seg_idx)
+        if n_seg == 0:
+            continue
+        offset = int(rng.integers(1, n_seg)) if n_seg > 1 else 0      # zero is redrawn: offsets are in 1..n_seg-1
+        f_out[seg_idx] = np.roll(f[seg_idx], offset)
+        e_out[seg_idx] = np.roll(e[seg_idx], offset)
+        offsets.append(offset)
+        if offset > 0:                                  # rule (7): wrap between seg_idx[offset-1] and seg_idx[offset]
+            shift[seg_idx[offset]:] += gap
+            wrap_idx.append(int(seg_idx[offset]))
+    t_out = t + shift
+    keep2 = inserted_gap_keep(t_out, wrap_idx, gap_d, gap_trim_d)    # rule (8)
+
+    info = {
+        "scr_offsets": offsets,
+        "scr_scheme": "segment_rotation",
+        "n_segments": len(seg_indices),
+        "scr_join_gap_d": gap,
+        "scr_cadence_d": cad,
+        "scr_wrap_t0": [float(t_out[i - 1]) for i in wrap_idx],     # last cadence before each inserted gap
+        "scr_wrap_t1": [float(t_out[i]) for i in wrap_idx],         # first cadence after it
+        "scr_join_trim_d": gap_trim_d,
+        "scr_join_trim_dropped": int((~keep2).sum()),
+    }
+
+    return t_out[keep2], f_out[keep2], e_out[keep2], info

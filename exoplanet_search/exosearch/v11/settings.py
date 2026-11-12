@@ -36,6 +36,38 @@ def _sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def exclusion_files(c=None):
+    """{sector: repo-relative path} of the scrambled-null exclusion CSVs registered in the config.
+
+    A registered file that is missing, or has no 'tic' column, is a hard error (never silently skipped).
+    """
+    import pandas as pd
+    c = c or cfg()
+    ex = c.get("scramble", {}).get("exclude_hosts_file")
+    if not ex:
+        return {}
+    ex = ex if isinstance(ex, dict) else {"*": ex}
+    out = {}
+    for sec, rel in sorted(ex.items()):
+        p = ROOT / rel
+        if not p.is_file():
+            raise FileNotFoundError(f"scramble exclusion file for sector {sec} is registered but missing: {rel}")
+        if "tic" not in pd.read_csv(p, nrows=0).columns:
+            raise ValueError(f"scramble exclusion file {rel} has no 'tic' column")
+        out[str(sec)] = rel
+    return out
+
+
+def exclusion_tics(sector, c=None):
+    """Excluded TIC set for a sector (empty set only when no file is registered for that sector)."""
+    import pandas as pd
+    files = exclusion_files(c)
+    rel = files.get(str(sector), files.get("*"))
+    if rel is None:
+        return set()
+    return set(pd.read_csv(ROOT / rel).tic.astype(int))
+
+
 def config(beta_option=None):
     """Everything that can change a v1.1 result. beta_option overrides the file (dry runs only)."""
     from . import grid, search
@@ -45,6 +77,7 @@ def config(beta_option=None):
     prior = ROOT / c["beta_prior_file"]
     return dict(pipeline_version=PIPELINE_VERSION, cfg=c,
                 beta_prior_sha256=_sha(prior) if prior.exists() else None,
+                scramble_exclude_sha256={k: _sha(ROOT / v) for k, v in exclusion_files(c).items()},
                 durations_d=[float(x) for x in search.DURATIONS], grid=grid.GRID_SPEC,
                 quality_mask="QUALITY == 0, finite TIME/PDCSAP_FLUX/PDCSAP_FLUX_ERR, ERR > 0; flux / median",
                 detrend=dict(method="biweight", window=0.75, edge_cutoff=0.0, break_tolerance=0.5, clip_sigma=4.0,
@@ -69,6 +102,14 @@ def commit():
         return "unknown"
 
 
+def tree():
+    """Git tree object of HEAD (content identity of the checked-out code, independent of commit metadata)."""
+    try:
+        return subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD^{tree}"], text=True).strip()
+    except Exception:
+        return "unknown"
+
+
 def lib_versions():
     import importlib.metadata as md
     v = {}
@@ -89,6 +130,11 @@ def host_id(explicit=None):
 
 
 def provenance(hid, beta_option, production):
-    return dict(pipeline_version=PIPELINE_VERSION, config_hash=config_hash(beta_option), commit=commit(),
-                host_id=hid, arch=platform.machine(), lib_versions=json.dumps(lib_versions(), sort_keys=True),
-                beta_option=beta_option, production=bool(production))
+    out = dict(pipeline_version=PIPELINE_VERSION, config_hash=config_hash(beta_option), commit=commit(), tree=tree(),
+               host_id=hid, arch=platform.machine(), lib_versions=json.dumps(lib_versions(), sort_keys=True),
+               beta_option=beta_option, production=bool(production))
+    out["tree"] = tree()
+    for sec, rel in exclusion_files(cfg()).items():
+        out[f"scramble_exclude_file_{sec}"] = rel
+        out[f"scramble_exclude_sha256_{sec}"] = _sha(ROOT / rel)
+    return out

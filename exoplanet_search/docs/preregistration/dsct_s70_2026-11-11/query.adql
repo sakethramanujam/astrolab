@@ -1,0 +1,6 @@
+SELECT n.dr2_source_id, n.dr3_source_id, n.angular_distance, n.magnitude_difference,
+       v.best_class_name, v.best_class_score, v.classifier_name
+FROM gaiadr3.dr2_neighbourhood AS n
+JOIN gaiadr3.vari_classifier_result AS v ON v.source_id = n.dr3_source_id
+WHERE n.dr2_source_id IN ({ids})
+  AND (v.best_class_name LIKE '%DSCT%' OR v.best_class_name LIKE '%SXPHE%')
