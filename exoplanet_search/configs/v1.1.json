@@ -1,6 +1,6 @@
 {
   "name": "exosearch_v1.1",
-  "beta_option": null,
+  "beta_option": "b",
   "beta_option_note": "Set only by the dated registration that applies docs/preregistration/beta_treatment.md (a/b/c/d). Production refuses to start while this is null.",
   "beta_prior_file": "configs/v1.1_beta_prior.json",
   "prewhiten": {
