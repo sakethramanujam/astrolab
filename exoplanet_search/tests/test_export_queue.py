@@ -7,6 +7,7 @@ def _r(**k):
     base = dict(tic=1, passed=0, toi_period_match=0, ctoi_period_match=0, planet_period_match=0,
                 known_toi=None, known_planet=None, known_ctoi=None)
     base.update(k)
+    base.setdefault("passed_screens_v10", base["passed"] == 1)   # export.load_rows derives it from `passed`
     return NS(**base)
 
 
