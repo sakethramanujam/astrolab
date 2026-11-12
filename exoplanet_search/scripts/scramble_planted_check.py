@@ -23,7 +23,7 @@ from exosearch.v11 import scramble, settings
 
 def run_planted_check(
     cadence_file: Path | str,
-    output_file: Path | str = "/tmp/agy-t1-sigma.txt",
+    output_file: Path | str = "scramble_planted_check.txt",
     n_seeds: int = 10,
     periods: Tuple[float, ...] = (1.0, 3.0, 6.0),
 ) -> List[Dict[str, float]]:
@@ -99,7 +99,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Check planted transit signal significance after scrambling.")
     default_cadence = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "s0070_cadence.npz"
     parser.add_argument("--cadence", default=str(default_cadence), help="Path to cadence fixture .npz")
-    parser.add_argument("--out", default="/tmp/agy-t1-sigma.txt", help="Output file path")
+    parser.add_argument("--out", required=True, help="Output file path (relative or absolute)")
     parser.add_argument("--n-seeds", type=int, default=10, help="Number of seeds to test")
     args = parser.parse_args()
 

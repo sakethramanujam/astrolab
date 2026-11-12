@@ -8,7 +8,8 @@ REVISED v1.1 SCRAMBLE RULE (Scientist ruling 2026-11-11, supersedes the fallback
     cyclic offset from a numpy default_rng seeded by the task seed; flux and flux_err
     move together, time stamps fixed, no sample crosses a gap.
 (4) There is NO block-shuffle fallback and NO leave-unrotated path: both deleted.
-    A 1-sample segment trivially rotates by 0.
+    A 1-sample segment has no non-zero rotation and stays as is (the only unrotated case);
+    for longer segments the offset is drawn from 1..n_seg-1, i.e. a zero offset is redrawn.
 (5) Return per-segment offsets so the pipeline records them (scr_offsets,
     scr_scheme='segment_rotation').
 (6) Parameters in configs/v1.1.json 'scramble' section.
@@ -81,12 +82,12 @@ def segment_rotate(
     offsets: List[int] = []
 
     # Rule (3): Rotate EVERY segment, regardless of length, by its own independent random cyclic offset.
-    # Rule (4): A 1-sample segment trivially rotates by 0.
+    # Rule (4): a 1-sample segment cannot rotate (offset 0, documented); otherwise offsets are 1..n_seg-1.
     for seg_idx in seg_indices:
         n_seg = len(seg_idx)
         if n_seg == 0:
             continue
-        offset = int(rng.integers(0, n_seg)) if n_seg > 1 else 0
+        offset = int(rng.integers(1, n_seg)) if n_seg > 1 else 0      # zero is redrawn: offsets are in 1..n_seg-1
         f_out[seg_idx] = np.roll(f[seg_idx], offset)
         e_out[seg_idx] = np.roll(e[seg_idx], offset)
         offsets.append(offset)

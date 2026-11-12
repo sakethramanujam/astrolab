@@ -208,3 +208,154 @@ def test_candidate_order_ignores_last_bit_ties():
     p2 = p.copy(); p2[700], p2[300] = 10.0, 10.0 * (1 + 1e-15)
     c2, *_ = search.candidates([dict(D=0.1, p=p2)], periods, 2, 0.01)
     assert c1[1]["idx"] == c2[1]["idx"] == 300   # lowest period among the tie, on either host
+
+
+# ---------------------------------------------------------------- T3 shared fixes (C1-C4)
+import importlib.util
+import subprocess
+from pathlib import Path
+
+import pandas as pd
+
+from exosearch.v11 import registration_checks, scramble
+
+
+def _exclusion_cfg(rel):
+    c = settings.cfg()
+    c["scramble"] = dict(c["scramble"], exclude_hosts_file={"70": rel})
+    return c
+
+
+def test_missing_exclusion_file_is_a_hard_error(monkeypatch):
+    c = _exclusion_cfg("configs/does_not_exist.csv")
+    with pytest.raises(FileNotFoundError):
+        settings.exclusion_files(c)
+    monkeypatch.setattr(settings, "cfg", lambda path=settings.CFG_FILE: c)
+    with pytest.raises(FileNotFoundError):
+        settings.provenance("h1", None, False)
+    with pytest.raises(FileNotFoundError):
+        settings.config_hash()
+    with pytest.raises(FileNotFoundError):
+        run.settings.exclusion_tics(70, c)
+
+
+def test_exclusion_file_without_tic_column_is_a_hard_error(tmp_path, monkeypatch):
+    (tmp_path / "ex.csv").write_text("host,x\n1,2\n")
+    monkeypatch.setattr(settings, "ROOT", tmp_path)
+    with pytest.raises(ValueError, match="tic"):
+        settings.exclusion_files(_exclusion_cfg("ex.csv"))
+
+
+def test_exclusion_content_sha_enters_config_hash(tmp_path, monkeypatch):
+    (tmp_path / "ex.csv").write_text("tic\n1\n2\n")
+    c = _exclusion_cfg("ex.csv")
+    monkeypatch.setattr(settings, "ROOT", tmp_path)
+    monkeypatch.setattr(settings, "cfg", lambda path=settings.CFG_FILE: dict(c))
+    h1 = settings.config_hash()
+    (tmp_path / "ex.csv").write_text("tic\n1\n2\n3\n")
+    assert settings.config_hash() != h1
+    assert settings.config()["scramble_exclude_sha256"]["70"]
+
+
+def test_provenance_records_tree_next_to_commit():
+    p = settings.provenance("h1", None, False)
+    tree = subprocess.check_output(["git", "-C", str(settings.ROOT), "rev-parse", "HEAD^{tree}"], text=True).strip()
+    assert p["tree"] == tree and p["commit"] != p["tree"] and "scramble_exclude_sha256_70" in p
+
+
+def test_compare_reports_commit_tree_and_fails_on_tree_mismatch(monkeypatch):
+    def rows(host, tree):
+        return pd.DataFrame(dict(key=["a", "b"], status="ok", S=[1.0, 2.0], period=[1.0, 2.0], P_grid=[1.0, 2.0],
+                                 duration=[0.1, 0.1], P_grid_halfwidth=[0.01, 0.01], host_id=host, arch="x",
+                                 lib_versions="{}", commit=f"c-{host}", tree=tree, runtime_s=1.0))
+    frames = {"d1": rows("h1", "T1"), "d2": rows("h2", "T1"), "d3": rows("h3", "T2")}
+    monkeypatch.setattr(run, "load_rows", lambda d: frames[d])
+    res = run.compare(["d1", "d2", "d3"])
+    assert [h["tree"] for h in res["hosts"]] == ["T1", "T1", "T2"]
+    assert [h["commit"] for h in res["hosts"]] == ["c-h1", "c-h2", "c-h3"]
+    assert not res["tree_match"] and not res["all_pass"]
+    res = run.compare(["d1", "d2"])
+    assert res["tree_match"] and res["all_pass"]
+
+
+def test_zero_rotation_offset_is_redrawn():
+    t = np.concatenate([np.arange(0, 1, 0.01), np.arange(3, 4, 0.01)])
+    f = np.arange(t.size, dtype=float)
+    for seed in range(50):
+        _, fo, _, info = scramble.segment_rotate(t, f, f.copy(), seed, dict(scramble=dict(gap_d=0.5, gap_trim_d=0.0)))
+        assert all(o >= 1 for o in info["scr_offsets"])
+    # two-sample segments: the only non-zero offset is 1, drawn every time
+    t2 = np.array([0.0, 0.01, 5.0, 5.01, 10.0, 10.01])
+    for seed in range(20):
+        _, _, _, info = scramble.segment_rotate(t2, np.arange(6.0), np.arange(6.0), seed,
+                                                dict(scramble=dict(gap_d=0.5, gap_trim_d=0.0)))
+        assert info["scr_offsets"] == [1, 1, 1]
+
+
+def test_registration_guard_is_a_dedicated_exception_and_rejects_empty_sets():
+    flip = pd.DataFrame(dict(tic=[1, 2, 3], sector=70))
+    scr = pd.DataFrame(dict(tic=[2, 3], sector=70))
+    with pytest.raises(registration_checks.PopulationGuardError):
+        registration_checks.check_registration_population(flip, scr, pd.DataFrame(dict(tic=[2])))
+    with pytest.raises(registration_checks.PopulationGuardError, match="empty"):
+        registration_checks.check_registration_population(flip, scr, pd.DataFrame(dict(tic=[], sector=[])))
+    with pytest.raises(registration_checks.PopulationGuardError, match="empties"):
+        registration_checks.check_registration_population(flip, scr, pd.DataFrame(dict(tic=[9], sector=[106])), sector=70)
+    with pytest.raises(registration_checks.PopulationGuardError, match="tic"):
+        registration_checks.check_registration_population(flip, scr, pd.DataFrame(dict(x=[1])))
+    assert not issubclass(registration_checks.PopulationGuardError, AssertionError)
+
+
+def _launcher():
+    p = Path(__file__).resolve().parents[1] / "scripts" / "v11_launch.py"
+    spec = importlib.util.spec_from_file_location("v11_launch_t", p)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_launcher_runs_guard_before_beta_select_and_stops_on_failure(tmp_path, monkeypatch):
+    L = _launcher()
+    monkeypatch.setattr(L, "WT", tmp_path / "wt")
+    (tmp_path / "wt" / L.SUB).mkdir(parents=True)
+    monkeypatch.setattr(L, "worktree", lambda *a, **k: None)
+    monkeypatch.setattr(Path, "symlink_to", lambda self, target: None)
+    calls = []
+
+    def fake_sh(*cmd, **kw):
+        calls.append(" ".join(cmd))
+        if "registration_checks" in " ".join(cmd):
+            raise RuntimeError("POPULATION GUARD FAILED")
+        return ""
+    monkeypatch.setattr(L, "sh", fake_sh)
+    with pytest.raises(RuntimeError, match="POPULATION GUARD"):
+        L.register({})
+    assert any("registration_checks" in c for c in calls)
+    assert not any("beta_select" in c for c in calls)          # registration stopped before the beta computation
+
+    # main() turns the failure into the 'error' state and launches nothing
+    monkeypatch.setattr(L, "STATUS", tmp_path / "status.json")
+    monkeypatch.setattr(L, "OUTROOT", tmp_path)
+    monkeypatch.setattr(L, "r0_done", lambda: True)
+    launched = []
+    monkeypatch.setattr(L, "launch", lambda *a, **k: launched.append(1))
+    L.main(False)
+    st = json.loads((tmp_path / "status.json").read_text())
+    assert st["state"] == "error" and not launched
+
+
+def test_launcher_orders_guard_then_beta_select(tmp_path, monkeypatch):
+    L = _launcher()
+    monkeypatch.setattr(L, "WT", tmp_path / "wt")
+    (tmp_path / "wt" / L.SUB).mkdir(parents=True)
+    monkeypatch.setattr(L, "worktree", lambda *a, **k: None)
+    monkeypatch.setattr(Path, "symlink_to", lambda self, target: None)
+    calls = []
+
+    def fake_sh(*cmd, **kw):
+        calls.append(" ".join(cmd))
+        raise RuntimeError("stop")
+    monkeypatch.setattr(L, "sh", fake_sh)
+    with pytest.raises(RuntimeError):
+        L.register({})
+    assert "registration_checks" in calls[0]

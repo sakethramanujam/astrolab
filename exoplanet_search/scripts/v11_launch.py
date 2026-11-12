@@ -150,6 +150,8 @@ def register(env):
     (WT / SUB / ".venv").symlink_to(REPO / SUB / ".venv")
     day = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
     reg = Path("docs/preregistration") / f"beta_registration_{day}"
+    # Same-population guard (amendment section 5): a failure raises here and registration stops before beta_select.
+    sh(".venv/bin/python", "-m", "exosearch.v11.registration_checks", cwd=WT / SUB, env=env)
     sh(".venv/bin/python", "-m", "exosearch.v11.beta_select", "--out", str(reg), cwd=WT / SUB, env=env)
     dec = json.loads((WT / SUB / reg / "beta_selection.json").read_text())["decision"]
     ts = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

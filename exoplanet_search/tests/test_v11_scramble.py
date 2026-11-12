@@ -210,9 +210,9 @@ def test_planted_signal_real_cadence_check(v11_cfg):
 
     This test asserts that scramble_planted_check is deterministic and exactly reproduces
     the committed sigma table:
-      P=1.0: median 3.69, max 7.70
-      P=3.0: median 1.82, max 7.23
-      P=6.0: median 0.93, max 7.82
+      P=1.0: median 3.70, max 7.70
+      P=3.0: median 1.81, max 7.26
+      P=6.0: median 0.97, max 7.82
     """
     from scripts.scramble_planted_check import run_planted_check
 
@@ -220,9 +220,9 @@ def test_planted_signal_real_cadence_check(v11_cfg):
     results = run_planted_check(fixture_path, output_file=None, n_seeds=10, periods=(1.0, 3.0, 6.0))
 
     expected = {
-        1.0: {"median_sigma": 3.69, "max_sigma": 7.70},
-        3.0: {"median_sigma": 1.82, "max_sigma": 7.23},
-        6.0: {"median_sigma": 0.93, "max_sigma": 7.82},
+        1.0: {"median_sigma": 3.70, "max_sigma": 7.70},
+        3.0: {"median_sigma": 1.81, "max_sigma": 7.26},
+        6.0: {"median_sigma": 0.97, "max_sigma": 7.82},
     }
 
     assert len(results) == 3
@@ -233,7 +233,7 @@ def test_planted_signal_real_cadence_check(v11_cfg):
         assert r["n_seeds"] == 10
 
 
-def test_pipeline_scramble_mode_integration(v11_cfg):
+def test_pipeline_scramble_mode_integration(v11_cfg, monkeypatch):
     """Test pipeline run_job integration with mode 'scramble'."""
     from exosearch.v11 import pipeline
 
@@ -261,12 +261,12 @@ def test_pipeline_scramble_mode_integration(v11_cfg):
         ]
     }
 
-    orig_load = pipeline.load
-    try:
-        pipeline.load = lambda j: (t, f, e, np.ones(len(t), bool), meta, np.array([]))
-        rows = pipeline.run_job(job)
-    finally:
-        pipeline.load = orig_load
+    monkeypatch.setattr(pipeline, "load", lambda j: (t, f, e, np.ones(len(t), bool), meta, np.array([])))
+    trims = []
+    orig_prepare = pipeline.prepare
+    monkeypatch.setattr(pipeline, "prepare", lambda *a, **k: (trims.append(k.get("gap_trim")), orig_prepare(*a, **k))[1])
+    rows = pipeline.run_job(job)
+    assert trims == [0.0]                         # scrambled path: the detrender's gap trim is off (no double trimming)
 
     assert len(rows) == 1
     row = rows[0]
@@ -275,4 +275,4 @@ def test_pipeline_scramble_mode_integration(v11_cfg):
     assert "scr_offsets" in row
     assert "scr_scheme" in row
     assert row["scr_scheme"] == "segment_rotation"
-    assert len(row["scr_offsets"]) == 2
+    assert len(row["scr_offsets"]) == 2 and all(o >= 1 for o in row["scr_offsets"])

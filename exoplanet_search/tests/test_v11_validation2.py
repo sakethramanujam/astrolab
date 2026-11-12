@@ -175,7 +175,7 @@ def test_registration_guard():
 
     # 2. Invalid case: an excluded TIC leaks into scrambled -> appears in paired set
     df_scr_leaked = pd.DataFrame({"tic": [101, 201, 202], "status": "ok"})
-    with pytest.raises(AssertionError, match="Population guard failed"):
+    with pytest.raises(registration_checks.PopulationGuardError, match="Population guard failed"):
         registration_checks.check_registration_population(df_flip, df_scr_leaked, df_ex)
 
 

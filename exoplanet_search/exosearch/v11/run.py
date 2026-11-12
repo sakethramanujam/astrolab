@@ -119,15 +119,7 @@ def build(sectors, weights, out, production=True, log=print, tics_filter=None, t
             inj_hosts = set(inject.select_hosts(s, cfg_inj, con).tic.astype(int))
         runs = cfg_inj["runs"].get(str(s), [])
 
-        scramble_exclude = set()
-        ex_map = cfg.get("scramble", {}).get("exclude_hosts_file", {})
-        ex_file = ex_map.get(str(s)) if isinstance(ex_map, dict) else ex_map
-        if ex_file:
-            p_ex = settings.ROOT / ex_file
-            if p_ex.exists():
-                ex_df = pd.read_csv(p_ex)
-                if "tic" in ex_df.columns:
-                    scramble_exclude = set(ex_df.tic.astype(int))
+        scramble_exclude = settings.exclusion_tics(s, cfg)      # hard error if registered but missing / no tic column
 
         for r in df.itertuples():
             tic = int(r.tic)
@@ -267,6 +259,7 @@ def compare(dirs, summary=None, tol=1e-6):
         hosts.append(dict(host_id=h, arch=d.arch.dropna().iloc[0] if "arch" in d else None,
                           lib_versions=json.loads(d.lib_versions.dropna().iloc[0]) if "lib_versions" in d else None,
                           commit=d.commit.dropna().iloc[0] if "commit" in d else None,
+                          tree=d.tree.dropna().iloc[0] if "tree" in d and d.tree.notna().any() else None,
                           n_rows=int(len(d)), n_ok=int(len(x)), n_err=int((d.status != "ok").sum()), n_compared=int(len(common)),
                           columns=rep, n_fail=len(fails), fail_keys=sorted(fails)[:20],
                           tie_band_gt1=int((x.n_tie_band > 1).sum()) if "n_tie_band" in x else None,
@@ -274,9 +267,13 @@ def compare(dirs, summary=None, tol=1e-6):
                           prewhitened_stars=int((x.pw_prewhiten_n > 0).sum()) if "pw_prewhiten_n" in x else None,
                           runtime_s_median=float(x.runtime_s.median()) if len(x) else None,
                           passes=bool(len(fails) == 0 and (d.status != "ok").sum() == 0 and len(common) == len(ref))))
+    trees = {h["tree"] for h in hosts}
+    commits = {h["commit"] for h in hosts}
+    tree_match = len(trees) == 1
     res = dict(gate="3-host gate on the v1.1 code (exosearch.v11, real search, sector 70)", tolerance_S=tol,
                exact=["period", "P_grid", "duration", "P_grid_halfwidth"], reference=hosts[0]["host_id"],
-               n_stars=int(len(ref)), hosts=hosts, all_pass=all(h["passes"] for h in hosts))
+               n_stars=int(len(ref)), hosts=hosts, commits=sorted(map(str, commits)), trees=sorted(map(str, trees)),
+               tree_match=tree_match, all_pass=bool(tree_match and all(h["passes"] for h in hosts)))
     if summary:
         Path(summary).write_text(json.dumps(res, indent=1, default=str))
     print(json.dumps(res, indent=1, default=str))
