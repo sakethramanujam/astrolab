@@ -16,7 +16,8 @@ from . import config
 TOI_URL = "https://exofop.ipac.caltech.edu/tess/download_toi.php?sort=toi&output=csv"
 CTOI_URL = "https://exofop.ipac.caltech.edu/tess/download_ctoi.php?sort=ctoi&output=csv"
 PS_URL = ("https://exoplanetarchive.ipac.caltech.edu/TAP/sync?query="
-          "select+pl_name,tic_id,pl_orbper,disc_facility+from+pscomppars+where+tic_id+is+not+null"
+          "select+pl_name,tic_id,pl_orbper,pl_trandep,pl_trandur,pl_tranmid,disc_facility"
+          "+from+pscomppars+where+tic_id+is+not+null"
           "&format=csv")
 
 

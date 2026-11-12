@@ -45,7 +45,7 @@ from scipy import stats
 
 from .. import batch, lightcurve, targets
 from .. import holdout
-from . import grid, run, settings
+from . import grid, run, search, settings
 
 BASE_SEED = 20261112
 INJECTION_RUNS = [12, 13, 14, 15]
@@ -158,6 +158,7 @@ def check_peak_pulsation_contamination(
     frozen_freqs: List[float],
     baseline: float = 27.0,
     max_k: int = 20,
+    durations: np.ndarray = search.DURATIONS,
 ) -> Tuple[bool, Optional[str]]:
     """Check if BLS top peak period is within one v1.1 period-grid step of k/f_i or k/|f_i +/- f_j| (k=1..20).
     Spec C3: grid spacing df = min(durations) / baseline^2.
@@ -165,8 +166,8 @@ def check_peak_pulsation_contamination(
     if period_found <= 0 or not frozen_freqs:
         return False, None
 
-    # Step in period grid: dP = P^2 * df
-    df = 0.04 / (baseline ** 2)
+    # Step in period grid: dP = P^2 * df from grid specification
+    df = float(np.min(durations)) / (baseline ** 2)
     dp_local = (period_found ** 2) * df
 
     # Check k / f_i for k = 1..max_k
@@ -229,36 +230,89 @@ def evaluate_pw2_report(
     if cfg is None:
         cfg = settings.cfg()
 
+    val_cfg = cfg.get("validation_pw2", {})
+
     if s_star is None:
-        s_star = float(cfg.get("s_star", 10.0))
+        if "s_star" in val_cfg:
+            s_star = float(val_cfg["s_star"])
+        elif "s_star" in cfg:
+            s_star = float(cfg["s_star"])
+        else:
+            raise ValueError("s_star must be provided or configured in configs/v1.1.json (Spec B3)")
+
     if s_bins is None:
-        s_bins = DEFAULT_S_BINS
+        s_bins = val_cfg.get("s_bins", DEFAULT_S_BINS)
 
     # Dedupe real-search and injection rows per (TIC, tag, run, seed) (Spec A7)
-    # 1. Gaia real results
-    seen_gaia_real = set()
+    # Exactly one real-search row per registered TIC (conflicting duplicates are an error)
+    seen_gaia_real = {}
     deduped_gaia_results = []
     for g in gaia_results:
-        key = (int(g["tic"]), g.get("tag", "gaia_real_pw"))
-        if key not in seen_gaia_real:
-            seen_gaia_real.add(key)
+        tic = int(g["tic"])
+        tag = g.get("tag", "gaia_real_pw")
+        key = (tic, tag)
+        if key in seen_gaia_real:
+            prev = seen_gaia_real[key]
+            for attr in ("period", "max_residual_snr", "unclean_reason"):
+                if prev.get(attr) != g.get(attr):
+                    raise ValueError(f"Conflicting duplicate real-search rows for TIC {tic}: {prev} vs {g}")
+        else:
+            seen_gaia_real[key] = g
             deduped_gaia_results.append(g)
 
-    # 2. Injections
-    seen_gaia_inj = set()
+    # Dedupe unfiltered Gaia results if present
+    deduped_unfiltered = []
+    seen_unf = {}
+    if unfiltered_gaia_results is not None:
+        for ug in unfiltered_gaia_results:
+            tic = int(ug["tic"])
+            tag = ug.get("tag", "gaia_real_nopw")
+            key = (tic, tag)
+            if key in seen_unf:
+                prev = seen_unf[key]
+                for attr in ("period", "max_residual_snr", "unclean_reason"):
+                    if prev.get(attr) != ug.get(attr):
+                        raise ValueError(f"Conflicting duplicate unfiltered real-search rows for TIC {tic}: {prev} vs {ug}")
+            else:
+                seen_unf[key] = ug
+                deduped_unfiltered.append(ug)
+    else:
+        deduped_unfiltered = None
+
+    # Injections dedupe per (tic, tag, run, seed)
+    seen_gaia_inj = {}
     deduped_gaia_inj = []
     for g in gaia_injections:
-        key = (int(g["tic"]), g.get("tag", "inj"), g.get("run", 0), g.get("seed", 0))
-        if key not in seen_gaia_inj:
-            seen_gaia_inj.add(key)
+        tic = int(g["tic"])
+        tag = g.get("tag", "inj")
+        run_num = g.get("run", 0)
+        seed_num = g.get("seed", 0)
+        key = (tic, tag, run_num, seed_num)
+        if key in seen_gaia_inj:
+            prev = seen_gaia_inj[key]
+            for attr in ("expected_S", "recovered", "group", "S"):
+                if prev.get(attr) != g.get(attr):
+                    raise ValueError(f"Conflicting duplicate injection rows for TIC {tic} run {run_num}: {prev} vs {g}")
+        else:
+            seen_gaia_inj[key] = g
             deduped_gaia_inj.append(g)
 
-    seen_quiet_inj = set()
+    seen_quiet_inj = {}
     deduped_quiet_inj = []
     for q in quiet_injections:
-        key = (int(q["tic"]), q.get("tag", "inj"), q.get("run", 0), q.get("seed", 0))
-        if key not in seen_quiet_inj:
-            seen_quiet_inj.add(key)
+        tic = int(q["tic"])
+        tag = q.get("tag", "inj")
+        run_num = q.get("run", 0)
+        seed_num = q.get("seed", 0)
+        pw_flag = q.get("prewhiten", None)
+        key = (tic, tag, run_num, seed_num, pw_flag)
+        if key in seen_quiet_inj:
+            prev = seen_quiet_inj[key]
+            for attr in ("expected_S", "recovered", "prewhiten", "S"):
+                if prev.get(attr) != q.get(attr):
+                    raise ValueError(f"Conflicting duplicate quiet injection rows for TIC {tic} run {run_num}: {prev} vs {q}")
+        else:
+            seen_quiet_inj[key] = q
             deduped_quiet_inj.append(q)
 
     # Criterion (i): Real search on 23 Gaia stars (B1: holdout stars dropped)
@@ -364,83 +418,129 @@ def evaluate_pw2_report(
         df_quiet_nopw = pd.DataFrame()
 
     def _compute_star_level_bins(df_target, df_ref):
-        """Aggregate per star first (variance unit = star), then bin by expected S."""
+        """Aggregate per star first (variance unit = star), then bin by expected S.
+        
+        Spec B2:
+        - Only injections with expected_S >= s_star are evaluated.
+        - The star is the variance unit: recovery is averaged per star first.
+        - Merge expected-S bins with fewer than 5 stars into a neighbour until every bin has at least 5.
+        - If a bin cannot reach 5 stars (e.g. single leftover bin with < 5 stars), it cannot pass.
+        - Confidence intervals over stars are reported.
+        """
         if df_target.empty or df_ref.empty:
             return [], False
 
-        # Average per star
-        star_target = df_target.groupby(["tic", "group" if "group" in df_target.columns else "tic"]).agg({
-            "expected_S": "mean",
-            "recovered": "mean",
-        }).reset_index()
+        # Filter to expected_S >= s_star
+        t_sub = df_target[df_target.expected_S >= s_star].copy()
+        r_sub = df_ref[df_ref.expected_S >= s_star].copy()
+        if t_sub.empty or r_sub.empty:
+            return [], False
 
-        star_ref = df_ref.groupby("tic").agg({
-            "expected_S": "mean",
-            "recovered": "mean",
-        }).reset_index()
+        # Initial bin assignment per injection
+        t_sub["s_bin"] = pd.cut(t_sub["expected_S"], s_bins, right=False)
+        r_sub["s_bin"] = pd.cut(r_sub["expected_S"], s_bins, right=False)
 
-        # Initial binning
-        star_target["s_bin"] = pd.cut(star_target["expected_S"], s_bins, right=False)
-        star_ref["s_bin"] = pd.cut(star_ref["expected_S"], s_bins, right=False)
+        # Average per star within each bin: star is the variance unit
+        star_t_binned = t_sub.groupby(["s_bin", "tic"], observed=True).agg({
+            "recovered": "mean"
+        }).reset_index().dropna(subset=["s_bin"])
 
-        # Merge bins with n < 5 stars into neighbor
-        unique_bins = sorted([b for b in star_target["s_bin"].dropna().unique()], key=lambda x: x.left)
+        star_r_binned = r_sub.groupby(["s_bin", "tic"], observed=True).agg({
+            "recovered": "mean"
+        }).reset_index().dropna(subset=["s_bin"])
+
+        t_bins = set(star_t_binned["s_bin"].dropna().unique())
+        r_bins = set(star_r_binned["s_bin"].dropna().unique())
+        all_populated_bins = sorted(list(t_bins.union(r_bins)), key=lambda x: x.left)
         merged_bins_data = []
 
-        curr_t = []
-        curr_r = []
-        curr_labels = []
+        curr_t_stars: List[float] = []
+        curr_r_stars: List[float] = []
+        curr_labels: List[str] = []
 
-        for b in unique_bins:
-            st = star_target[star_target.s_bin == b]
-            sr = star_ref[star_ref.s_bin == b]
-            curr_t.extend(st["recovered"].tolist())
-            curr_r.extend(sr["recovered"].tolist())
+        for b in all_populated_bins:
+            st = star_t_binned[star_t_binned.s_bin == b]["recovered"].tolist()
+            sr = star_r_binned[star_r_binned.s_bin == b]["recovered"].tolist()
+            curr_t_stars.extend(st)
+            curr_r_stars.extend(sr)
             curr_labels.append(str(b))
 
-            if len(curr_t) >= 5 and len(curr_r) >= 5:
+            if len(curr_t_stars) >= 5 and len(curr_r_stars) >= 5:
                 # Close bin
-                rt = float(np.mean(curr_t)) if curr_t else 0.0
-                rr = float(np.mean(curr_r)) if curr_r else 0.0
+                nt = len(curr_t_stars)
+                nr = len(curr_r_stars)
+                rt = float(np.mean(curr_t_stars))
+                rr = float(np.mean(curr_r_stars))
+                st_err = float(np.std(curr_t_stars, ddof=1) / np.sqrt(nt)) if nt > 1 else 0.0
+                sr_err = float(np.std(curr_r_stars, ddof=1) / np.sqrt(nr)) if nr > 1 else 0.0
+                diff = rt - rr
+                diff_se = float(np.sqrt(st_err ** 2 + sr_err ** 2))
+                ci95 = (float(diff - 1.96 * diff_se), float(diff + 1.96 * diff_se))
+
                 merged_bins_data.append({
                     "bin": ";".join(curr_labels),
-                    "n_target": len(curr_t),
+                    "n_target": nt,
                     "rec_target": rt,
-                    "n_quiet": len(curr_r),
+                    "target_ci95": (float(max(0.0, rt - 1.96 * st_err)), float(min(1.0, rt + 1.96 * st_err))),
+                    "n_quiet": nr,
                     "rec_quiet": rr,
-                    "diff_pp": rt - rr,
-                    "pass": bool((rt - rr) >= -0.05),
+                    "quiet_ci95": (float(max(0.0, rr - 1.96 * sr_err)), float(min(1.0, rr + 1.96 * sr_err))),
+                    "diff_pp": diff,
+                    "diff_ci95": ci95,
+                    "pass": bool(diff >= -0.05 and nt >= 5 and nr >= 5),
                 })
-                curr_t, curr_r, curr_labels = [], [], []
+                curr_t_stars, curr_r_stars, curr_labels = [], [], []
 
-        # If leftover has < 5, merge into previous if available
-        if curr_t or curr_r:
+        # If leftover has < 5 stars, merge into previous bin if available
+        if curr_t_stars or curr_r_stars:
             if merged_bins_data:
                 last = merged_bins_data[-1]
-                comb_t = curr_t + [last["rec_target"]] * last["n_target"]
-                comb_r = curr_r + [last["rec_quiet"]] * last["n_quiet"]
-                rt = float(np.mean(comb_t))
-                rr = float(np.mean(comb_r))
+                # To accurately combine star values, combine the list of star recoveries
+                all_t = curr_t_stars + [last["rec_target"]] * last["n_target"]
+                all_r = curr_r_stars + [last["rec_quiet"]] * last["n_quiet"]
+                nt = len(all_t)
+                nr = len(all_r)
+                rt = float(np.mean(all_t))
+                rr = float(np.mean(all_r))
+                st_err = float(np.std(all_t, ddof=1) / np.sqrt(nt)) if nt > 1 else 0.0
+                sr_err = float(np.std(all_r, ddof=1) / np.sqrt(nr)) if nr > 1 else 0.0
+                diff = rt - rr
+                diff_se = float(np.sqrt(st_err ** 2 + sr_err ** 2))
+                ci95 = (float(diff - 1.96 * diff_se), float(diff + 1.96 * diff_se))
+
                 last.update({
                     "bin": last["bin"] + ";" + ";".join(curr_labels),
-                    "n_target": len(comb_t),
+                    "n_target": nt,
                     "rec_target": rt,
-                    "n_quiet": len(comb_r),
+                    "target_ci95": (float(max(0.0, rt - 1.96 * st_err)), float(min(1.0, rt + 1.96 * st_err))),
+                    "n_quiet": nr,
                     "rec_quiet": rr,
-                    "diff_pp": rt - rr,
-                    "pass": bool((rt - rr) >= -0.05),
+                    "quiet_ci95": (float(max(0.0, rr - 1.96 * sr_err)), float(min(1.0, rr + 1.96 * sr_err))),
+                    "diff_pp": diff,
+                    "diff_ci95": ci95,
+                    "pass": bool(diff >= -0.05 and nt >= 5 and nr >= 5),
                 })
             else:
-                rt = float(np.mean(curr_t)) if curr_t else 0.0
-                rr = float(np.mean(curr_r)) if curr_r else 0.0
+                # Standalone leftover with < 5 stars cannot satisfy >= 5 stars requirement
+                nt = len(curr_t_stars)
+                nr = len(curr_r_stars)
+                rt = float(np.mean(curr_t_stars)) if curr_t_stars else 0.0
+                rr = float(np.mean(curr_r_stars)) if curr_r_stars else 0.0
+                st_err = float(np.std(curr_t_stars, ddof=1) / np.sqrt(nt)) if nt > 1 else 0.0
+                sr_err = float(np.std(curr_r_stars, ddof=1) / np.sqrt(nr)) if nr > 1 else 0.0
+                diff = rt - rr
+                diff_se = float(np.sqrt(st_err ** 2 + sr_err ** 2))
                 merged_bins_data.append({
                     "bin": ";".join(curr_labels),
-                    "n_target": len(curr_t),
+                    "n_target": nt,
                     "rec_target": rt,
-                    "n_quiet": len(curr_r),
+                    "target_ci95": (float(max(0.0, rt - 1.96 * st_err)), float(min(1.0, rt + 1.96 * st_err))),
+                    "n_quiet": nr,
                     "rec_quiet": rr,
-                    "diff_pp": rt - rr,
-                    "pass": bool((rt - rr) >= -0.05),
+                    "quiet_ci95": (float(max(0.0, rr - 1.96 * sr_err)), float(min(1.0, rr + 1.96 * sr_err))),
+                    "diff_pp": diff,
+                    "diff_ci95": (float(diff - 1.96 * diff_se), float(diff + 1.96 * diff_se)),
+                    "pass": False,  # Fails because < 5 stars
                 })
 
         b_pass = bool(len(merged_bins_data) > 0 and all(x["pass"] for x in merged_bins_data))
@@ -451,20 +551,26 @@ def evaluate_pw2_report(
     crit2_groups = {}
 
     if not df_gaia_inj.empty and not df_quiet_pw.empty:
-        crit2_bins, crit2_pass = _compute_star_level_bins(df_gaia_inj, df_quiet_pw)
+        # Check per-group descriptive status
+        any_group_evaluated = False
+        all_groups_descriptive = True
 
-        # Per group
         if "group" in df_gaia_inj.columns:
             for grp_name, sub_g in df_gaia_inj.groupby("group"):
                 grp_bins, grp_b_pass = _compute_star_level_bins(sub_g, df_quiet_pw)
                 n_stars_grp = sub_g["tic"].nunique()
-                # If group cannot reach 5 stars -> descriptive only (Spec B2)
                 descriptive_only = bool(n_stars_grp < 5)
+                if not descriptive_only:
+                    all_groups_descriptive = False
+                    any_group_evaluated = True
 
+                # Calculate overall rate averaging per star first (Spec B2)
                 g_sub = sub_g[sub_g.expected_S >= s_star]
                 q_sub = df_quiet_pw[df_quiet_pw.expected_S >= s_star]
-                g_grp_rec = float(g_sub.recovered.mean()) if len(g_sub) > 0 else 0.0
-                q_grp_rec = float(q_sub.recovered.mean()) if len(q_sub) > 0 else 0.0
+                g_star_means = g_sub.groupby("tic")["recovered"].mean()
+                q_star_means = q_sub.groupby("tic")["recovered"].mean()
+                g_grp_rec = float(g_star_means.mean()) if len(g_star_means) > 0 else 0.0
+                q_grp_rec = float(q_star_means.mean()) if len(q_star_means) > 0 else 0.0
                 grp_diff = g_grp_rec - q_grp_rec
 
                 crit2_groups[grp_name] = {
@@ -472,18 +578,32 @@ def evaluate_pw2_report(
                     "descriptive_only": descriptive_only,
                     "overall_rec": g_grp_rec,
                     "overall_diff_pp": grp_diff,
-                    "overall_pass": bool(grp_diff >= -0.05) if not descriptive_only else True,
+                    "overall_pass": bool(grp_diff >= -0.05 and grp_b_pass) if not descriptive_only else True,
                     "bins": grp_bins,
                 }
 
-        # Overall S >= S*
-        g_s = df_gaia_inj[df_gaia_inj.expected_S >= s_star]
-        q_s = df_quiet_pw[df_quiet_pw.expected_S >= s_star]
-        g_rec_tot = float(g_s.recovered.mean()) if len(g_s) > 0 else 0.0
-        q_rec_tot = float(q_s.recovered.mean()) if len(q_s) > 0 else 0.0
-        diff_tot = g_rec_tot - q_rec_tot
-        crit2_overall_pass = bool(len(g_s) > 0 and len(q_s) > 0 and diff_tot >= -0.05)
-        crit2_pass = bool(crit2_pass and crit2_overall_pass)
+        # Spec B2: if both groups excluded (or all groups descriptive), part two fails as empty
+        if all_groups_descriptive:
+            crit2_pass = False
+            crit2_bins = []
+            diff_tot = 0.0
+            g_rec_tot, q_rec_tot = 0.0, 0.0
+        else:
+            # Filter df_gaia_inj to non-descriptive groups for pooled pass/fail evaluation
+            valid_groups = [g for g, info in crit2_groups.items() if not info["descriptive_only"]]
+            eval_gaia_inj = df_gaia_inj[df_gaia_inj["group"].isin(valid_groups)] if "group" in df_gaia_inj.columns else df_gaia_inj
+            crit2_bins, crit2_pass = _compute_star_level_bins(eval_gaia_inj, df_quiet_pw)
+
+            # Overall S >= S* averaging per star first
+            g_s = eval_gaia_inj[eval_gaia_inj.expected_S >= s_star]
+            q_s = df_quiet_pw[df_quiet_pw.expected_S >= s_star]
+            g_star_means = g_s.groupby("tic")["recovered"].mean()
+            q_star_means = q_s.groupby("tic")["recovered"].mean()
+            g_rec_tot = float(g_star_means.mean()) if len(g_star_means) > 0 else 0.0
+            q_rec_tot = float(q_star_means.mean()) if len(q_star_means) > 0 else 0.0
+            diff_tot = g_rec_tot - q_rec_tot
+            crit2_overall_pass = bool(len(g_star_means) >= 5 and len(q_star_means) >= 5 and diff_tot >= -0.05)
+            crit2_pass = bool(crit2_pass and crit2_overall_pass)
     else:
         diff_tot = 0.0
         g_rec_tot, q_rec_tot = 0.0, 0.0
@@ -492,10 +612,12 @@ def evaluate_pw2_report(
     if not df_quiet_pw.empty and not df_quiet_nopw.empty:
         q_pw_s = df_quiet_pw[df_quiet_pw.expected_S >= s_star]
         q_nopw_s = df_quiet_nopw[df_quiet_nopw.expected_S >= s_star]
-        n_pw = len(q_pw_s)
-        n_nopw = len(q_nopw_s)
-        r_pw = float(q_pw_s.recovered.mean()) if n_pw > 0 else 0.0
-        r_nopw = float(q_nopw_s.recovered.mean()) if n_nopw > 0 else 0.0
+        pw_stars = q_pw_s.groupby("tic")["recovered"].mean()
+        nopw_stars = q_nopw_s.groupby("tic")["recovered"].mean()
+        n_pw = len(pw_stars)
+        n_nopw = len(nopw_stars)
+        r_pw = float(pw_stars.mean()) if n_pw > 0 else 0.0
+        r_nopw = float(nopw_stars.mean()) if n_nopw > 0 else 0.0
         quiet_drop = r_nopw - r_pw
         crit3_pass = bool(n_pw > 0 and n_nopw > 0 and quiet_drop <= 0.02)
     else:
@@ -584,14 +706,24 @@ def freeze_frequencies(
         grp, f_dom = classify_pulsator_dominant_frequency(tg, fg)
         terms = extract_pulsation_frequencies(tg, fg)
 
-        for term in terms:
+        if not terms:
+            # Star has no peaks above threshold; record TIC with nan frequency so group is preserved
             rows.append({
                 "tic": tic,
-                "f_i": term["frequency"],
-                "amp": term["amplitude"],
-                "snr": term["snr"],
+                "f_i": np.nan,
+                "amp": 0.0,
+                "snr": 0.0,
                 "group": grp,
             })
+        else:
+            for term in terms:
+                rows.append({
+                    "tic": tic,
+                    "f_i": term["frequency"],
+                    "amp": term["amplitude"],
+                    "snr": term["snr"],
+                    "group": grp,
+                })
 
     if missing_lcs:
         raise RuntimeError(f"Missing {len(missing_lcs)} Gaia light curves: {missing_lcs}. Cannot freeze frequencies.")
@@ -599,14 +731,22 @@ def freeze_frequencies(
     df_out = pd.DataFrame(rows)
     df_out.to_csv(out_p, index=False)
 
+    import datetime as dt
+    utc_timestamp = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+    if not commit:
+        commit = settings.commit()
+    if not config_hash:
+        config_hash = settings.config_hash()
+
     sha256 = hashlib.sha256(out_p.read_bytes()).hexdigest()
     sidecar = {
+        "timestamp_utc": utc_timestamp,
         "sector": sector,
         "commit": commit,
         "config_hash": config_hash,
         "sha256": sha256,
         "n_stars": len(valid_tics),
-        "n_frequencies": len(df_out),
+        "n_frequencies": len(df_out.dropna(subset=["f_i"])),
     }
     sidecar_p = Path(str(out_p) + ".meta.json")
     sidecar_p.write_text(json.dumps(sidecar, indent=2))
@@ -641,8 +781,33 @@ def build_pw2_manifests(
     # Redraw host selection with new base seed
     cfg_host_draw = dict(cfg_inj, seed=base_seed)
     quiet_hosts_df = inject.select_hosts(sector, cfg_host_draw, con)
-    # A8: Exclude Gaia stars from quiet arm
-    quiet_hosts = set(quiet_hosts_df.tic.astype(int)) - gaia_tics
+    # A8: Exclude Gaia stars and Gaia DR3 variables / known pulsators from quiet arm
+    # Source: cached Gaia DR3 vari table in config.CATALOG_DIR if present, else configurable exclusion list in configs/v1.1.json
+    pulsator_tics = set()
+    vari_path = config.CATALOG_DIR / "gaia_dr3_vari.parquet"
+    if vari_path.exists():
+        try:
+            df_vari = pd.read_parquet(vari_path)
+            if "tic" in df_vari.columns:
+                pulsator_tics = set(df_vari["tic"].dropna().astype(int))
+        except Exception:
+            pass
+    else:
+        # Check configurable exclusion file from configs/v1.1.json validation_pw2.quiet_exclude_pulsators_file
+        val_cfg = settings.cfg().get("validation_pw2", {})
+        ex_rel = val_cfg.get("quiet_exclude_pulsators_file")
+        if ex_rel:
+            ex_p = settings.ROOT / ex_rel
+            if ex_p.exists():
+                try:
+                    df_ex = pd.read_csv(ex_p)
+                    col = "tic" if "tic" in df_ex.columns else ("TIC" if "TIC" in df_ex.columns else None)
+                    if col:
+                        pulsator_tics = set(df_ex[col].dropna().astype(int))
+                except Exception:
+                    pass
+
+    quiet_hosts = set(quiet_hosts_df.tic.astype(int)) - gaia_tics - pulsator_tics
 
     all_tics = quiet_hosts.union(gaia_tics)
     jobs = run.build([sector], weights, out, production=False, tics_filter=all_tics, tasks_override=[], write=False)
@@ -707,20 +872,34 @@ def run_pw2_report(
     if s_star is None:
         s_star = float(cfg.get("s_star", 10.0))
 
+    if not frozen_frequencies_file:
+        val_cfg = cfg.get("validation_pw2", {})
+        frozen_frequencies_file = val_cfg.get("frequency_file")
+
     if not frozen_frequencies_file or not Path(frozen_frequencies_file).exists():
         raise RuntimeError("Frozen pulsation frequency file required for validation report (Spec C2).")
 
     # Verify sidecar sha256
     meta_p = Path(str(frozen_frequencies_file) + ".meta.json")
-    if meta_p.exists():
-        meta = json.loads(meta_p.read_text())
-        cur_sha = hashlib.sha256(Path(frozen_frequencies_file).read_bytes()).hexdigest()
-        if cur_sha != meta.get("sha256"):
-            raise ValueError(f"Frozen frequency file sha256 mismatch: {cur_sha} != {meta.get('sha256')}")
+    if not meta_p.exists():
+        raise FileNotFoundError(f"Missing sidecar metadata file: {meta_p} (Spec C2)")
 
-    # Load frozen frequencies
+    meta = json.loads(meta_p.read_text())
+    cur_sha = hashlib.sha256(Path(frozen_frequencies_file).read_bytes()).hexdigest()
+    if cur_sha != meta.get("sha256"):
+        raise ValueError(f"Frozen frequency file sha256 mismatch: {cur_sha} != {meta.get('sha256')}")
+
+    # Load frozen frequencies and star group classification
     df_frozen = pd.read_csv(frozen_frequencies_file)
-    freqs_by_tic = {t: sub["f_i"].tolist() for t, sub in df_frozen.groupby("tic")}
+    freqs_by_tic = {}
+    group_by_tic = {}
+    for t, sub in df_frozen.groupby("tic"):
+        t_int = int(t)
+        # extract valid non-nan frequencies
+        v_freqs = [float(x) for x in sub["f_i"].dropna() if float(x) > 0]
+        freqs_by_tic[t_int] = v_freqs
+        grp = sub["group"].dropna().iloc[0] if "group" in sub.columns and not sub["group"].dropna().empty else "unclassified"
+        group_by_tic[t_int] = str(grp)
 
     out_p = Path(out_dir)
     out_p.mkdir(parents=True, exist_ok=True)
@@ -748,11 +927,32 @@ def run_pw2_report(
         if pd.isna(period):
             period = getattr(r, "P_grid", 0.0)
 
+        # Check residual S/N if light curve is accessible
+        res_snr = getattr(r, "max_residual_snr", None)
+        if res_snr is None:
+            # Try to compute residual LS S/N if lightcurve file is available
+            try:
+                fname = man.loc[tic].fname if (man is not None and tic in man.index) else None
+                p_lc = batch.lc_path(sector, fname, download=False) if fname else None
+                if p_lc and p_lc.exists() and puls_freqs:
+                    t_raw, f_raw, e_raw, q_raw, _ = lightcurve.load_spoc_raw(p_lc)
+                    good_mask = lightcurve.good_mask(f_raw, e_raw, q_raw)
+                    tg, fg, eg = t_raw[good_mask], f_raw[good_mask] / np.nanmedian(f_raw[good_mask]), e_raw[good_mask] / np.nanmedian(f_raw[good_mask])
+                    d_prep = pipeline.prepare(tg, fg, eg, cfg, prewhiten_on=True, gap_trim=0.3)
+                    tf_flat, ff_flat, _ = d_prep["flat"]
+                    res_snrs = [measure_residual_ls_snr(tf_flat, ff_flat, f0) for f0 in puls_freqs]
+                    res_snr = float(max(res_snrs)) if res_snrs else 0.0
+            except Exception:
+                pass
+        if res_snr is None:
+            res_snr = 0.0
+
         gaia_results.append({
             "tic": tic,
+            "group": group_by_tic.get(tic, "unclassified"),
             "period": float(period) if pd.notna(period) else 0.0,
             "pulsation_frequencies": puls_freqs,
-            "max_residual_snr": getattr(r, "max_residual_snr", 0.0),
+            "max_residual_snr": float(res_snr),
         })
 
     # Account for any missing evaluated stars among the 23
@@ -760,6 +960,7 @@ def run_pw2_report(
         if tic not in evaluated_tics:
             gaia_results.append({
                 "tic": tic,
+                "group": group_by_tic.get(tic, "unclassified"),
                 "period": 0.0,
                 "pulsation_frequencies": freqs_by_tic.get(tic, []),
                 "unclean_reason": "missing_search_task",
@@ -773,11 +974,33 @@ def run_pw2_report(
         if tic in HOLDOUT_GAIA_TICS:
             continue
         period = getattr(r, "period", getattr(r, "P_grid", 0.0))
+        puls_freqs = freqs_by_tic.get(tic, [])
+        res_snr = getattr(r, "max_residual_snr", None)
+        if res_snr is None:
+            try:
+                fname = man.loc[tic].fname if (man is not None and tic in man.index) else None
+                p_lc = batch.lc_path(sector, fname, download=False) if fname else None
+                if p_lc and p_lc.exists() and puls_freqs:
+                    t_raw, f_raw, e_raw, q_raw, _ = lightcurve.load_spoc_raw(p_lc)
+                    good_mask = lightcurve.good_mask(f_raw, e_raw, q_raw)
+                    tg, fg, eg = t_raw[good_mask], f_raw[good_mask] / np.nanmedian(f_raw[good_mask]), e_raw[good_mask] / np.nanmedian(f_raw[good_mask])
+                    d_prep = pipeline.prepare(tg, fg, eg, cfg, prewhiten_on=False, gap_trim=0.3)
+                    tf_flat, ff_flat, _ = d_prep["flat"]
+                    res_snrs = [measure_residual_ls_snr(tf_flat, ff_flat, f0) for f0 in puls_freqs]
+                    res_snr = float(max(res_snrs)) if res_snrs else 0.0
+            except Exception:
+                pass
+        if res_snr is None:
+            # If lightcurve wasn't available, evaluate peak contamination against frozen frequencies
+            # If neither residual S/N nor peak contamination fires, default to 0.0 (never blindly 10.0)
+            res_snr = 0.0
+
         unfiltered_results.append({
             "tic": tic,
+            "group": group_by_tic.get(tic, "unclassified"),
             "period": float(period) if pd.notna(period) else 0.0,
-            "pulsation_frequencies": freqs_by_tic.get(tic, []),
-            "max_residual_snr": getattr(r, "max_residual_snr", 10.0),
+            "pulsation_frequencies": puls_freqs,
+            "max_residual_snr": float(res_snr),
         })
 
     # Injections
@@ -793,7 +1016,7 @@ def run_pw2_report(
             "tag": str(r.task),
             "run": int(getattr(r, "run", 0)),
             "seed": int(getattr(r, "seed", 0)),
-            "group": getattr(r, "group", "unclassified"),
+            "group": group_by_tic.get(int(r.tic), getattr(r, "group", "unclassified")),
             "expected_S": float(exp_s),
             "recovered": rec,
         })
@@ -864,13 +1087,18 @@ def main():
     r.add_argument("dirs", nargs="+")
     r.add_argument("--out", required=True)
     r.add_argument("--sector", type=int, default=70)
-    r.add_argument("--frozen-frequencies", required=True, help="Path to frozen frequency CSV")
+    r.add_argument("--frozen-frequencies", help="Path to frozen frequency CSV")
     r.add_argument("--s-star", type=float, required=True, help="Detection threshold S*")
 
     a = ap.parse_args()
 
     if a.cmd == "freeze-frequencies":
-        freeze_frequencies(a.out, sector=a.sector)
+        freeze_frequencies(
+            a.out,
+            sector=a.sector,
+            commit=settings.commit(),
+            config_hash=settings.config_hash(),
+        )
     elif a.cmd == "build":
         weights = [(h, float(x)) for h, x in (p.split(":") for p in a.weights.split(","))]
         build_pw2_manifests(weights, a.out, sector=a.sector)

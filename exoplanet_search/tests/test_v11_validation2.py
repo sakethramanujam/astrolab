@@ -91,21 +91,23 @@ def test_blocker1_negative_control_fails_on_noop_filter():
 
 def test_pulsation_k_and_combination_harmonics_caught():
     """Spec C3: BLS top peak within one period-grid step of k/f_i (k=1..20)
-    or of k/|f_i +/- f_j| (k=1..20) must be caught."""
+    or of k/|f_i +/- f_j| (k=1..20) must be caught (using search grid P >= 0.5 d)."""
     f1 = 12.0
     f2 = 15.0
     frozen = [f1, f2]
     baseline = 27.0
-    df = 0.04 / (baseline ** 2)
 
-    # 1. k = 3 / f1
-    target_p1 = 3.0 / f1
+    # In BLS search grid (grid.py), P >= 0.5 d.
+    # 1. k = 8 / f1 = 8 / 12 = 0.6667 d (k in 1..20, P >= 0.5 d)
+    target_p1 = 8.0 / f1
     caught1, detail1 = validate_pw2.check_peak_pulsation_contamination(target_p1, frozen, baseline=baseline)
     assert caught1
-    assert "k=3" in detail1
+    assert "k=8" in detail1
 
-    # 2. k = 5 / (f1 + f2) = 5 / 27.0
-    target_p2 = 5.0 / (f1 + f2)
+    # 2. Combination frequency: f1 = 12.0, f2 = 15.0 -> f1 + f2 = 27.0
+    # k = 15 / 27.0 = 0.5555 d (k in 1..20, P >= 0.5 d).
+    # Since 15 / 27 = 5 / 9, this is not an integer multiple of 1/12 or 1/15.
+    target_p2 = 15.0 / (f1 + f2)
     caught2, detail2 = validate_pw2.check_peak_pulsation_contamination(target_p2, frozen, baseline=baseline)
     assert caught2
     assert "combo" in detail2
@@ -114,6 +116,27 @@ def test_pulsation_k_and_combination_harmonics_caught():
     clean_p = 3.71234
     caught_clean, _ = validate_pw2.check_peak_pulsation_contamination(clean_p, frozen, baseline=baseline)
     assert not caught_clean
+
+
+def test_realistic_dsct_noop_filter_fails_residual_ls_and_bls():
+    """Spec C1, C3, C4: realistic dSct synthetic star with no-op filter.
+    Residual LS S/N > 4 fails the star; BLS peak near k/f_i fails the star."""
+    from exosearch.v11 import synth
+    # Generate pure pulsator (delta scuti)
+    t, f, modes = synth.pulsator(42, kind="dsct")
+    # modes has strongest mode
+    f_dom = modes[0][0]
+    # No-op filter: filtered flux is identical to original flux
+    f_filtered = f.copy()
+    # Residual LS S/N at f_dom must be > 4.0
+    snr_res = validate_pw2.measure_residual_ls_snr(t, f_filtered, f_dom)
+    assert snr_res > 4.0
+
+    # Also check that period matching k/f_dom with k in 1..20 and P >= 0.5 d is caught
+    k_cand = int(np.ceil(0.5 * f_dom))
+    p_peak = k_cand / f_dom
+    caught, _ = validate_pw2.check_peak_pulsation_contamination(p_peak, [f_dom])
+    assert caught
 
 
 def test_b1_denominator_23_holdout_exception():

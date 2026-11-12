@@ -45,25 +45,49 @@ def get_plateau_halfwidth(
     baseline: float = 27.0,
     durations: np.ndarray = search.DURATIONS,
     frequency_factor: float = 1.0,
-    plateaus_cache: Optional[Dict[float, float]] = None,
+    plateaus_cache: Optional[Dict[Any, float]] = None,
+    tic: Optional[int] = None,
+    sector: Optional[int] = None,
+    plateaus_list: Optional[List[Any]] = None,
 ) -> float:
     """Calculate the registered plateau half-width from exosearch/p_grid_halfwidth.py.
     
     Falls back to 0.5 * P^2 * df only where that module itself falls back.
     """
-    if plateaus_cache is not None and period in plateaus_cache:
-        return plateaus_cache[period]
+    if not np.isfinite(period) or period <= 0:
+        return 0.0
+
+    if plateaus_cache is not None:
+        if (tic, period) in plateaus_cache:
+            return plateaus_cache[(tic, period)]
+        if period in plateaus_cache:
+            return plateaus_cache[period]
+
     df = frequency_factor * float(np.min(durations)) / (baseline ** 2)
+
+    if plateaus_list is not None:
+        loc = p_grid_halfwidth.locate(period, plateaus_list, df)
+        return float(loc["P_grid_halfwidth"])
+
     # Check if registered plateau half-width file exists
     pgh_file = p_grid_halfwidth.OUT
     if pgh_file.exists():
         try:
             df_pgh = pd.read_csv(pgh_file)
-            m = np.abs(df_pgh["period_v10"] - period) <= 1e-5
+            cond = np.abs(df_pgh["period_v10"] - period) <= 1e-4
+            if tic is not None and "tic" in df_pgh.columns:
+                cond = cond & (df_pgh["tic"] == tic)
+            if sector is not None and "sector" in df_pgh.columns:
+                cond = cond & (df_pgh["sector"] == sector)
+            if cond.any():
+                return float(df_pgh.loc[cond, "P_grid_halfwidth"].iloc[0])
+            # If tic-match was not found, try period match alone
+            m = np.abs(df_pgh["period_v10"] - period) <= 1e-4
             if m.any():
                 return float(df_pgh.loc[m, "P_grid_halfwidth"].iloc[0])
         except Exception:
             pass
+
     # Default fallback per p_grid_halfwidth.locate
     loc = p_grid_halfwidth.locate(period, [], df)
     return float(loc["P_grid_halfwidth"])
@@ -101,14 +125,22 @@ def check_recovery(
     p_found: Optional[float],
     half_width: float,
     alias_ratios: Tuple[float, ...] = (2.0, 0.5),
+    s_found: Optional[float] = None,
+    s_star: Optional[float] = None,
 ) -> Tuple[bool, Optional[str]]:
     """Determine whether p_found recovers p_cat within the plateau half-width or as an alias.
     
-    Per Spec A4 / B4: 2x and 0.5x aliases use the exact same tolerance and are flagged.
+    Per Spec A4 / B3: 2x and 0.5x aliases use the exact same tolerance and are flagged.
+    Recovery strictly requires S_found >= S* (Spec B3 / Amendment 8d).
     Returns (recovered, alias_flag).
     """
     if p_found is None or not np.isfinite(p_found) or p_found <= 0:
         return False, None
+
+    # Check S_found >= s_star if s_star is provided (Spec B3)
+    if s_star is not None:
+        if s_found is None or not np.isfinite(s_found) or s_found < s_star:
+            return False, None
 
     # Check primary recovery within plateau half-width
     if abs(p_found - p_cat) <= half_width:
@@ -148,8 +180,10 @@ def determine_miss_cause(
         return "masked"
     if expected_s < s_star:
         return "below_threshold"
-    recovered, _ = check_recovery(p_cat, p_found, half_width)
+    recovered, _ = check_recovery(p_cat, p_found, half_width, s_found=s_found, s_star=s_star)
     if not recovered:
+        if p_found is not None and abs(p_found - p_cat) <= half_width and (s_found is None or s_found < s_star):
+            return "below_threshold"
         return "outcompeted"
     return "other"
 
@@ -179,9 +213,12 @@ def select_known_planet_targets(
         never round(P, 4).
     """
     if searched_tics is None:
-        con = store.connect()
-        df_searched = store.frame(con, sector)
-        searched_tics = set(df_searched.tic.astype(int))
+        try:
+            con = store.connect()
+            df_searched = store.frame(con, sector)
+            searched_tics = set(df_searched.tic.astype(int))
+        except Exception:
+            searched_tics = set()
 
     cats = catalogs.load_catalogs()
     active_toi_base = cats["toi"][~cats["toi"].disp.isin(["FP", "FA"])].copy()
@@ -200,29 +237,55 @@ def select_known_planet_targets(
         active_toi_full = active_toi_base[active_toi_base.tic.isin(searched_tics)].copy()
 
     # PS confirmed planets
-    ps_df = cats["ps"]
-    ps_s70 = ps_df[ps_df.tic.isin(searched_tics)].copy()
+    ps_df = cats.get("ps", pd.DataFrame())
+    if not ps_df.empty and "tic" in ps_df.columns:
+        ps_s70 = ps_df[ps_df.tic.isin(searched_tics)].copy()
+    else:
+        ps_s70 = pd.DataFrame()
+
+    # Load full pscomppars table if available on disk for depth, duration, epoch
+    ps_file = config.CATALOG_DIR / "nasa_pscomppars.csv"
+    if ps_file.exists():
+        try:
+            ps_raw = pd.read_csv(ps_file, comment="#", low_memory=False)
+            if "tic_id" in ps_raw.columns:
+                ps_raw["tic"] = pd.to_numeric(ps_raw["tic_id"].astype(str).str.replace("TIC", "").str.strip(), errors="coerce")
+            if "tic" in ps_raw.columns:
+                ps_s70 = ps_raw[ps_raw.tic.isin(searched_tics)].copy()
+        except Exception:
+            pass
 
     # Build initial candidate lists
     ps_targets = []
     for r in ps_s70.itertuples():
         tic = int(r.tic)
-        p = float(r.pl_orbper) if pd.notna(r.pl_orbper) else np.nan
-        # Look for matching row in TOI table for duration, depth, epoch if available
-        dur_h = np.nan
-        depth_ppm = np.nan
-        t0 = np.nan
-        if not active_toi_full.empty:
-            m_toi = active_toi_full[(active_toi_full.tic == tic) & np.isclose(active_toi_full.period.astype(float), p, atol=get_plateau_halfwidth(p))]
-            if not m_toi.empty:
-                r_m = m_toi.iloc[0]
-                dur_h = float(r_m.dur_h) if pd.notna(r_m.dur_h) else np.nan
-                depth_ppm = float(r_m.depth_ppm) if pd.notna(r_m.depth_ppm) else np.nan
-                t0 = float(r_m.epoch_bjd) - 2457000.0 if pd.notna(r_m.epoch_bjd) else np.nan
+        p = float(getattr(r, "pl_orbper", np.nan)) if pd.notna(getattr(r, "pl_orbper", np.nan)) else np.nan
+        
+        # Read catalogue depth, duration, epoch directly from pscomppars (Spec A2)
+        # In pscomppars: pl_trandep is in percent, pl_trandur is in hours, pl_tranmid is BJD
+        depth_pct = getattr(r, "pl_trandep", np.nan)
+        depth_ppm = float(depth_pct) * 1e4 if pd.notna(depth_pct) else np.nan
+        dur_h = float(getattr(r, "pl_trandur", np.nan)) if pd.notna(getattr(r, "pl_trandur", np.nan)) else np.nan
+        tranmid = getattr(r, "pl_tranmid", np.nan)
+        t0 = float(tranmid) - 2457000.0 if pd.notna(tranmid) else np.nan
+
+        # If pscomppars row lacks parameters, look for matching row in TOI table as fallback
+        if not active_toi_full.empty and (np.isnan(depth_ppm) or np.isnan(dur_h) or np.isnan(t0)):
+            if np.isfinite(p):
+                hw_p = get_plateau_halfwidth(p, tic=tic, sector=sector)
+                m_toi = active_toi_full[(active_toi_full.tic == tic) & np.isclose(active_toi_full.period.astype(float), p, atol=hw_p)]
+                if not m_toi.empty:
+                    r_m = m_toi.iloc[0]
+                    if np.isnan(dur_h) and pd.notna(r_m.dur_h):
+                        dur_h = float(r_m.dur_h)
+                    if np.isnan(depth_ppm) and pd.notna(r_m.depth_ppm):
+                        depth_ppm = float(r_m.depth_ppm)
+                    if np.isnan(t0) and pd.notna(r_m.epoch_bjd):
+                        t0 = float(r_m.epoch_bjd) - 2457000.0
 
         ps_targets.append({
             "tic": tic,
-            "name": str(r.pl_name),
+            "name": str(getattr(r, "pl_name", "")),
             "period": p,
             "t0": t0,
             "dur_h": dur_h,
@@ -247,22 +310,52 @@ def select_known_planet_targets(
             "type": "toi",
         })
 
-    # A3: Dedupe by (TIC, period within registered tolerance), PREFERRING the pscomppars row
+    # A3: Dedupe within ps_targets itself, then add TOI rows if no matching (TIC, period within tolerance)
     final_targets = []
-    # Add PS rows first
+    deduped_ps = []
     for pt in ps_targets:
-        final_targets.append(pt)
+        t_tic = pt["tic"]
+        t_p = pt["period"]
+        if np.isnan(t_p) or t_p <= 0:
+            deduped_ps.append(pt)
+            continue
+        hw = get_plateau_halfwidth(t_p, tic=t_tic, sector=sector)
+        matched = False
+        for ex in deduped_ps:
+            if ex["tic"] == t_tic and np.isfinite(ex["period"]) and abs(ex["period"] - t_p) <= hw:
+                matched = True
+                break
+        if not matched:
+            deduped_ps.append(pt)
 
-    # Add TOI rows if no PS row matches (TIC, period within registered tolerance)
+    final_targets.extend(deduped_ps)
+
+    # Dedupe within toi_targets and match against final_targets
+    deduped_toi = []
     for tt in toi_targets:
+        t_tic = tt["tic"]
+        t_p = tt["period"]
+        if np.isnan(t_p) or t_p <= 0:
+            deduped_toi.append(tt)
+            continue
+        hw = get_plateau_halfwidth(t_p, tic=t_tic, sector=sector)
+        matched = False
+        for ex in deduped_toi:
+            if ex["tic"] == t_tic and np.isfinite(ex["period"]) and abs(ex["period"] - t_p) <= hw:
+                matched = True
+                break
+        if not matched:
+            deduped_toi.append(tt)
+
+    for tt in deduped_toi:
         t_tic = tt["tic"]
         t_p = tt["period"]
         if np.isnan(t_p) or t_p <= 0:
             final_targets.append(tt)
             continue
-        hw = get_plateau_halfwidth(t_p)
+        hw = get_plateau_halfwidth(t_p, tic=t_tic, sector=sector)
         matched = False
-        for pt in ps_targets:
+        for pt in deduped_ps:
             if pt["tic"] == t_tic and np.isfinite(pt["period"]) and abs(pt["period"] - t_p) <= hw:
                 matched = True
                 break
@@ -277,6 +370,7 @@ def evaluate_known_planets(
     search_results_df: pd.DataFrame,
     s_star: float,
     durations: np.ndarray = search.DURATIONS,
+    cfg: Optional[Dict[str, Any]] = None,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """Evaluate known planet / active TOI recovery on searched stars.
     
@@ -284,6 +378,13 @@ def evaluate_known_planets(
     """
     if s_star is None or not np.isfinite(s_star) or s_star <= 0:
         raise ValueError("s_star must be provided as a positive float")
+
+    if cfg is None:
+        cfg = settings.cfg()
+    kp_cfg = cfg.get("known_planets", {})
+    contam_tol = float(kp_cfg.get("contamination_diff_tol", 0.20))
+    alias_ratios = tuple(float(x) for x in kp_cfg.get("alias_ratios", [2.0, 0.5]))
+    detrend_window_days = float(kp_cfg.get("detrend_window_d", DETREND_WINDOW_DAYS))
 
     res_by_tic = {}
     if not search_results_df.empty:
@@ -293,7 +394,14 @@ def evaluate_known_planets(
             if P is None or pd.isna(P):
                 P = getattr(r, "P_grid", None)
             S = getattr(r, "S", None)
-            res_by_tic[tic] = dict(period=P, S=S)
+            stat = getattr(r, "status", "ok")
+            err_r = getattr(r, "error", None)
+            # A7: exactly one real-search row per registered TIC (conflicting duplicates are an error)
+            if tic in res_by_tic:
+                prev = res_by_tic[tic]
+                if prev.get("period") != P or prev.get("S") != S or prev.get("status") != stat:
+                    raise ValueError(f"Conflicting duplicate real-search rows for TIC {tic}: {prev} vs {r}")
+            res_by_tic[tic] = dict(period=P, S=S, status=stat, error=err_r)
 
     rows = []
     baseline = 27.0
@@ -324,7 +432,7 @@ def evaluate_known_planets(
         contamination_flag = False
         if aperture_val is not None and contratio is not None and contratio >= 0:
             tic_target_flux_frac = 1.0 / (1.0 + contratio)
-            if abs(aperture_val - tic_target_flux_frac) / max(aperture_val, 1e-4) > 0.20:
+            if abs(aperture_val - tic_target_flux_frac) / max(aperture_val, 1e-4) > contam_tol:
                 contamination_flag = True
 
         # Check eligibility reasons (B4, B5)
@@ -362,9 +470,12 @@ def evaluate_known_planets(
             depth_exp = np.nan
 
         # Check further eligibility requirements
+        # Distinguish declared mask kills (n_raw >= 2 but n_tr < 2) vs few raw transits (n_raw < 2)
         if ineligible_reason is None:
-            if n_tr < 2:
+            if n_raw < 2:
                 ineligible_reason = "transits_under_two"
+            elif n_tr < 2 or (dur_d is not None and np.isfinite(dur_d) and detrend_window_days < 3.0 * dur_d):
+                ineligible_reason = "in_declared_mask"
             elif expected_s < s_star:
                 ineligible_reason = "expected_s_below_threshold"
 
@@ -380,11 +491,19 @@ def evaluate_known_planets(
         # Required set = eligible (B5)
         required = eligible
 
-        recovered, alias_flag = check_recovery(P_cat, P_found, half_width) if (eligible and P_found is not None) else (False, None)
+        recovered, alias_flag = check_recovery(
+            P_cat, P_found, half_width, alias_ratios=alias_ratios, s_found=S_found, s_star=s_star
+        ) if (eligible and P_found is not None) else (False, None)
 
         miss_cause = None
         if not recovered:
             err = getattr(row, "error", None)
+            if (err is None or pd.isna(err) or str(err).strip() == "") and found.get("error"):
+                err = found.get("error")
+            if (err is None or pd.isna(err) or str(err).strip() == "") and found.get("status") == "error":
+                err = "pipeline search error"
+            if (err is None or pd.isna(err) or str(err).strip() == "") and eligible and (tic not in res_by_tic):
+                err = "missing light curve / search result"
             err_str = str(err) if (err is not None and pd.notna(err) and str(err).strip() != "") else None
             miss_cause = determine_miss_cause(
                 n_raw=n_raw,
@@ -515,6 +634,8 @@ def freeze_eligibility(
                     cdpp_d = prof[2].get(dur_d, (np.nan, 1.0))[0]
                 except Exception as exc:
                     err = str(exc)
+            else:
+                err = "missing CROWDSAP in FITS header"
         else:
             err = "missing light curve"
 
@@ -534,8 +655,16 @@ def freeze_eligibility(
     eval_df.to_csv(out_p, index=False)
 
     # Sidecar JSON
+    import datetime as dt
+    utc_timestamp = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+    if not commit:
+        commit = settings.commit()
+    if not config_hash:
+        config_hash = settings.config_hash()
+
     sha256 = hashlib.sha256(out_p.read_bytes()).hexdigest()
     sidecar = {
+        "timestamp_utc": utc_timestamp,
         "s_star": float(s_star),
         "sector": sector,
         "commit": commit,
@@ -557,6 +686,7 @@ def run_known_planet_recovery(
     out_dir: Union[str, Path] = Path("."),
     sector: int = 70,
     frozen_eligibility_file: Optional[Union[str, Path]] = None,
+    cfg: Optional[Dict[str, Any]] = None,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """Run known-planet recovery evaluation and write CSV and JSON outputs.
     
@@ -565,16 +695,24 @@ def run_known_planet_recovery(
     if s_star is None or not np.isfinite(s_star) or s_star <= 0:
         raise ValueError("s_star must be provided as a positive float")
 
+    if cfg is None:
+        cfg = settings.cfg()
+
+    if not frozen_eligibility_file:
+        frozen_eligibility_file = cfg.get("known_planets", {}).get("frozen_eligibility_file")
+
     if not frozen_eligibility_file or not Path(frozen_eligibility_file).exists():
         raise RuntimeError("Frozen eligibility file required for known-planet recovery evaluation (Spec B5).")
 
     # Verify sidecar sha256
     meta_p = Path(str(frozen_eligibility_file) + ".meta.json")
-    if meta_p.exists():
-        meta = json.loads(meta_p.read_text())
-        cur_sha = hashlib.sha256(Path(frozen_eligibility_file).read_bytes()).hexdigest()
-        if cur_sha != meta.get("sha256"):
-            raise ValueError(f"Eligibility file sha256 mismatch: {cur_sha} != {meta.get('sha256')}")
+    if not meta_p.exists():
+        raise FileNotFoundError(f"Missing sidecar metadata file: {meta_p} (Spec B5)")
+
+    meta = json.loads(meta_p.read_text())
+    cur_sha = hashlib.sha256(Path(frozen_eligibility_file).read_bytes()).hexdigest()
+    if cur_sha != meta.get("sha256"):
+        raise ValueError(f"Eligibility file sha256 mismatch: {cur_sha} != {meta.get('sha256')}")
 
     out_p = Path(out_dir)
     out_p.mkdir(parents=True, exist_ok=True)
@@ -586,7 +724,7 @@ def run_known_planet_recovery(
     else:
         df_search = pd.DataFrame(columns=["tic", "period", "S"])
 
-    out_df, summary = evaluate_known_planets(df_eligible, df_search, s_star=s_star)
+    out_df, summary = evaluate_known_planets(df_eligible, df_search, s_star=s_star, cfg=cfg)
 
     csv_path = out_p / "known_planets_recovery.csv"
     out_df.to_csv(csv_path, index=False)
@@ -610,14 +748,20 @@ def main():
     r = sp.add_parser("report")
     r.add_argument("--s-star", type=float, required=True, help="Detection threshold S*")
     r.add_argument("--results", help="Search results CSV path")
-    r.add_argument("--frozen-eligibility", required=True, help="Path to frozen eligibility CSV")
+    r.add_argument("--frozen-eligibility", help="Path to frozen eligibility CSV")
     r.add_argument("--out", required=True, help="Output directory")
     r.add_argument("--sector", type=int, default=70, help="TESS Sector")
 
     a = ap.parse_args()
 
     if a.cmd == "freeze-eligibility":
-        freeze_eligibility(s_star=a.s_star, out_file=a.out, sector=a.sector)
+        freeze_eligibility(
+            s_star=a.s_star,
+            out_file=a.out,
+            sector=a.sector,
+            commit=settings.commit(),
+            config_hash=settings.config_hash(),
+        )
     else:
         run_known_planet_recovery(
             s_star=a.s_star,

@@ -1,3 +1,4 @@
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
@@ -114,3 +115,74 @@ def test_b5_report_refuses_without_frozen_eligibility_file(tmp_path):
     """Spec B5: Report refuses without frozen eligibility file."""
     with pytest.raises(RuntimeError, match="Frozen eligibility file required"):
         known_planets.run_known_planet_recovery(s_star=10.0, out_dir=tmp_path, frozen_eligibility_file=None)
+
+
+def test_select_known_planet_targets_dedupe_and_pscomppars_preference(monkeypatch):
+    """Spec A2, A3: PS rows preferred, dedupe within registered tolerance, no round(P, 4)."""
+    from exosearch import catalogs
+
+    # Mock catalogs
+    mock_toi = pd.DataFrame([
+        {"tic": 101, "toi": "101.01", "period": 3.14159, "disp": "CP", "dur_h": 2.5, "depth_ppm": 1200.0, "epoch_bjd": 2458000.1},
+        {"tic": 102, "toi": "102.01", "period": 5.0, "disp": "PC", "dur_h": 3.0, "depth_ppm": 800.0, "epoch_bjd": 2458000.5},
+    ])
+    mock_ps = pd.DataFrame([
+        # Planet on TIC 101 with period slightly different (within tolerance)
+        {"tic": 101, "pl_name": "Planet-101 b", "pl_orbper": 3.14160, "pl_trandep": 0.15, "pl_trandur": 2.6, "pl_tranmid": 2458000.12},
+    ])
+
+    monkeypatch.setattr(catalogs, "load_catalogs", lambda: {"toi": mock_toi, "ps": mock_ps, "ctoi": pd.DataFrame()})
+    # Avoid disk catalog loading
+    monkeypatch.setattr(known_planets.config, "CATALOG_DIR", Path("/nonexistent/catalog/dir"))
+    targets_df = known_planets.select_known_planet_targets(sector=70, searched_tics={101, 102})
+    assert len(targets_df) == 2
+    row_101 = targets_df[targets_df.tic == 101].iloc[0]
+    assert row_101["type"] == "ps"
+    assert row_101["name"] == "Planet-101 b"
+    # Real depth and duration from pscomppars
+    assert np.isclose(row_101["depth_ppm"], 1500.0)
+    assert np.isclose(row_101["dur_h"], 2.6)
+
+    row_102 = targets_df[targets_df.tic == 102].iloc[0]
+    assert row_102["type"] == "toi"
+    assert row_102["name"] == "TOI 102.01"
+
+
+def test_recovery_requires_s_found_ge_s_star():
+    """Spec B3: Peak matching period with S_found < S* must NOT count as recovered."""
+    P_cat = 4.0
+    hw = 0.01
+    s_star = 12.0
+
+    # Period matches, but S_found = 10.0 < s_star = 12.0
+    rec, alias = known_planets.check_recovery(P_cat, P_cat, hw, s_found=10.0, s_star=s_star)
+    assert not rec
+
+    # Period matches and S_found = 13.0 >= s_star = 12.0
+    rec_ok, alias_ok = known_planets.check_recovery(P_cat, P_cat, hw, s_found=13.0, s_star=s_star)
+    assert rec_ok
+
+
+def test_freeze_eligibility_end_to_end(tmp_path, monkeypatch):
+    """Spec B5: freeze-eligibility writes dated CSV and sidecar with sha256, commit, and config_hash."""
+    from exosearch import catalogs
+    mock_toi = pd.DataFrame([
+        {"tic": 501, "toi": "501.01", "period": 3.0, "disp": "CP", "dur_h": 2.0, "depth_ppm": 2000.0, "epoch_bjd": 2458000.1},
+    ])
+    monkeypatch.setattr(catalogs, "load_catalogs", lambda: {"toi": mock_toi, "ps": pd.DataFrame(columns=["tic"]), "ctoi": pd.DataFrame()})
+    # Patch select_known_planet_targets to return a target
+    mock_targets = pd.DataFrame([
+        {"tic": 501, "name": "TOI 501.01", "period": 3.0, "t0": 1000.1, "dur_h": 2.0, "depth_ppm": 2000.0, "type": "toi"}
+    ])
+    monkeypatch.setattr(known_planets, "select_known_planet_targets", lambda **k: mock_targets)
+    
+    out_csv = tmp_path / "frozen_eligibility_s70.csv"
+    eval_df, sidecar = known_planets.freeze_eligibility(s_star=10.0, out_file=out_csv, sector=70)
+    assert out_csv.exists()
+    sidecar_p = Path(str(out_csv) + ".meta.json")
+    assert sidecar_p.exists()
+    assert "timestamp_utc" in sidecar
+    assert "sha256" in sidecar
+    assert sidecar["sha256"] != ""
+    assert "commit" in sidecar
+    assert "config_hash" in sidecar
