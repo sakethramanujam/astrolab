@@ -1,0 +1,304 @@
+{
+ "rule": "docs/preregistration/beta_treatment.md (registered 2026-11-10) with amendment 1 (2026-11-11), applied as written; v1.1 amendment 2026-11-11 sections 4-5 (sector 70, same population for both nulls)",
+ "inputs": {
+  "flip": "invert",
+  "scrambled": "scramble_r0",
+  "sectors": [
+   70
+  ],
+  "n_boot": 2000,
+  "seed": 20261110,
+  "injections_in_bin": 304,
+  "injections": "v1.0 interim sector-70 injections (beta_select.injections), scored at the v1.1 S70 S* per option",
+  "statistic": "v1.1 row S_opt_<option> (each option searched at its own peak)"
+ },
+ "per_sector_option": [
+  {
+   "sector": 70,
+   "option": "a",
+   "n_null_stars": 7983,
+   "n_stars_alpha": 10244,
+   "u_flip": 6.5,
+   "u_scr": 6.0,
+   "s_star_flip": 9.79637974484291,
+   "s_star_scr": 16.438466975213707,
+   "s_star": 16.438466975213707,
+   "diff": -6.642087230370796,
+   "ci95_diff": [
+    -15.827728447976003,
+    -1.6096025737069488
+   ],
+   "ci90_diff": [
+    -13.635409371117929,
+    -2.368103484086009
+   ],
+   "n_boot_ok": 2000,
+   "ci95_flip": [
+    8.590115224126672,
+    11.577299030127694
+   ],
+   "ci95_scr": [
+    11.730542285939098,
+    25.638634517344325
+   ],
+   "ci95_contains_0": false,
+   "gate_pass": false,
+   "null_peaks_moved_gt1pct": 0,
+   "vetted_flip": 2632,
+   "vetted_scr": 2876
+  },
+  {
+   "sector": 70,
+   "option": "b",
+   "n_null_stars": 7983,
+   "n_stars_alpha": 10244,
+   "u_flip": 6.5,
+   "u_scr": 6.0,
+   "s_star_flip": 9.69828776493846,
+   "s_star_scr": 14.519774193296959,
+   "s_star": 14.519774193296959,
+   "diff": -4.821486428358499,
+   "ci95_diff": [
+    -10.900584841672089,
+    -0.8566050732797322
+   ],
+   "ci90_diff": [
+    -9.731631906159834,
+    -1.4331098013528596
+   ],
+   "n_boot_ok": 2000,
+   "ci95_flip": [
+    8.523318084963362,
+    11.247197247015587
+   ],
+   "ci95_scr": [
+    10.811272381553342,
+    20.62197788256706
+   ],
+   "ci95_contains_0": false,
+   "gate_pass": false,
+   "null_peaks_moved_gt1pct": 6663,
+   "vetted_flip": 2632,
+   "vetted_scr": 2876
+  },
+  {
+   "sector": 70,
+   "option": "c",
+   "n_null_stars": 7983,
+   "n_stars_alpha": 10244,
+   "u_flip": 6.5,
+   "u_scr": 6.0,
+   "s_star_flip": 9.815987386902183,
+   "s_star_scr": 16.276717288254055,
+   "s_star": 16.276717288254055,
+   "diff": -6.460729901351872,
+   "ci95_diff": [
+    -15.311326560781447,
+    -1.4219620118242968
+   ],
+   "ci90_diff": [
+    -13.344200182921513,
+    -2.2086657424631446
+   ],
+   "n_boot_ok": 2000,
+   "ci95_flip": [
+    8.594471985710065,
+    11.66659148031864
+   ],
+   "ci95_scr": [
+    11.571214125253439,
+    25.18066168725462
+   ],
+   "ci95_contains_0": false,
+   "gate_pass": false,
+   "null_peaks_moved_gt1pct": 1020,
+   "vetted_flip": 2632,
+   "vetted_scr": 2876
+  },
+  {
+   "sector": 70,
+   "option": "d",
+   "n_null_stars": 7983,
+   "n_stars_alpha": 10244,
+   "u_flip": 6.5,
+   "u_scr": 6.25,
+   "s_star_flip": 9.905196882498478,
+   "s_star_scr": 15.117662635614408,
+   "s_star": 15.117662635614408,
+   "diff": -5.21246575311593,
+   "ci95_diff": [
+    -12.660910119587216,
+    -0.6868058811055361
+   ],
+   "ci90_diff": [
+    -11.044695838305998,
+    -1.3897078058334429
+   ],
+   "n_boot_ok": 2000,
+   "ci95_flip": [
+    8.625308745224018,
+    11.975210812644344
+   ],
+   "ci95_scr": [
+    11.155700983038862,
+    22.75991810869639
+   ],
+   "ci95_contains_0": false,
+   "gate_pass": false,
+   "null_peaks_moved_gt1pct": 1130,
+   "vetted_flip": 2632,
+   "vetted_scr": 2876
+  }
+ ],
+ "completeness_15_25": {
+  "a": {
+   "n": 304,
+   "vetted": 0.06907894736842106,
+   "per_sector": {
+    "70": {
+     "n": 304,
+     "vetted": 0.06907894736842106
+    },
+    "106": {
+     "n": 0,
+     "vetted": null
+    }
+   }
+  },
+  "b": {
+   "n": 304,
+   "vetted": 0.22697368421052633,
+   "per_sector": {
+    "70": {
+     "n": 304,
+     "vetted": 0.22697368421052633
+    },
+    "106": {
+     "n": 0,
+     "vetted": null
+    }
+   }
+  },
+  "c": {
+   "n": 304,
+   "vetted": 0.08881578947368421,
+   "per_sector": {
+    "70": {
+     "n": 304,
+     "vetted": 0.08881578947368421
+    },
+    "106": {
+     "n": 0,
+     "vetted": null
+    }
+   }
+  },
+  "d": {
+   "n": 304,
+   "vetted": 0.1875,
+   "per_sector": {
+    "70": {
+     "n": 304,
+     "vetted": 0.1875
+    },
+    "106": {
+     "n": 0,
+     "vetted": null
+    }
+   }
+  }
+ },
+ "decision": {
+  "gate_tost": {
+   "a": false,
+   "b": false,
+   "c": false,
+   "d": false
+  },
+  "passing": [],
+  "chosen": "b",
+  "reason": "no option passes the TOST gate: b (most conservative) per rule 4; production is not launched",
+  "tied": [],
+  "gate_failed": true,
+  "completeness_diff_ci95": {
+   "a-b": [
+    -0.19736842105263158,
+    -0.11513157894736842
+   ],
+   "a-c": [
+    -0.03618421052631579,
+    -0.006578947368421045
+   ],
+   "a-d": [
+    -0.15460526315789475,
+    -0.08223684210526316
+   ],
+   "b-c": [
+    0.09868421052631579,
+    0.1743421052631579
+   ],
+   "b-d": [
+    0.019736842105263136,
+    0.0625
+   ],
+   "c-d": [
+    -0.13157894736842107,
+    -0.06578947368421052
+   ]
+  },
+  "descriptive": {
+   "ci95_contains_0": {
+    "a": false,
+    "b": false,
+    "c": false,
+    "d": false
+   },
+   "null_peaks_moved_gt1pct": {
+    "a": 0,
+    "b": 6663,
+    "c": 1020,
+    "d": 1130
+   }
+  }
+ },
+ "status": "gate_failed",
+ "v11_rows": {
+  "reader": {
+   "n_rows_read": 25309,
+   "n_duplicate_rows": 0,
+   "n_after_dedupe": 25309,
+   "n_per_task": {
+    "invert": 12797,
+    "scramble_r0": 12512
+   },
+   "manifest_tasks": 25309,
+   "provenance": {
+    "tree": "16e4f315cf39a48c5145fa7523ff0d4fc22fdfd2",
+    "commit": "fddfb2536894ce4469864f065faca9ce772c1e32",
+    "config_hash": "f9f10beec4f1",
+    "pipeline_version": "1.1.0",
+    "production": "False"
+   }
+  },
+  "population": {
+   "n_alpha": 10244,
+   "flipped_tuning_quality": 8156,
+   "scrambled_tuning_quality": 7983,
+   "paired": 7983,
+   "excluded_removed_from_flipped": 173,
+   "flipped_unpaired_not_excluded": 0,
+   "scrambled_unpaired": 0,
+   "guard": {
+    "paired_count": 7983,
+    "flipped_count": 8156,
+    "scrambled_count": 7983,
+    "excluded_count": 285,
+    "excluded_in_paired": 0,
+    "status": "ok"
+   }
+  },
+  "exclusion_file": "configs/scramble_exclude_s0070_2026-11-11.csv",
+  "exclusion_sha256": "afa7c0122f3a1254177c87c85cbe7108acb9371c0b477dbf238615f03837cd97"
+ },
+ "runtime_s": 50.85625672340393
+}
