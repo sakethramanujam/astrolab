@@ -625,6 +625,8 @@ def _search_index(search_results_df: Optional[pd.DataFrame]) -> Dict[int, Dict[s
     d = search_results_df
     if "mode" in d.columns:
         d = d[d["mode"] == "real"]
+    # vetter amendment 2026-11-12: the amended verdict (exosearch.v11.vet_amend) when the rows carry it
+    vcol = "passed_lc_checks_v2" if "passed_lc_checks_v2" in d.columns else "passed_lc_checks"
     for r in d.to_dict(orient="records"):
         tic = int(r["tic"])
         P = r.get("period")
@@ -632,8 +634,7 @@ def _search_index(search_results_df: Optional[pd.DataFrame]) -> Dict[int, Dict[s
             P = r.get("P_grid")
         rec = dict(period=_f(P), S=_f(r.get("S")), status=_s(r.get("status")) or "ok", error=_s(r.get("error")),
                    plateaus=r.get("plateaus") if _s(r.get("plateaus")) else None, grid_df=_f(r.get("grid_df")),
-                   vetted=(None if "passed_lc_checks" not in r or not np.isfinite(_f(r.get("passed_lc_checks")))
-                           else bool(_f(r.get("passed_lc_checks")))))
+                   vetted=(None if vcol not in r or not np.isfinite(_f(r.get(vcol))) else bool(_f(r.get(vcol)))))
         if tic in res:      # A7: exactly one real-search row per TIC
             prev = res[tic]
             if not (np.isclose(prev["period"], rec["period"], equal_nan=True) and
