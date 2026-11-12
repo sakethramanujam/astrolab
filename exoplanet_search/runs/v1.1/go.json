@@ -1,0 +1,28 @@
+{
+ "pinned_commit": "0e2ca0de48bb3bdd1926eaafcb5d0f444bf5f35c",
+ "beta_option": "b",
+ "s_star": 11.82,
+ "registration_commit": "0e2ca0de48bb3bdd1926eaafcb5d0f444bf5f35c",
+ "known_planet_freeze_commit": "f27e8cf4137e035fb6d66d386d567cf251b3a0c1",
+ "searchpath_hash": "fb958a4e3287588b376c6f57c752c0e130ffb9d3d581840e476a165c7e23ae07",
+ "sectors": [
+  70
+ ],
+ "workers": {
+  "h2": 9
+ },
+ "weights": "h2:1.0",
+ "order": [
+  "known (94 hosts of the 95 required known planets, run first)",
+  "rest"
+ ],
+ "manifests": {
+  "known": "exoplanet_search/runs/v1.1/known_h2.jsonl.gz",
+  "rest": "exoplanet_search/runs/v1.1/rest_h2.jsonl.gz"
+ },
+ "manifest_sha256": {
+  "known_h2.jsonl.gz": "a96221e5442f2b000eab359035e322dc652e14d2b1ca87846c637b82e1689750",
+  "rest_h2.jsonl.gz": "b0e02765e5b22c4022d7441638e5538652fcabd1f83447ae56d651b36f98749f"
+ },
+ "note": "S70 only, single host h2, nice 19, thermal guard. Approved 2026-11-12. Gate: every required planet in docs/preregistration/v1.1_known_planets_2026-11-12 recovered."
+}
