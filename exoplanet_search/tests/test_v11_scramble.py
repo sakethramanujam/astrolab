@@ -31,6 +31,8 @@ def test_gap_edge_cadences_removed_before_scrambling(v11_cfg):
     """Gap-edge cadences within 0.3 d of gaps > 0.5 d and endpoints must be dropped before scrambling."""
     t, f, e = _make_two_orbit_lc()
     t_out, f_out, e_out, info = scramble.segment_rotate(t, f, e, seed=42, cfg=v11_cfg)
+    # undo the rule-(7) join gaps (each wrap shifts every later cadence by scr_join_gap_d)
+    t_out = t_out - info["scr_join_gap_d"] * np.sum(t_out[:, None] >= np.array(info["scr_wrap_t1"])[None, :], axis=1)
 
     # Initial time span has gap 113.0 to 114.5 (size 1.5 d > 0.5 d)
     # Cadences within 0.3 d of 100.0 (start), 113.0 (before gap), 114.5 (after gap), 127.0 (end) dropped
@@ -58,7 +60,14 @@ def test_no_samples_cross_gap_and_each_segment_is_cyclic_rotation(v11_cfg):
     e_kept = e[mask]
 
     t_out, f_out, e_out, info = scramble.segment_rotate(t, f, e, seed=123, cfg=v11_cfg)
-    assert np.array_equal(t_out, t_kept)
+    # rule (7): time stamps move only by the inserted join gaps (cumulative), never reorder
+    shift = np.zeros(t_kept.size)
+    starts = np.r_[0, np.where(np.diff(t_kept) > 0.5)[0] + 1]
+    for a, k in zip(starts, info["scr_offsets"]):
+        if k > 0:
+            shift[a + k:] += info["scr_join_gap_d"]
+    assert np.allclose(t_out, t_kept + shift, rtol=0, atol=1e-9)
+    assert np.all(np.diff(t_out) > 0)
 
     # Split into segments at gaps > 0.5 d
     split_idx = np.where(np.diff(t_kept) > 0.5)[0] + 1
@@ -219,10 +228,13 @@ def test_planted_signal_real_cadence_check(v11_cfg):
     fixture_path = Path(__file__).resolve().parent / "fixtures" / "s0070_cadence.npz"
     results = run_planted_check(fixture_path, output_file=None, n_seeds=10, periods=(1.0, 3.0, 6.0))
 
+    # Amendment 2026-11-12 (join gaps, rule 7): the inserted gaps move every cadence after a wrap by 0.5 d + 1 cadence,
+    # which also breaks a planted signal's phase coherence across the wrap. Before the amendment (fddfb25):
+    # P=1.0 3.70/7.70, P=3.0 1.81/7.26, P=6.0 0.97/7.82.
     expected = {
-        1.0: {"median_sigma": 3.70, "max_sigma": 7.70},
-        3.0: {"median_sigma": 1.81, "max_sigma": 7.26},
-        6.0: {"median_sigma": 0.97, "max_sigma": 7.82},
+        1.0: {"median_sigma": 3.98, "max_sigma": 5.23},
+        3.0: {"median_sigma": 1.57, "max_sigma": 3.34},
+        6.0: {"median_sigma": 1.40, "max_sigma": 2.88},
     }
 
     assert len(results) == 3
@@ -276,3 +288,52 @@ def test_pipeline_scramble_mode_integration(v11_cfg, monkeypatch):
     assert "scr_scheme" in row
     assert row["scr_scheme"] == "segment_rotation"
     assert len(row["scr_offsets"]) == 2 and all(o >= 1 for o in row["scr_offsets"])
+
+
+def test_join_gap_equals_detrender_break_tolerance_plus_cadence(v11_cfg):
+    """Amendment 2026-11-12: inserted offset = the detrender's break_tolerance + one cadence, exactly."""
+    import inspect, re
+    src = inspect.getsource(lightcurve.detrend)
+    bt = float(re.search(r"break_tolerance=([0-9.]+)", src).group(1))
+    assert scramble.BREAK_TOLERANCE_D == bt == 0.5
+    t, f, e = _make_two_orbit_lc()
+    _, _, _, info = scramble.segment_rotate(t, f, e, seed=5, cfg=v11_cfg)
+    kept = t[lightcurve.gap_edge_mask(t, gap=0.5, trim=0.3)]
+    cad = float(np.median(np.diff(kept)))
+    assert info["scr_cadence_d"] == cad
+    assert info["scr_join_gap_d"] == bt + cad
+    assert abs(cad - 2.0 / 1440.0) < 1e-9
+
+
+def _box_snr_at(t, f, edge_t, D, side):
+    tf, fl, _, _, _ = lightcurve.detrend(t, f, np.full_like(t, 1e-4), gap_trim=0.0)
+    c = edge_t - D / 2 if side < 0 else edge_t + D / 2
+    m = np.abs(tf - c) < D / 2
+    sig = 1.4826 * np.median(np.abs(fl - np.median(fl)))
+    return float((np.median(fl) - fl[m].mean()) / (sig / np.sqrt(m.sum())))
+
+
+@pytest.mark.parametrize("seed", [3, 7, 11])
+def test_linear_ramp_wrap_gives_break_and_no_box_dip(seed):
+    """A rotated linear ramp: the detrender breaks at the wrap and no box dip appears there (beyond the detrender's
+    ordinary edge effect at a real segment start); without the inserted gap the wrap step makes a strong dip."""
+    from wotan.gaps import get_gaps_indexes
+    dt = 2.0 / 1440.0
+    t = np.arange(100.0, 112.0, dt)
+    rng = np.random.default_rng(1)
+    f = 1 + 1e-3 * (t - 100.0) / 12.0 + rng.normal(0, 1e-4, t.size)
+    e = np.full_like(t, 1e-4)
+    cfg = {"scramble": {"gap_d": 0.5, "gap_trim_d": 0.3}}
+    to, fo, eo, info = scramble.segment_rotate(t, f, e, seed, cfg)
+    assert len(info["scr_wrap_t1"]) == 1
+    i = int(np.searchsorted(to, info["scr_wrap_t1"][0]))
+    assert i in set(get_gaps_indexes(to, scramble.BREAK_TOLERANCE_D).tolist())       # detrender breaks at the wrap
+    tk = t[lightcurve.gap_edge_mask(t, gap=0.5, trim=0.3)]
+    fk = f[lightcurve.gap_edge_mask(t, gap=0.5, trim=0.3)]
+    for D in (0.04, 0.08, 0.25):
+        fixed = max(_box_snr_at(to, fo, info["scr_wrap_t0"][0], D, -1), _box_snr_at(to, fo, info["scr_wrap_t1"][0], D, +1))
+        unfixed = max(_box_snr_at(tk, fo, tk[i - 1], D, -1), _box_snr_at(tk, fo, tk[i], D, +1))
+        real_edge = max(_box_snr_at(tk, fk, tk[0], D, +1), _box_snr_at(tk, fk, tk[-1], D, -1))
+        assert unfixed > 10.0
+        assert fixed < 3.0
+        assert fixed <= real_edge + 0.5

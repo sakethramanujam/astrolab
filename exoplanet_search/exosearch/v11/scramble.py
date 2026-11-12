@@ -13,6 +13,11 @@ REVISED v1.1 SCRAMBLE RULE (Scientist ruling 2026-11-11, supersedes the fallback
 (5) Return per-segment offsets so the pipeline records them (scr_offsets,
     scr_scheme='segment_rotation').
 (6) Parameters in configs/v1.1.json 'scramble' section.
+(7) JOIN GAP (post-hoc amendment 2026-11-12, docs/preregistration/v1.1_amendment_join_gap_2026-11-12.md): after
+    rotating, a time offset JOIN_GAP_D = BREAK_TOLERANCE_D + cadence is inserted at every wrap point (the cadence
+    where the rotated segment's original first sample now sits): that cadence and every later one move later by the
+    offset (cumulative over wraps), so the wrap becomes a gap the detrender breaks at, as at a real gap. cadence is the
+    median spacing of the gap-edge-masked input. No mask, no taper; flux and flux_err are unchanged by (7).
 """
 from __future__ import annotations
 
@@ -21,6 +26,16 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 
 from .. import lightcurve
+
+# lightcurve.detrend calls wotan flatten(..., break_tolerance=0.5); wotan splits where diff(t) > break_tolerance.
+# tests/test_v11_scramble.py asserts this constant equals the value in lightcurve.detrend's source.
+BREAK_TOLERANCE_D = 0.5
+
+
+def join_gap_d(t: np.ndarray) -> Tuple[float, float]:
+    """-> (offset inserted at each wrap = BREAK_TOLERANCE_D + cadence, cadence = median diff of t)."""
+    cad = float(np.median(np.diff(t))) if t.size > 1 else 0.0
+    return BREAK_TOLERANCE_D + cad, cad
 
 
 def segment_rotate(
@@ -67,7 +82,8 @@ def segment_rotate(
     e = e[keep]
 
     if t.size == 0:
-        return t, f, e, {"scr_offsets": [], "scr_scheme": "segment_rotation", "n_segments": 0}
+        return t, f, e, {"scr_offsets": [], "scr_scheme": "segment_rotation", "n_segments": 0,
+                         "scr_join_gap_d": None, "scr_cadence_d": None, "scr_wrap_t0": [], "scr_wrap_t1": []}
 
     # Rule (2): Split into contiguous segments at gaps > 0.5 d
     dt = np.diff(t)
@@ -80,6 +96,9 @@ def segment_rotate(
     e_out = np.zeros_like(e)
 
     offsets: List[int] = []
+    gap, cad = join_gap_d(t)
+    shift = np.zeros(t.size)
+    wrap_idx: List[int] = []
 
     # Rule (3): Rotate EVERY segment, regardless of length, by its own independent random cyclic offset.
     # Rule (4): a 1-sample segment cannot rotate (offset 0, documented); otherwise offsets are 1..n_seg-1.
@@ -91,11 +110,19 @@ def segment_rotate(
         f_out[seg_idx] = np.roll(f[seg_idx], offset)
         e_out[seg_idx] = np.roll(e[seg_idx], offset)
         offsets.append(offset)
+        if offset > 0:                                  # rule (7): wrap between seg_idx[offset-1] and seg_idx[offset]
+            shift[seg_idx[offset]:] += gap
+            wrap_idx.append(int(seg_idx[offset]))
+    t_out = t + shift
 
     info = {
         "scr_offsets": offsets,
         "scr_scheme": "segment_rotation",
         "n_segments": len(seg_indices),
+        "scr_join_gap_d": gap,
+        "scr_cadence_d": cad,
+        "scr_wrap_t0": [float(t_out[i - 1]) for i in wrap_idx],     # last cadence before each inserted gap
+        "scr_wrap_t1": [float(t_out[i]) for i in wrap_idx],         # first cadence after it
     }
 
-    return t, f_out, e_out, info
+    return t_out, f_out, e_out, info
