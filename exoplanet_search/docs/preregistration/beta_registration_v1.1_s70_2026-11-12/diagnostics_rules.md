@@ -1,0 +1,9 @@
+# Diagnostic rules for the v1.1 S70 beta-registration nulls (pre-registered 2026-11-11 PT / 2026-11-12 UTC)
+
+Written and committed before any diagnostic result exists. Exploratory and post hoc with respect to the beta registration in this directory; not a registration. Applies to the existing v1.1 null rows (code fddfb25, tree 16e4f31); no new search run.
+
+1. **Leakage match.** A scrambled-null peak matches a star when its period P is within the plateau half-width of that star's real-search peak P, or of its 2x or 0.5x alias (aliases reported separately), AND the scrambled depth is between 0.5 and 2 times the real-search depth.
+2. **Leakage chance baseline.** Apply the same rule after pairing each scrambled peak with a randomly chosen different star's real-search peak: 1000 shuffles, fixed seed (reported). Leakage is reported as the excess of the observed match rate over the shuffled rate. Leakage is declared only if the observed rate is above the one-sided 99% bound of the shuffle distribution; in that case the matching (leaked) stars are dropped from BOTH nulls.
+3. **Join proximity.** Fraction of rows with in-transit points (any epoch of the best period within the data span) within one trial duration of a scramble join. Chance baseline: the fraction of each light curve lying within one duration of a join, averaged over the same stars. Report the excess over chance.
+4. **Population.** Option b; top 1% of scrambled (scramble_r0) S_opt_b on the paired same-population set (n = 7983). Also report the S_opt_b >= 12 and >= 14.5 subsets.
+5. **Decision mapping (room).** If the tail clusters on joins: fix the joins and rerun only the scrambled null. If it is leakage: drop the leaked stars from both nulls and recompute; S* is then the larger of the two option-b thresholds. Saketh signs off via a dated post-hoc amendment.
