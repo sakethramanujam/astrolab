@@ -18,6 +18,11 @@ REVISED v1.1 SCRAMBLE RULE (Scientist ruling 2026-11-11, supersedes the fallback
     where the rotated segment's original first sample now sits): that cadence and every later one move later by the
     offset (cumulative over wraps), so the wrap becomes a gap the detrender breaks at, as at a real gap. cadence is the
     median spacing of the gap-edge-masked input. No mask, no taper; flux and flux_err are unchanged by (7).
+(8) JOIN-GAP TRIM (post-hoc amendment 2026-11-12, docs/preregistration/v1.1_amendment_join_gap_trim_2026-11-12.md):
+    each inserted wrap gap gets the SAME edge trim real gaps get in rule (1): lightcurve.gap_edge_mask's rule with the
+    same parameters (scramble.gap_d, scramble.gap_trim_d = 0.3 d), i.e. cadences with t > t_before - trim up to the
+    last cadence before the inserted gap and with t < t_after + trim from the first cadence after it are dropped.
+    Copies the existing rule; no new parameter. Real gaps are not trimmed a second time.
 """
 from __future__ import annotations
 
@@ -30,6 +35,18 @@ from .. import lightcurve
 # lightcurve.detrend calls wotan flatten(..., break_tolerance=0.5); wotan splits where diff(t) > break_tolerance.
 # tests/test_v11_scramble.py asserts this constant equals the value in lightcurve.detrend's source.
 BREAK_TOLERANCE_D = 0.5
+
+
+def inserted_gap_keep(t: np.ndarray, wrap_idx: List[int], gap: float, trim: float) -> np.ndarray:
+    """Rule (8): lightcurve.gap_edge_mask's decision on the shifted time stamps, used only in the trim window of each
+    inserted gap (the window is gap_edge_mask's own rule: [t_after, t_after + trim) and (t_before - trim, t_before]).
+    Real gaps (trimmed before scrambling) and the series ends are not trimmed again."""
+    full = lightcurve.gap_edge_mask(t, gap=gap, trim=trim)
+    keep = np.ones(t.size, bool)
+    for i in wrap_idx:                                  # inserted gap between cadences i-1 and i
+        keep[i:] &= ~((t[i:] >= t[i]) & (t[i:] < t[i] + trim)) | full[i:]
+        keep[:i] &= ~((t[:i] <= t[i - 1]) & (t[:i] > t[i - 1] - trim)) | full[:i]
+    return keep
 
 
 def join_gap_d(t: np.ndarray) -> Tuple[float, float]:
@@ -114,6 +131,7 @@ def segment_rotate(
             shift[seg_idx[offset]:] += gap
             wrap_idx.append(int(seg_idx[offset]))
     t_out = t + shift
+    keep2 = inserted_gap_keep(t_out, wrap_idx, gap_d, gap_trim_d)    # rule (8)
 
     info = {
         "scr_offsets": offsets,
@@ -123,6 +141,8 @@ def segment_rotate(
         "scr_cadence_d": cad,
         "scr_wrap_t0": [float(t_out[i - 1]) for i in wrap_idx],     # last cadence before each inserted gap
         "scr_wrap_t1": [float(t_out[i]) for i in wrap_idx],         # first cadence after it
+        "scr_join_trim_d": gap_trim_d,
+        "scr_join_trim_dropped": int((~keep2).sum()),
     }
 
-    return t_out, f_out, e_out, info
+    return t_out[keep2], f_out[keep2], e_out[keep2], info

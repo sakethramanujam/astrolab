@@ -66,16 +66,23 @@ def test_no_samples_cross_gap_and_each_segment_is_cyclic_rotation(v11_cfg):
     for a, k in zip(starts, info["scr_offsets"]):
         if k > 0:
             shift[a + k:] += info["scr_join_gap_d"]
-    assert np.allclose(t_out, t_kept + shift, rtol=0, atol=1e-9)
-    assert np.all(np.diff(t_out) > 0)
+    t_sh = t_kept + shift
+    assert np.all(np.diff(t_sh) > 0)
+    wrap_idx = [int(np.searchsorted(t_sh, w)) for w in info["scr_wrap_t1"]]
+    keep2 = scramble.inserted_gap_keep(t_sh, wrap_idx, 0.5, 0.3)                       # rule (8)
+    assert np.allclose(t_out, t_sh[keep2], rtol=0, atol=1e-9)
+    f_full = np.zeros_like(f_kept); e_full = np.zeros_like(e_kept)
 
     # Split into segments at gaps > 0.5 d
     split_idx = np.where(np.diff(t_kept) > 0.5)[0] + 1
     t_segs = np.split(t_kept, split_idx)
     f_in_segs = np.split(f_kept, split_idx)
     e_in_segs = np.split(e_kept, split_idx)
-    f_out_segs = np.split(f_out, split_idx)
-    e_out_segs = np.split(e_out, split_idx)
+    for a_, b_, k in zip(np.r_[0, split_idx], np.r_[split_idx, t_kept.size], info["scr_offsets"]):
+        f_full[a_:b_] = np.roll(f_kept[a_:b_], k); e_full[a_:b_] = np.roll(e_kept[a_:b_], k)
+    assert np.array_equal(f_out, f_full[keep2]) and np.array_equal(e_out, e_full[keep2])
+    f_out_segs = np.split(f_full, split_idx)
+    e_out_segs = np.split(e_full, split_idx)
 
     assert len(t_segs) == info["n_segments"]
     assert len(info["scr_offsets"]) == len(t_segs)
@@ -230,11 +237,12 @@ def test_planted_signal_real_cadence_check(v11_cfg):
 
     # Amendment 2026-11-12 (join gaps, rule 7): the inserted gaps move every cadence after a wrap by 0.5 d + 1 cadence,
     # which also breaks a planted signal's phase coherence across the wrap. Before the amendment (fddfb25):
-    # P=1.0 3.70/7.70, P=3.0 1.81/7.26, P=6.0 0.97/7.82.
+    # P=1.0 3.70/7.70, P=3.0 1.81/7.26, P=6.0 0.97/7.82; join gap only (6d283e8): 3.98/5.23, 1.57/3.34, 1.40/2.88.
+    # Join gap + rule-(8) trim (amendment 2026-11-12, join-gap trim):
     expected = {
-        1.0: {"median_sigma": 3.98, "max_sigma": 5.23},
-        3.0: {"median_sigma": 1.57, "max_sigma": 3.34},
-        6.0: {"median_sigma": 1.40, "max_sigma": 2.88},
+        1.0: {"median_sigma": 3.86, "max_sigma": 5.56},
+        3.0: {"median_sigma": 1.39, "max_sigma": 3.21},
+        6.0: {"median_sigma": 1.40, "max_sigma": 3.32},
     }
 
     assert len(results) == 3
@@ -329,11 +337,47 @@ def test_linear_ramp_wrap_gives_break_and_no_box_dip(seed):
     i = int(np.searchsorted(to, info["scr_wrap_t1"][0]))
     assert i in set(get_gaps_indexes(to, scramble.BREAK_TOLERANCE_D).tolist())       # detrender breaks at the wrap
     tk = t[lightcurve.gap_edge_mask(t, gap=0.5, trim=0.3)]
+    i = int(np.searchsorted(tk, info["scr_wrap_t1"][0] - info["scr_join_gap_d"]))   # wrap index in the unshifted series
     fk = f[lightcurve.gap_edge_mask(t, gap=0.5, trim=0.3)]
     for D in (0.04, 0.08, 0.25):
-        fixed = max(_box_snr_at(to, fo, info["scr_wrap_t0"][0], D, -1), _box_snr_at(to, fo, info["scr_wrap_t1"][0], D, +1))
-        unfixed = max(_box_snr_at(tk, fo, tk[i - 1], D, -1), _box_snr_at(tk, fo, tk[i], D, +1))
+        tb_ = to[to < info["scr_wrap_t1"][0]].max(); ta_ = to[to > info["scr_wrap_t0"][0]].min()     # kept edges after rule (8)
+        fixed = max(_box_snr_at(to, fo, tb_, D, -1), _box_snr_at(to, fo, ta_, D, +1))
+        fr = np.roll(fk, info["scr_offsets"][0])                                         # rotated, no gap, no trim
+        unfixed = max(_box_snr_at(tk, fr, tk[i - 1], D, -1), _box_snr_at(tk, fr, tk[i], D, +1))
         real_edge = max(_box_snr_at(tk, fk, tk[0], D, +1), _box_snr_at(tk, fk, tk[-1], D, -1))
         assert unfixed > 10.0
         assert fixed < 3.0
         assert fixed <= real_edge + 0.5
+
+
+@pytest.mark.parametrize("seed", [3, 7, 11, 42])
+def test_inserted_gaps_trimmed_exactly_like_real_gaps(v11_cfg, seed):
+    """Rule (8): around each inserted gap exactly the cadences lightcurve.gap_edge_mask drops around a real gap of the
+    same geometry are dropped (same rule, same 0.3 d trim from the config); real gaps and ends are not trimmed again."""
+    t, f, e = _make_two_orbit_lc()
+    sc = v11_cfg["scramble"]
+    t_kept = t[lightcurve.gap_edge_mask(t, gap=sc["gap_d"], trim=sc["gap_trim_d"])]
+    t_out, _, _, info = scramble.segment_rotate(t, f, e, seed=seed, cfg=v11_cfg)
+    assert info["scr_join_trim_d"] == sc["gap_trim_d"] == 0.3
+    starts = np.r_[0, np.where(np.diff(t_kept) > sc["gap_d"])[0] + 1]
+    shift = np.zeros(t_kept.size)
+    for a, k in zip(starts, info["scr_offsets"]):
+        if k > 0:
+            shift[a + k:] += info["scr_join_gap_d"]
+    t_sh = t_kept + shift                                   # the inserted gaps are real gaps in this series
+    real_rule = lightcurve.gap_edge_mask(t_sh, gap=sc["gap_d"], trim=sc["gap_trim_d"])
+    near_ins = np.zeros(t_sh.size, bool)
+    for w0, w1 in zip(info["scr_wrap_t0"], info["scr_wrap_t1"]):
+        near_ins |= (t_sh > w0 - 1.0) & (t_sh < w1 + 1.0)
+    near_real = np.zeros(t_sh.size, bool)
+    for a in starts:
+        near_real |= np.abs(t_sh - t_sh[a]) < 1.0
+    ends = np.r_[starts[1:] - 1, t_sh.size - 1]
+    for b in ends:
+        near_real |= np.abs(t_sh - t_sh[b]) < 1.0
+    kept = np.isin(np.round(t_sh, 9), np.round(t_out, 9))
+    region = near_ins & ~near_real
+    assert region.any() and (~real_rule[region]).sum() > 0
+    assert np.array_equal(kept[region], real_rule[region])        # identical to the real-gap rule at inserted gaps
+    assert kept[~near_ins].all()                                  # nothing else dropped (no second real-gap trim)
+    assert info["scr_join_trim_dropped"] == int((~kept).sum())
