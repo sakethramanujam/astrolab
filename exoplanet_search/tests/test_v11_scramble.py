@@ -270,7 +270,7 @@ def test_pipeline_scramble_mode_integration(v11_cfg, monkeypatch):
 
     assert len(rows) == 1
     row = rows[0]
-    assert row["status"] == "ok"
+    assert row["status"] == "ok", row.get("error")
     assert row["mode"] == "scramble"
     assert "scr_offsets" in row
     assert "scr_scheme" in row
