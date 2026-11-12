@@ -251,11 +251,11 @@ def injection_completeness(q, s_star):
     """beta_select.injections and .completeness on the sector-70 interim injections (the injection input the rule
     names), each option at its v1.1 S70 S*. S106 has no v1.1 S* in this run and enters with no rows."""
     if not glob.glob(str(interim.PROD / "injections" / "*" / "part-*.parquet")):
-        raise FileNotFoundError("no interim injection part files under " + str(interim.PROD / "injections"))
+        raise FileNotFoundError("no interim injection part files under <EXO_DATA_ROOT>/products/v1.0.0/injections")
     inj = bs.injections(q)
     inj = inj[inj.sector == SECTOR].copy()
     if not len(inj):
-        raise FileNotFoundError("no sector-70 interim injections under " + str(interim.PROD / "injections"))
+        raise FileNotFoundError("no sector-70 interim injections under <EXO_DATA_ROOT>/products/v1.0.0/injections")
     st = dict(s_star)
     st.update({(s, o): np.inf for s in bs.SECTORS if s != SECTOR for o in bs.OPTIONS})
     comp, ind = bs.completeness(inj, q, st)
