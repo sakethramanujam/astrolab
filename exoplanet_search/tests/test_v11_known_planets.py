@@ -10,6 +10,14 @@ from exosearch.v11 import known_planets, pipeline, search, settings
 from lc_fixtures import s70_like_times, transit_flux, write_spoc_fits
 
 
+def legacy_cfg():
+    """configs/v1.1.json with the known-planet gate as registered before the 2026-11-12 known-gate amendment."""
+    c = json.loads(json.dumps(settings.cfg()))
+    c["known_planets"].update(min_transits=2, tolerance="plateau", alias_recovered=False, required_types=None,
+                              expected_s_scale=1.0)
+    return c
+
+
 def test_grid_halfwidth_fallback():
     """locate's own fallback 0.5 * P^2 * df when no plateau information exists for the star."""
     hw = known_planets.calculate_grid_halfwidth(3.0, baseline=27.0)
@@ -54,7 +62,7 @@ def test_contamination_flag_and_missing_aperture():
     df_tgt = pd.DataFrame([dict(base, tic=1, name="P1", aperture_contamination=0.95, contratio=0.05),
                            dict(base, tic=2, name="P2", aperture_contamination=0.50, contratio=0.01),
                            dict(base, tic=3, name="P3", aperture_contamination=np.nan, contratio=0.05)])
-    out, _ = known_planets.evaluate_known_planets(df_tgt, pd.DataFrame(), s_star=10.0)
+    out, _ = known_planets.evaluate_known_planets(df_tgt, pd.DataFrame(), s_star=10.0, cfg=legacy_cfg())
     r = out.set_index("tic")
     assert r.loc[1, "eligibility"] == "eligible" and not r.loc[1, "contamination_flag"]
     assert r.loc[2, "eligibility"] == "eligible" and r.loc[2, "contamination_flag"]
@@ -67,8 +75,8 @@ def test_threshold_applied_to_frozen_expected_s():
     base = dict(t0=1.0, dur_h=2.0, depth_ppm=1000.0, n_raw=4, n_tr=4, cdpp_d=1e-4, aperture_contamination=1.0)
     df_tgt = pd.DataFrame([dict(base, tic=1, name="a", period=2.0, depth_ppm=600.0),     # S = 12
                            dict(base, tic=2, name="b", period=3.0)])                      # S = 20
-    lo, _ = known_planets.evaluate_known_planets(df_tgt, pd.DataFrame(), s_star=9.70)
-    hi, _ = known_planets.evaluate_known_planets(df_tgt, pd.DataFrame(), s_star=14.52)
+    lo, _ = known_planets.evaluate_known_planets(df_tgt, pd.DataFrame(), s_star=9.70, cfg=legacy_cfg())
+    hi, _ = known_planets.evaluate_known_planets(df_tgt, pd.DataFrame(), s_star=14.52, cfg=legacy_cfg())
     assert list(lo.eligibility) == ["eligible", "eligible"]
     assert list(hi.eligibility) == ["ineligible", "eligible"]
     assert hi.iloc[0].ineligible_reason == "expected_s_below_threshold"
@@ -135,7 +143,7 @@ def test_freeze_then_report_end_to_end(tmp_path):
     """Frozen CSV round trip into run_known_planet_recovery on synthetic light curves and a real v1.1 search:
     eligibility and P_cat survive the round trip, a direct match is recovered, an alias is reported and fails,
     a missing light curve is a required error row (never ineligible), and expected S is never recomputed."""
-    cfg = settings.cfg()
+    cfg = legacy_cfg()
     P, t0, dur, depth = 3.71, 3001.3, 0.11, 2500e-6
     t = s70_like_times()
     lc = write_spoc_fits(tmp_path / "lc1.fits", t, transit_flux(t, P, t0, dur, depth), crowdsap=0.98, tic=1)
@@ -189,7 +197,7 @@ def test_runtime_error_during_freeze_is_error_row(tmp_path):
     tg = pd.DataFrame([dict(tic=9, name="TOI 9.01", type="toi", period=2.0, t0=3000.5, dur_h=2.0, depth_ppm=2000.0,
                             depth_src="exofop_toi", dur_src="exofop_toi", t0_src="exofop_toi")])
     df, _ = known_planets.freeze_eligibility(10.0, tmp_path / "f.csv", targets_df=tg, lc_lookup=lambda t: bad,
-                                             contratio_map={}, commit="x", config_hash="x")
+                                             contratio_map={}, commit="x", config_hash="x", cfg=legacy_cfg())
     row = df.iloc[0]
     assert row.eligibility == "error" and row.required and row.error and row.ineligible_reason == ""
 
@@ -204,3 +212,44 @@ def test_losing_stage():
     assert ls("2x", 30, 10, True, s_cat=6, depth_ratio_cat=0.9) == "below_S*"
     assert ls("direct", 20, 10, False) == "vetting"
     assert ls("direct", 20, 10, True) == ""
+
+
+# ---------------------------------------------------------------- known-gate amendment 2026-11-12
+def test_amended_config_values():
+    kp = settings.cfg()["known_planets"]
+    assert kp["min_transits"] == 3 and kp["tolerance"] == "bls_peak" and kp["period_err_nsigma"] == 3.0
+    assert kp["alias_recovered"] is True and kp["required_types"] == ["ps"] and kp["expected_s_scale"] == 0.66
+
+
+def test_bls_peak_tolerance():
+    # D * P / T_span with 3 sigma_P in quadrature
+    assert np.isclose(known_planets.bls_peak_tolerance(3.4, 2.4, 25.0), 0.1 * 3.4 / 25.0)
+    assert np.isclose(known_planets.bls_peak_tolerance(3.4, 2.4, 25.0, 0.002), np.hypot(0.1 * 3.4 / 25.0, 0.006))
+    assert known_planets.bls_peak_tolerance(3.4, np.nan, 25.0) == 0.0
+
+
+def test_alias_recovered_with_scaled_tolerance():
+    P, hw = 4.0, 0.01
+    cr = known_planets.check_recovery
+    assert cr(P, 2 * P + 1.5 * hw, hw, alias_scale=True, alias_recovered=True) == (True, "2x")
+    assert cr(P, 2 * P + 2.5 * hw, hw, alias_scale=True, alias_recovered=True) == (False, "none")
+    assert cr(P, 0.5 * P + 0.4 * hw, hw, alias_scale=True, alias_recovered=True) == (True, "0.5x")
+    assert cr(P, 2 * P, hw, s_found=10.0, s_star=12.0, alias_scale=True, alias_recovered=True) == (False, "2x")
+
+
+def test_amended_gate_confirmed_required_tois_scored():
+    base = dict(t0=1.0, dur_h=2.4, depth_ppm=2000.0, n_raw=4, n_tr=4, cdpp_d=1e-4, aperture_contamination=1.0,
+                period=3.0, period_err=0.0, t_span_d=25.0, error="")
+    df_tgt = pd.DataFrame([dict(base, tic=1, name="P b", type="ps"), dict(base, tic=2, name="TOI 2.01", type="toi"),
+                           dict(base, tic=3, name="P3 b", type="ps", n_raw=2, n_tr=2)])
+    rows = pd.DataFrame([dict(tic=1, period=3.0 + 0.009, S=50.0, status="ok", passed_lc_checks=1.0),
+                         dict(tic=2, period=9.0, S=50.0, status="ok", passed_lc_checks=1.0)])
+    out, summ = known_planets.evaluate_known_planets(df_tgt, rows, s_star=11.82)
+    o = out.set_index("tic")
+    # expected S scaled by 0.66 (raw 2000e-6 * 2 / 1e-4 = 40)
+    assert np.isclose(o.loc[1, "expected_S"], 0.66 * 40.0)
+    assert o.loc[1, "required"] and o.loc[1, "recovered"]          # within D*P/T = 0.012 d
+    assert not o.loc[2, "required"] and o.loc[2, "eligibility"] == "eligible" and not o.loc[2, "recovered"]
+    assert o.loc[2, "stage"] != ""                                   # TOI misses are scored with a cause
+    assert o.loc[3, "eligibility"] == "ineligible" and o.loc[3, "ineligible_reason"] == "transits_under_min"
+    assert summ["required_targets"] == 1 and summ["pass"]

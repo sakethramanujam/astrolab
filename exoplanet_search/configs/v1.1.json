@@ -78,9 +78,16 @@
   },
   "known_planets": {
     "frozen_eligibility_file": null,
-    "min_transits": 2,
+    "amendment": "docs/preregistration/v1.1_amendment_known_gate_2026-11-12.md",
+    "min_transits": 3,
     "contamination_diff_tol": 0.20,
     "alias_ratios": [2.0, 0.5],
-    "detrend_window_d": 0.75
+    "detrend_window_d": 0.75,
+    "tolerance": "bls_peak",
+    "period_err_nsigma": 3.0,
+    "alias_recovered": true,
+    "required_types": ["ps"],
+    "expected_s_scale": 0.66,
+    "expected_s_scale_source": "v1.0.0 injection_v1 products (runs 0 and 1): median S_obs / S_exp of period-matched injections"
   }
 }

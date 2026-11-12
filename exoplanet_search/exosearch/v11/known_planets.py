@@ -63,15 +63,16 @@ CATALOG_MATCH_REL = 0.01       # PS-vs-TOI same-planet match: |dP| / P (two plan
 BTJD_OFFSET = 2457000.0
 
 # Frozen eligibility schema (one row per target; written once pre-run, read back by the report)
-FROZEN_STR = ("name", "type", "depth_src", "dur_src", "t0_src", "base_ineligible_reason", "error",
+FROZEN_STR = ("name", "type", "disp", "depth_src", "dur_src", "t0_src", "base_ineligible_reason", "error",
               "eligibility", "ineligible_reason")
-FROZEN_FLOAT = ("period", "t0", "dur_h", "depth_ppm", "eph_sigma_h", "aperture_contamination", "contratio", "cdpp_d",
-                "expected_S")
+FROZEN_FLOAT = ("period", "period_err", "t0", "dur_h", "depth_ppm", "eph_sigma_h", "aperture_contamination", "contratio",
+                "cdpp_d", "t_span_d", "expected_S_raw", "expected_S")
 FROZEN_INT = ("tic", "n_raw", "n_tr")
 FROZEN_BOOL = ("contamination_flag", "required")
-FROZEN_COLUMNS = ("tic", "name", "type", "period", "t0", "dur_h", "depth_ppm", "depth_src", "dur_src", "t0_src",
-                  "eph_sigma_h", "aperture_contamination", "contratio", "contamination_flag", "n_raw", "n_tr", "cdpp_d",
-                  "expected_S", "base_ineligible_reason", "error", "eligibility", "ineligible_reason", "required")
+FROZEN_COLUMNS = ("tic", "name", "type", "disp", "period", "period_err", "t0", "dur_h", "depth_ppm", "depth_src", "dur_src",
+                  "t0_src", "eph_sigma_h", "aperture_contamination", "contratio", "contamination_flag", "n_raw", "n_tr",
+                  "cdpp_d", "t_span_d", "expected_S_raw", "expected_S", "base_ineligible_reason", "error", "eligibility",
+                  "ineligible_reason", "required")
 
 STAGES = ("error", "masked", "detrending", "below_S*", "outranked", "vetting")
 
@@ -210,6 +211,19 @@ def get_plateau_halfwidth(
 calculate_grid_halfwidth = get_plateau_halfwidth
 
 
+def bls_peak_tolerance(period: float, dur_h: float, t_span_d: float, period_err: float = np.nan,
+                       nsigma: float = 3.0) -> float:
+    """Known-gate amendment 2026-11-12, item 1: BLS peak width D * P / T_span (catalogue duration, the star's own data
+    span) plus nsigma times the catalogue period error, in quadrature. 0.0 when an input is missing."""
+    P, D, T = _f(period), _f(dur_h) / 24.0, _f(t_span_d)
+    if not (P > 0 and D > 0 and T > 0):
+        return 0.0
+    sp = _f(period_err)
+    sp = abs(sp) if np.isfinite(sp) else 0.0
+    return float(np.hypot(D * P / T, nsigma * sp))
+
+
+
 def count_surviving_transits(
     t: np.ndarray,
     period: float,
@@ -239,11 +253,16 @@ def check_recovery(
     alias_ratios: Tuple[float, ...] = (2.0, 0.5),
     s_found: Optional[float] = None,
     s_star: Optional[float] = None,
+    alias_scale: bool = False,
+    alias_recovered: bool = False,
 ) -> Tuple[bool, str]:
     """-> (recovered, match_type) with match_type in {'direct', '2x', '0.5x', 'none'}.
 
     Recovered only for a direct match (|P_found - P_cat| <= half-width) with S_found >= S* (when S* is given).
     2x / 0.5x aliases use the exact same half-width, are reported as match types, and never count as recovered.
+    Known-gate amendment 2026-11-12, item 5: alias_scale scales the tolerance with the alias period (ratio x
+    half_width, as the BLS peak width and the period error both scale with P) and alias_recovered counts a flagged
+    alias as recovered.
     """
     pf = _f(p_found)
     if not np.isfinite(pf) or pf <= 0 or not np.isfinite(p_cat):
@@ -253,11 +272,11 @@ def check_recovery(
         mt = "direct"
     else:
         for ratio in alias_ratios:
-            if abs(pf - p_cat * ratio) <= half_width:
+            if abs(pf - p_cat * ratio) <= (ratio * half_width if alias_scale else half_width):
                 mt = f"{int(ratio)}x" if ratio >= 1 else "0.5x"
                 break
     s_ok = True if s_star is None else bool(np.isfinite(_f(s_found)) and _f(s_found) >= s_star)
-    return bool(mt == "direct" and s_ok), mt
+    return bool((mt == "direct" or (alias_recovered and mt != "none")) and s_ok), mt
 
 
 def losing_stage(
@@ -373,7 +392,8 @@ def select_known_planet_targets(
                 vals["dur_h"], src["dur_h"] = 24.0 * p / np.pi * float(np.arcsin(arg)), "pscomppars T14(P,a/R*,b,Rp/R*)"
         sig = eph_sigma_h(p, getattr(r, "pl_orbpererr1", np.nan), getattr(r, "pl_tranmiderr1", np.nan), vals["t0"]) \
             if src["t0"] == "pscomppars" else np.nan
-        ps_targets.append(dict(tic=tic, name=_s(getattr(r, "pl_name", "")), type="ps", period=p, **vals,
+        ps_targets.append(dict(tic=tic, name=_s(getattr(r, "pl_name", "")), type="ps", disp="CONFIRMED", period=p,
+                               period_err=_f(getattr(r, "pl_orbpererr1", np.nan)), **vals,
                                depth_src=src["depth_ppm"], dur_src=src["dur_h"], t0_src=src["t0"], eph_sigma_h=sig))
 
     toi_targets = []
@@ -381,7 +401,8 @@ def select_known_planet_targets(
         vals = dict(depth_ppm=_f(r.depth_ppm), dur_h=_f(r.dur_h), t0=_f(r.epoch_bjd) - BTJD_OFFSET)
         src = {k: ("exofop_toi" if np.isfinite(v) else "") for k, v in vals.items()}
         sig = eph_sigma_h(_f(r.period), getattr(r, "period_err", np.nan), getattr(r, "epoch_err", np.nan), vals["t0"])
-        toi_targets.append(dict(tic=int(r.tic), name=f"TOI {r.toi}", type="toi", period=_f(r.period), **vals,
+        toi_targets.append(dict(tic=int(r.tic), name=f"TOI {r.toi}", type="toi", disp=_s(r.disp), period=_f(r.period),
+                                period_err=_f(getattr(r, "period_err", np.nan)), **vals,
                                 depth_src=src["depth_ppm"], dur_src=src["dur_h"], t0_src=src["t0"], eph_sigma_h=sig))
 
     def same(a, b, rel=0.0):
@@ -397,7 +418,8 @@ def select_known_planet_targets(
         # one planet differ by far more than one grid step); TOIs among themselves use the registered tolerance
         if not any(same(ex, tt, CATALOG_MATCH_REL if ex["type"] == "ps" else 0.0) for ex in final):
             final.append(tt)
-    cols = ["tic", "name", "type", "period", "t0", "dur_h", "depth_ppm", "depth_src", "dur_src", "t0_src", "eph_sigma_h"]
+    cols = ["tic", "name", "type", "disp", "period", "period_err", "t0", "dur_h", "depth_ppm", "depth_src", "dur_src",
+            "t0_src", "eph_sigma_h"]
     return pd.DataFrame(final, columns=cols)
 
 
@@ -408,6 +430,7 @@ def derive_expected(rd: Dict[str, Any], cfg: Optional[Dict[str, Any]] = None) ->
     kp = cfg.get("known_planets", {})
     contam_tol = float(kp.get("contamination_diff_tol", 0.20))
     min_tr = int(kp.get("min_transits", 2))
+    s_scale = float(kp.get("expected_s_scale", 1.0))      # amendment 2026-11-12 item 4 (injection obs/exp ratio)
     window = float(kp.get("detrend_window_d", DETREND_WINDOW_DAYS))
     P, dur_h, depth_ppm, t0 = _f(rd.get("period")), _f(rd.get("dur_h")), _f(rd.get("depth_ppm")), _f(rd.get("t0"))
     ap = _f(rd.get("aperture_contamination"))
@@ -429,21 +452,22 @@ def derive_expected(rd: Dict[str, Any], cfg: Optional[Dict[str, Any]] = None) ->
         reason = "missing_epoch"
     elif not err and not (ap > 0):
         reason = "missing_aperture_contamination"
-    exp_s = np.nan
+    exp_s = exp_raw = np.nan
     if not reason and not err:
         if n_raw < min_tr:
-            reason = "transits_under_two"
+            reason = "transits_under_min"
         elif n_tr < min_tr or window < 3.0 * dur_h / 24.0:
             reason = "in_declared_mask"
         if np.isfinite(cdpp) and cdpp > 0 and n_tr > 0:
-            exp_s = float(depth_ppm * 1e-6 * ap * np.sqrt(n_tr) / cdpp)
+            exp_raw = float(depth_ppm * 1e-6 * ap * np.sqrt(n_tr) / cdpp)
+            exp_s = exp_raw * s_scale
         elif not reason:
             err = "no finite CDPP at catalogue duration"
-    return dict(contamination_flag=flag, n_raw=n_raw, n_tr=n_tr, expected_S=exp_s,
+    return dict(contamination_flag=flag, n_raw=n_raw, n_tr=n_tr, expected_S_raw=exp_raw, expected_S=exp_s,
                 base_ineligible_reason=reason, error=err)
 
 
-def apply_threshold(df: pd.DataFrame, s_star: float) -> pd.DataFrame:
+def apply_threshold(df: pd.DataFrame, s_star: float, required_types: Optional[Tuple[str, ...]] = None) -> pd.DataFrame:
     """Eligibility at S* from the frozen expected S: 'eligible' | 'ineligible' | 'error'; required = eligible or error.
     An error row (missing light curve, runtime error) is never ineligible."""
     if s_star is None or not np.isfinite(s_star) or s_star <= 0:
@@ -463,6 +487,8 @@ def apply_threshold(df: pd.DataFrame, s_star: float) -> pd.DataFrame:
     out["eligibility"] = elig
     out["ineligible_reason"] = reason
     out["required"] = out.eligibility.isin(["eligible", "error"])
+    if required_types is not None:       # amendment 2026-11-12 item 3: TOIs are scored, decided by ExoFOP disposition
+        out["required"] = out["required"] & out["type"].map(_s).isin(list(required_types))
     return out
 
 
@@ -487,7 +513,7 @@ def read_frozen(path: Union[str, Path]) -> pd.DataFrame:
 def measure_target(rd: Dict[str, Any], path: Optional[Path], cfg: Dict[str, Any]) -> Dict[str, Any]:
     """Light-curve inputs for one target: CROWDSAP, raw and surviving transit counts, CDPP at catalogue duration.
     A missing light curve or any exception is returned as `error`, never swallowed."""
-    out = dict(aperture_contamination=np.nan, n_raw=0, n_tr=0, cdpp_d=np.nan, error="")
+    out = dict(aperture_contamination=np.nan, n_raw=0, n_tr=0, cdpp_d=np.nan, t_span_d=np.nan, error="")
     if path is None or not Path(path).exists():
         out["error"] = "missing light curve"
         return out
@@ -506,6 +532,7 @@ def measure_target(rd: Dict[str, Any], path: Optional[Path], cfg: Dict[str, Any]
         d = pipeline.prepare(tg, fg, eg, cfg, prewhiten_on=True, gap_trim=0.3)
         tf, ff, _ = d["flat"]
         out["n_tr"] = count_surviving_transits(tf, P, t0, dur_d)
+        out["t_span_d"] = float(np.max(tf) - np.min(tf)) if len(tf) else np.nan
         prof = bls.noise_profile(tf, ff, [dur_d])
         out["cdpp_d"] = float(prof[2][float(dur_d)][0])
     except Exception as exc:                                    # recorded as an error row, never as ineligible
@@ -557,8 +584,9 @@ def freeze_eligibility(
     rows = []
     for r in targets_df.to_dict(orient="records"):
         tic = int(r["tic"])
-        rd = {c: r.get(c, "") for c in ("tic", "name", "type", "period", "t0", "dur_h", "depth_ppm",
+        rd = {c: r.get(c, "") for c in ("tic", "name", "type", "disp", "period", "t0", "dur_h", "depth_ppm",
                                         "depth_src", "dur_src", "t0_src")}
+        rd["period_err"] = _f(r.get("period_err", np.nan))
         rd["eph_sigma_h"] = _f(r.get("eph_sigma_h", np.nan))
         rd["tic"] = tic
         rd["contratio"] = contratio_map.get(tic, np.nan)
@@ -566,7 +594,8 @@ def freeze_eligibility(
         rd.update(derive_expected(rd, cfg))
         rows.append(rd)
     df = apply_threshold(pd.DataFrame(rows, columns=[c for c in FROZEN_COLUMNS if c not in
-                                                     ("eligibility", "ineligible_reason", "required")]), s_star)
+                                                     ("eligibility", "ineligible_reason", "required")]), s_star,
+                         _required_types(cfg))
     df = df[list(FROZEN_COLUMNS)]
     df.to_csv(out_p, index=False)
 
@@ -584,6 +613,11 @@ def freeze_eligibility(
 
 
 # ---------------------------------------------------------------- evaluation
+def _required_types(cfg: Dict[str, Any]) -> Optional[Tuple[str, ...]]:
+    rt = cfg.get("known_planets", {}).get("required_types")
+    return tuple(rt) if rt else None
+
+
 def _search_index(search_results_df: Optional[pd.DataFrame]) -> Dict[int, Dict[str, Any]]:
     res = {}
     if search_results_df is None or search_results_df.empty:
@@ -630,6 +664,9 @@ def evaluate_known_planets(
     cfg = cfg if cfg is not None else settings.cfg()
     kp = cfg.get("known_planets", {})
     alias_ratios = tuple(float(x) for x in kp.get("alias_ratios", [2.0, 0.5]))
+    tol_mode = kp.get("tolerance", "plateau")            # "bls_peak": amendment 2026-11-12 item 1
+    nsig_p = float(kp.get("period_err_nsigma", 3.0))
+    alias_rec = bool(kp.get("alias_recovered", False))   # amendment 2026-11-12 item 5
 
     tdf = targets_df.copy()
     if "period" not in tdf.columns and "P_cat" in tdf.columns:
@@ -640,10 +677,10 @@ def evaluate_known_planets(
             r.update(derive_expected(r, cfg))
             recs.append(r)
         tdf = pd.DataFrame(recs)
-    for c in ("name", "error", "type"):
+    for c in ("name", "error", "type", "disp"):
         if c not in tdf.columns:
             tdf[c] = ""
-    tdf = apply_threshold(tdf, s_star)
+    tdf = apply_threshold(tdf, s_star, _required_types(cfg))
 
     res_by_tic = _search_index(search_results_df)
     diag = {}
@@ -665,20 +702,25 @@ def evaluate_known_planets(
             search_err = ""
         P_found = found["period"] if found else np.nan
         S_found = found["S"] if found else np.nan
-        hw = get_plateau_halfwidth(P_cat, plateaus_list=found["plateaus"] if found else None,
-                                   grid_df=found["grid_df"] if found else None, tic=tic, sector=sector) \
-            if np.isfinite(P_cat) else 0.0
-        rec, mt = check_recovery(P_cat, P_found, hw, alias_ratios=alias_ratios, s_found=S_found, s_star=s_star) \
+        if tol_mode == "bls_peak":
+            hw = bls_peak_tolerance(P_cat, r.get("dur_h"), r.get("t_span_d"), r.get("period_err"), nsig_p)
+        else:
+            hw = get_plateau_halfwidth(P_cat, plateaus_list=found["plateaus"] if found else None,
+                                       grid_df=found["grid_df"] if found else None, tic=tic, sector=sector) \
+                if np.isfinite(P_cat) else 0.0
+        rec, mt = check_recovery(P_cat, P_found, hw, alias_ratios=alias_ratios, s_found=S_found, s_star=s_star,
+                                 alias_scale=tol_mode == "bls_peak", alias_recovered=alias_rec) \
             if not search_err else (False, "none")
         vetted = found["vetted"] if found else None
         recovered = bool(rec and (vetted is None or vetted))
         stage = ""
-        if r["required"] and not recovered:
+        if (r["required"] or r["eligibility"] == "eligible") and not recovered:
             dg = diag.get((tic, name), {})
             stage = losing_stage(mt, S_found, s_star, vetted, error=err or search_err, s_cat=dg.get("S_cat"),
                                  n_tr_cat=dg.get("n_tr_cat"), depth_ratio_cat=dg.get("depth_ratio_cat"))
         rows.append(dict(
-            tic=tic, toi_or_planet=name, type=_s(r.get("type")), P_cat=P_cat, depth_ppm=_f(r.get("depth_ppm")),
+            tic=tic, toi_or_planet=name, type=_s(r.get("type")), disp=_s(r.get("disp")), P_cat=P_cat,
+            period_err=_f(r.get("period_err")), t_span_d=_f(r.get("t_span_d")), expected_S_raw=_f(r.get("expected_S_raw")), depth_ppm=_f(r.get("depth_ppm")),
             dur_h=_f(r.get("dur_h")), t0=_f(r.get("t0")), eph_sigma_h=_f(r.get("eph_sigma_h")), n_tr=int(_f(r.get("n_tr")) or 0) if np.isfinite(_f(r.get("n_tr"))) else 0,
             expected_S=_f(r.get("expected_S")), aperture_contamination=_f(r.get("aperture_contamination")),
             contratio=_f(r.get("contratio")), contamination_flag=bool(r.get("contamination_flag", False)),
@@ -700,6 +742,7 @@ def evaluate_known_planets(
         eligible_missed=int(len(missed)),
         required_aliases=int(req.match_type.isin(["2x", "0.5x"]).sum()) if len(req) else 0,
         stage_counts=missed.stage.value_counts().to_dict() if len(missed) else {},
+        tolerance=tol_mode, alias_recovered=alias_rec, required_types=list(_required_types(cfg) or []),
         pass_=bool(len(missed) == 0 and len(req) > 0),
     )
     summary["pass"] = summary.pop("pass_")
