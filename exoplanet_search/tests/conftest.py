@@ -9,9 +9,9 @@ for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMBA_
 # Configure fallback EXO_DATA_ROOT or EXO_OFFLINE if /media default does not exist
 if "EXO_DATA_ROOT" not in os.environ and not Path("/media/nfs01/astro_data/tess").exists():
     _candidates = [
+        Path(__file__).resolve().parents[1] / "data" / "tess",
         Path(__file__).resolve().parents[2] / "data" / "tess",
         Path(__file__).resolve().parents[3] / "data" / "tess",
-        Path.home() / "Documents" / "github" / "astrolab" / "exoplanet_search" / "data" / "tess",
     ]
     for _cand in _candidates:
         if _cand.exists():
