@@ -3,7 +3,8 @@
 Every confirmed planet or active TOI (TFOPWG disposition not FP/FA) on a searched star
 with expected S >= S* and at least 2 transits surviving masks must be recovered.
 
-Expected S = depth_exp * sqrt(n_tr) / CDPP_D at catalogue duration.
+Expected S = depth_exp * sqrt(n_tr) / CDPP_D at catalogue duration (computed ONCE, pre-run, by
+'freeze-eligibility'; the report never recomputes it).
 n_tr = catalogue-ephemeris transits surviving the v1.1 masks (at least half their in-transit cadences).
 CDPP_D from our own noise profile.
 depth_exp = catalogue depth scaled by aperture contamination ratio:
@@ -11,20 +12,26 @@ depth_exp = catalogue depth scaled by aperture contamination ratio:
   Documented gap: No standalone custom aperture pixel model code is present in the repository;
   we read the per-star aperture target flux fraction CROWDSAP from the SPOC FITS header.
   The TIC contamination ratio (contratio) is logged as diagnostic and stars where the two differ
-  by >20% (|crowdsap - 1/(1+contratio)| / crowdsap > 0.20 or similar) are flagged.
-  A star with no aperture value is ineligible with reason recorded.
+  by >20% are flagged. A star with no aperture value is ineligible with reason recorded.
   A factor of 1.0 is never assumed.
-Recovered: top reported peak period within the period-grid plateau half-width of the
-  catalogue period (from exosearch/p_grid_halfwidth.py locate() or interim file, falling back to 0.5 * P^2 * df),
-  or 2x / 0.5x alias (using the exact same half-width tolerance and flagged).
-Eligibility: computed PRE-RUN from pscomppars + active TOIs via 'freeze-eligibility' subcommand.
+Catalogue parameters: confirmed planets from the NASA Exoplanet Archive pscomppars table (fetched over TAP with
+  pl_trandep, pl_trandur, pl_tranmid and cached under a dated filename with a sha256 sidecar); active TOIs from the
+  ExoFOP TOI table (Depth (ppm), Duration (hours), Epoch (BJD)). A pscomppars row missing a transit parameter takes
+  it from the matching TOI row, and the source of every parameter is recorded.
+Recovered: the star's reported peak period lies within the star's own plateau half-width of the catalogue period
+  (p_grid_halfwidth.locate on that star's search plateaus and grid spacing; falling back to 0.5 * P^2 * df only where
+  locate itself falls back), with S >= S*. 2x and 0.5x aliases use the same tolerance and are reported as aliases;
+  they are NOT recoveries.
 No excused misses: any eligible miss for any reason (including missing light curve or runtime error)
-is a FAILURE row with diagnosed cause.
+is a FAILURE row with diagnosed cause. A light-curve or runtime error during freeze-eligibility is an error row
+(required, failing), never an ineligible row.
 """
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import hashlib
+import io
 import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Union
@@ -33,64 +40,162 @@ from astropy.io import fits
 import numpy as np
 import pandas as pd
 
-from .. import batch, bls, catalogs, config, lightcurve, store, targets
+from .. import batch, bls, config, lightcurve, store, targets
 from .. import p_grid_halfwidth
-from . import grid, pipeline, search, settings
+from . import pipeline, search, settings
 
 DETREND_WINDOW_DAYS = 0.75
 
+PS_TAP_URL = "https://exoplanetarchive.ipac.caltech.edu/TAP/sync"
+PS_COLUMNS = ("pl_name", "hostname", "tic_id", "pl_orbper", "pl_trandep", "pl_trandur", "pl_tranmid", "disc_facility")
+PS_QUERY = "select " + ",".join(PS_COLUMNS) + " from pscomppars where tic_id is not null"
+PS_PREFIX = "nasa_pscomppars_full_"
+TOI_FILE = "exofop_toi.csv"
+TOI_RENAME = {"TIC ID": "tic", "TOI": "toi", "Period (days)": "period", "TFOPWG Disposition": "disp",
+              "Epoch (BJD)": "epoch_bjd", "Duration (hours)": "dur_h", "Depth (ppm)": "depth_ppm"}
+BTJD_OFFSET = 2457000.0
 
+# Frozen eligibility schema (one row per target; written once pre-run, read back by the report)
+FROZEN_STR = ("name", "type", "depth_src", "dur_src", "t0_src", "base_ineligible_reason", "error",
+              "eligibility", "ineligible_reason")
+FROZEN_FLOAT = ("period", "t0", "dur_h", "depth_ppm", "aperture_contamination", "contratio", "cdpp_d", "expected_S")
+FROZEN_INT = ("tic", "n_raw", "n_tr")
+FROZEN_BOOL = ("contamination_flag", "required")
+FROZEN_COLUMNS = ("tic", "name", "type", "period", "t0", "dur_h", "depth_ppm", "depth_src", "dur_src", "t0_src",
+                  "aperture_contamination", "contratio", "contamination_flag", "n_raw", "n_tr", "cdpp_d",
+                  "expected_S", "base_ineligible_reason", "error", "eligibility", "ineligible_reason", "required")
+
+STAGES = ("error", "masked", "detrending", "below_S*", "outranked", "vetting")
+
+
+def _sha256(p: Union[str, Path]) -> str:
+    return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+
+
+def _s(x) -> str:
+    """String cell -> '' for None / NaN / blank."""
+    if x is None:
+        return ""
+    if isinstance(x, float) and not np.isfinite(x):
+        return ""
+    s = str(x).strip()
+    return "" if s.lower() == "nan" else s
+
+
+def _f(x) -> float:
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        return np.nan
+    return v
+
+
+# ---------------------------------------------------------------- catalogues (Spec A2)
+def pscomppars_path(cache_dir: Optional[Union[str, Path]] = None) -> Optional[Path]:
+    """Newest dated full-column pscomppars cache whose sidecar sha256 matches the file, or None."""
+    d = Path(cache_dir or config.CATALOG_DIR)
+    for p in sorted(d.glob(PS_PREFIX + "*.csv"), reverse=True):
+        meta = Path(str(p) + ".meta.json")
+        if meta.exists() and json.loads(meta.read_text()).get("sha256") == _sha256(p):
+            return p
+    return None
+
+
+def fetch_pscomppars(cache_dir: Optional[Union[str, Path]] = None, date_tag: Optional[str] = None) -> Path:
+    """Query pscomppars over the public NASA Exoplanet Archive TAP service with the transit columns and cache it as
+    nasa_pscomppars_full_<YYYYMMDD>.csv plus a .meta.json sidecar (UTC fetch time, query, rows, sha256)."""
+    import requests
+    d = Path(cache_dir or config.CATALOG_DIR)
+    d.mkdir(parents=True, exist_ok=True)
+    now = dt.datetime.now(dt.timezone.utc)
+    tag = date_tag or now.strftime("%Y%m%d")
+    r = requests.get(PS_TAP_URL, params=dict(query=PS_QUERY, format="csv"), timeout=300)
+    r.raise_for_status()
+    if b"<html" in r.content[:500].lower():
+        raise IOError("pscomppars TAP returned an HTML page instead of CSV")
+    df = pd.read_csv(io.BytesIO(r.content), comment="#", low_memory=False)
+    missing = [c for c in PS_COLUMNS if c not in df.columns]
+    if df.empty or missing:
+        raise IOError(f"pscomppars TAP result unusable (rows={len(df)}, missing columns={missing})")
+    out = d / f"{PS_PREFIX}{tag}.csv"
+    out.write_bytes(r.content)
+    meta = dict(fetched_at_utc=now.isoformat(timespec="seconds"), source=PS_TAP_URL, query=PS_QUERY, rows=int(len(df)),
+                columns=list(PS_COLUMNS), sha256=_sha256(out))
+    Path(str(out) + ".meta.json").write_text(json.dumps(meta, indent=2))
+    return out
+
+
+def load_pscomppars(path: Optional[Union[str, Path]] = None,
+                    cache_dir: Optional[Union[str, Path]] = None) -> Tuple[pd.DataFrame, Path]:
+    """Dated full-column pscomppars cache -> (DataFrame with int 'tic', path). Never the 4-column v1.0 cache."""
+    p = Path(path) if path else pscomppars_path(cache_dir)
+    if p is None or not p.exists():
+        raise FileNotFoundError("no dated full-column pscomppars cache (nasa_pscomppars_full_<date>.csv); "
+                                "run 'python -m exosearch.v11.known_planets fetch-pscomppars' (Spec A2)")
+    meta_p = Path(str(p) + ".meta.json")
+    if not meta_p.exists() or json.loads(meta_p.read_text()).get("sha256") != _sha256(p):
+        raise ValueError(f"pscomppars cache {p.name}: sidecar missing or sha256 mismatch")
+    df = pd.read_csv(p, comment="#", low_memory=False)
+    missing = [c for c in PS_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"pscomppars cache {p.name} lacks columns {missing}")
+    df["tic"] = pd.to_numeric(df["tic_id"].astype(str).str.replace("TIC", "").str.strip(), errors="coerce")
+    df = df[df.tic.notna()].copy()
+    df["tic"] = df.tic.astype(np.int64)
+    return df, p
+
+
+def load_toi_table(path: Optional[Union[str, Path]] = None) -> Tuple[pd.DataFrame, Path]:
+    """ExoFOP TOI table (period, epoch, duration, depth from ExoFOP's own columns) -> (DataFrame, path)."""
+    p = Path(path) if path else config.CATALOG_DIR / TOI_FILE
+    if not p.exists():
+        raise FileNotFoundError(f"ExoFOP TOI table not found: {p}")
+    raw = pd.read_csv(p, comment="#", low_memory=False)
+    missing = [c for c in TOI_RENAME if c not in raw.columns]
+    if missing:
+        raise ValueError(f"ExoFOP TOI table lacks columns {missing}")
+    df = raw.rename(columns=TOI_RENAME)
+    df["tic"] = pd.to_numeric(df["tic"], errors="coerce")
+    df = df[df.tic.notna()].copy()
+    df["tic"] = df.tic.astype(np.int64)
+    df["disp"] = df["disp"].map(_s)
+    return df, p
+
+
+# ---------------------------------------------------------------- tolerances and recovery (Spec A4)
 def get_plateau_halfwidth(
     period: float,
     baseline: float = 27.0,
     durations: np.ndarray = search.DURATIONS,
     frequency_factor: float = 1.0,
-    plateaus_cache: Optional[Dict[Any, float]] = None,
+    plateaus_list: Optional[Union[str, List[Any]]] = None,
+    grid_df: Optional[float] = None,
     tic: Optional[int] = None,
     sector: Optional[int] = None,
-    plateaus_list: Optional[List[Any]] = None,
+    pgh_table: Optional[pd.DataFrame] = None,
 ) -> float:
-    """Calculate the registered plateau half-width from exosearch/p_grid_halfwidth.py.
-    
-    Falls back to 0.5 * P^2 * df only where that module itself falls back.
+    """The star's own registered plateau half-width at `period` (exosearch/p_grid_halfwidth.locate).
+
+    plateaus_list / grid_df: that star's search plateaus ([[P_lo, P_hi, width, hw], ...], JSON allowed) and grid
+    spacing in 1/d. Without them, the (tic, sector) row of p_grid_halfwidth_v1.csv is used when the period lies on
+    that row's in-band plateau. Another star's row is never used. Otherwise locate's own fallback, 0.5 * P^2 * df.
     """
     if not np.isfinite(period) or period <= 0:
         return 0.0
-
-    if plateaus_cache is not None:
-        if (tic, period) in plateaus_cache:
-            return plateaus_cache[(tic, period)]
-        if period in plateaus_cache:
-            return plateaus_cache[period]
-
-    df = frequency_factor * float(np.min(durations)) / (baseline ** 2)
-
+    df = float(grid_df) if (grid_df is not None and np.isfinite(_f(grid_df)) and float(grid_df) > 0) else \
+        frequency_factor * float(np.min(durations)) / (baseline ** 2)
     if plateaus_list is not None:
-        loc = p_grid_halfwidth.locate(period, plateaus_list, df)
-        return float(loc["P_grid_halfwidth"])
-
-    # Check if registered plateau half-width file exists
-    pgh_file = p_grid_halfwidth.OUT
-    if pgh_file.exists():
-        try:
-            df_pgh = pd.read_csv(pgh_file)
-            cond = np.abs(df_pgh["period_v10"] - period) <= 1e-4
-            if tic is not None and "tic" in df_pgh.columns:
-                cond = cond & (df_pgh["tic"] == tic)
-            if sector is not None and "sector" in df_pgh.columns:
-                cond = cond & (df_pgh["sector"] == sector)
-            if cond.any():
-                return float(df_pgh.loc[cond, "P_grid_halfwidth"].iloc[0])
-            # If tic-match was not found, try period match alone
-            m = np.abs(df_pgh["period_v10"] - period) <= 1e-4
-            if m.any():
-                return float(df_pgh.loc[m, "P_grid_halfwidth"].iloc[0])
-        except Exception:
-            pass
-
-    # Default fallback per p_grid_halfwidth.locate
-    loc = p_grid_halfwidth.locate(period, [], df)
-    return float(loc["P_grid_halfwidth"])
+        pl = json.loads(plateaus_list) if isinstance(plateaus_list, str) else plateaus_list
+        return float(p_grid_halfwidth.locate(period, pl, df)["P_grid_halfwidth"])
+    if tic is not None and sector is not None:
+        tab = pgh_table if pgh_table is not None else p_grid_halfwidth.load()
+        if tab is not None and len(tab):
+            m = tab[(tab.tic.astype(np.int64) == int(tic)) & (tab.sector.astype(np.int64) == int(sector))]
+            for r in m.itertuples():
+                in_band = str(getattr(r, "P_grid_halfwidth_in_band", True)).lower() in ("true", "1")
+                if in_band and abs(float(r.period_v10) - period) <= float(r.P_grid_halfwidth):
+                    return float(r.P_grid_halfwidth)
+    return float(p_grid_halfwidth.locate(period, [], df)["P_grid_halfwidth"])
 
 
 # Alias for backwards compatibility
@@ -105,12 +210,11 @@ def count_surviving_transits(
     cadence: Optional[float] = None,
 ) -> int:
     """Number of transits of the ephemeris that have at least half their in-transit cadences."""
-    if len(t) == 0 or period <= 0 or duration <= 0:
+    if len(t) == 0 or not (period > 0) or not (duration > 0) or not np.isfinite(t0):
         return 0
     if cadence is None:
         cadence = float(np.median(np.diff(t))) if len(t) > 1 else (2.0 / 1440.0)
     expected_cadences = max(duration / cadence, 1.0)
-
     ph = ((t - t0 + 0.5 * period) % period) - 0.5 * period
     in_tr = np.abs(ph) < (duration / 2.0)
     if not np.any(in_tr):
@@ -127,435 +231,257 @@ def check_recovery(
     alias_ratios: Tuple[float, ...] = (2.0, 0.5),
     s_found: Optional[float] = None,
     s_star: Optional[float] = None,
-) -> Tuple[bool, Optional[str]]:
-    """Determine whether p_found recovers p_cat within the plateau half-width or as an alias.
-    
-    Per Spec A4 / B3: 2x and 0.5x aliases use the exact same tolerance and are flagged.
-    Recovery strictly requires S_found >= S* (Spec B3 / Amendment 8d).
-    Returns (recovered, alias_flag).
+) -> Tuple[bool, str]:
+    """-> (recovered, match_type) with match_type in {'direct', '2x', '0.5x', 'none'}.
+
+    Recovered only for a direct match (|P_found - P_cat| <= half-width) with S_found >= S* (when S* is given).
+    2x / 0.5x aliases use the exact same half-width, are reported as match types, and never count as recovered.
     """
-    if p_found is None or not np.isfinite(p_found) or p_found <= 0:
-        return False, None
-
-    # Check S_found >= s_star if s_star is provided (Spec B3)
-    if s_star is not None:
-        if s_found is None or not np.isfinite(s_found) or s_found < s_star:
-            return False, None
-
-    # Check primary recovery within plateau half-width
-    if abs(p_found - p_cat) <= half_width:
-        return True, None
-
-    # Check 2x / 0.5x aliases using the EXACT same half_width tolerance
-    for ratio in alias_ratios:
-        target_alias = p_cat * ratio
-        if abs(p_found - target_alias) <= half_width:
-            tag = f"{int(ratio)}x" if ratio >= 1 else "0.5x"
-            return True, tag
-
-    return False, None
+    pf = _f(p_found)
+    if not np.isfinite(pf) or pf <= 0 or not np.isfinite(p_cat):
+        return False, "none"
+    mt = "none"
+    if abs(pf - p_cat) <= half_width:
+        mt = "direct"
+    else:
+        for ratio in alias_ratios:
+            if abs(pf - p_cat * ratio) <= half_width:
+                mt = f"{int(ratio)}x" if ratio >= 1 else "0.5x"
+                break
+    s_ok = True if s_star is None else bool(np.isfinite(_f(s_found)) and _f(s_found) >= s_star)
+    return bool(mt == "direct" and s_ok), mt
 
 
-def determine_miss_cause(
-    n_raw: int,
-    dur_d: float,
-    n_tr_surviving: int,
-    expected_s: float,
+def losing_stage(
+    match_type: str,
+    s_found: Optional[float],
     s_star: float,
-    p_cat: float,
-    p_found: Optional[float],
-    half_width: float,
-    s_found: Optional[float] = None,
-    detrend_window: float = DETREND_WINDOW_DAYS,
-    error_msg: Optional[str] = None,
+    vetted: Optional[bool],
+    error: str = "",
+    s_cat: Optional[float] = None,
+    n_tr_cat: Optional[float] = None,
+    depth_ratio_cat: Optional[float] = None,
+    detrend_loss_ratio: float = 0.5,
 ) -> str:
-    """Classify miss cause bucket (diagnosed cause, never excused)."""
-    if error_msg:
-        return f"runtime_error: {error_msg}"
-    if n_raw < 2:
-        return "few_transits"
-    if detrend_window < 3.0 * dur_d:
-        return "long_duration"
-    if n_tr_surviving < 2:
+    """Stage that lost an eligible planet: error, masked, detrending, below_S*, outranked, vetting ('' if recovered).
+
+    s_cat / n_tr_cat / depth_ratio_cat: the v1.1 statistic, surviving transit count and measured/expected depth at
+    the catalogue ephemeris on the star's own searched light curve (diagnostics; optional)."""
+    if error:
+        return "error"
+    if np.isfinite(_f(n_tr_cat)) and _f(n_tr_cat) < 2:
         return "masked"
-    if expected_s < s_star:
-        return "below_threshold"
-    recovered, _ = check_recovery(p_cat, p_found, half_width, s_found=s_found, s_star=s_star)
-    if not recovered:
-        if p_found is not None and abs(p_found - p_cat) <= half_width and (s_found is None or s_found < s_star):
-            return "below_threshold"
-        return "outcompeted"
-    return "other"
+    weak = "detrending" if (np.isfinite(_f(depth_ratio_cat)) and _f(depth_ratio_cat) < detrend_loss_ratio) else "below_S*"
+    sf = _f(s_found)
+    if match_type == "direct":
+        if not (np.isfinite(sf) and sf >= s_star):
+            return weak
+        if vetted is not None and not bool(vetted):
+            return "vetting"
+        return ""
+    sc = _f(s_cat)
+    if np.isfinite(sc):
+        return "outranked" if sc >= s_star else weak
+    return "outranked" if (np.isfinite(sf) and sf >= s_star) else "below_S*"
 
 
 def read_crowdsap_from_fits(fits_path: Union[str, Path]) -> Optional[float]:
-    """Read CROWDSAP from FITS header (HDU 1 or HDU 0). Returns None if absent."""
-    try:
-        with fits.open(fits_path, memmap=False) as hdul:
-            for hdu in hdul:
-                if "CROWDSAP" in hdu.header and hdu.header["CROWDSAP"] is not None:
-                    val = float(hdu.header["CROWDSAP"])
-                    if np.isfinite(val) and val > 0:
-                        return val
-    except Exception:
-        pass
+    """Read CROWDSAP from the FITS headers. Returns None if absent (an unreadable file raises)."""
+    with fits.open(fits_path, memmap=False) as hdul:
+        for hdu in hdul:
+            if "CROWDSAP" in hdu.header and hdu.header["CROWDSAP"] is not None:
+                val = float(hdu.header["CROWDSAP"])
+                if np.isfinite(val) and val > 0:
+                    return val
     return None
 
 
+# ---------------------------------------------------------------- targets (Spec A2, A3)
 def select_known_planet_targets(
     sector: int = 70,
-    searched_tics: Optional[set[int]] = None,
+    searched_tics: Optional[set] = None,
+    ps_df: Optional[pd.DataFrame] = None,
+    toi_df: Optional[pd.DataFrame] = None,
+    pgh_table: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
-    """Find sector-70 searched stars hosting confirmed planets or active TOIs.
-    
-    A2: Real catalogue depth, duration, epoch (pscomppars + active TOIs). No placeholders anywhere.
-    A3: Known-planet dedupe by (TIC, period within registered tolerance), preferring pscomppars row;
-        never round(P, 4).
+    """Searched stars hosting confirmed planets (pscomppars) or active TOIs (TFOPWG not FP/FA).
+
+    A2: real catalogue depth, duration, epoch; pscomppars first, a missing pscomppars value from the matching TOI
+        row (source recorded per parameter). No placeholders.
+    A3: dedupe by (TIC, period within the registered tolerance), preferring the pscomppars row; never round(P, 4).
     """
     if searched_tics is None:
-        try:
-            con = store.connect()
-            df_searched = store.frame(con, sector)
-            searched_tics = set(df_searched.tic.astype(int))
-        except Exception:
-            searched_tics = set()
+        con = store.connect()
+        searched_tics = set(store.frame(con, sector).tic.astype(int))
+    searched_tics = {int(t) for t in searched_tics}
+    if ps_df is None:
+        ps_df, _ = load_pscomppars()
+    if toi_df is None:
+        toi_df, _ = load_toi_table()
+    if pgh_table is None:
+        pgh_table = p_grid_halfwidth.load()
 
-    cats = catalogs.load_catalogs()
-    active_toi_base = cats["toi"][~cats["toi"].disp.isin(["FP", "FA"])].copy()
+    def tol(p, tic):
+        return get_plateau_halfwidth(p, tic=tic, sector=sector, pgh_table=pgh_table)
 
-    # Load full TOI table for ephemeris & depth
-    toi_path = config.CATALOG_DIR / "exofop_toi.csv"
-    if toi_path.exists():
-        t_raw = pd.read_csv(toi_path, comment="#", low_memory=False)
-        t_raw = t_raw.rename(columns={
-            "TIC ID": "tic", "TOI": "toi", "Period (days)": "period",
-            "TFOPWG Disposition": "disp", "Epoch (BJD)": "epoch_bjd",
-            "Duration (hours)": "dur_h", "Depth (ppm)": "depth_ppm",
-        })
-        active_toi_full = t_raw[t_raw.tic.isin(searched_tics) & ~t_raw.disp.isin(["FP", "FA"])].copy()
-    else:
-        active_toi_full = active_toi_base[active_toi_base.tic.isin(searched_tics)].copy()
+    toi = toi_df[toi_df.tic.astype(np.int64).isin(searched_tics)].copy()
+    toi = toi[~toi.disp.map(_s).isin(["FP", "FA"])]
+    ps = ps_df[ps_df.tic.astype(np.int64).isin(searched_tics)].copy()
 
-    # PS confirmed planets
-    ps_df = cats.get("ps", pd.DataFrame())
-    if not ps_df.empty and "tic" in ps_df.columns:
-        ps_s70 = ps_df[ps_df.tic.isin(searched_tics)].copy()
-    else:
-        ps_s70 = pd.DataFrame()
-
-    # Load full pscomppars table if available on disk for depth, duration, epoch
-    ps_file = config.CATALOG_DIR / "nasa_pscomppars.csv"
-    if ps_file.exists():
-        try:
-            ps_raw = pd.read_csv(ps_file, comment="#", low_memory=False)
-            if "tic_id" in ps_raw.columns:
-                ps_raw["tic"] = pd.to_numeric(ps_raw["tic_id"].astype(str).str.replace("TIC", "").str.strip(), errors="coerce")
-            if "tic" in ps_raw.columns:
-                ps_s70 = ps_raw[ps_raw.tic.isin(searched_tics)].copy()
-        except Exception:
-            pass
-
-    # Build initial candidate lists
     ps_targets = []
-    for r in ps_s70.itertuples():
+    for r in ps.itertuples():
         tic = int(r.tic)
-        p = float(getattr(r, "pl_orbper", np.nan)) if pd.notna(getattr(r, "pl_orbper", np.nan)) else np.nan
-        
-        # Read catalogue depth, duration, epoch directly from pscomppars (Spec A2)
-        # In pscomppars: pl_trandep is in percent, pl_trandur is in hours, pl_tranmid is BJD
-        depth_pct = getattr(r, "pl_trandep", np.nan)
-        depth_ppm = float(depth_pct) * 1e4 if pd.notna(depth_pct) else np.nan
-        dur_h = float(getattr(r, "pl_trandur", np.nan)) if pd.notna(getattr(r, "pl_trandur", np.nan)) else np.nan
-        tranmid = getattr(r, "pl_tranmid", np.nan)
-        t0 = float(tranmid) - 2457000.0 if pd.notna(tranmid) else np.nan
-
-        # If pscomppars row lacks parameters, look for matching row in TOI table as fallback
-        if not active_toi_full.empty and (np.isnan(depth_ppm) or np.isnan(dur_h) or np.isnan(t0)):
-            if np.isfinite(p):
-                hw_p = get_plateau_halfwidth(p, tic=tic, sector=sector)
-                m_toi = active_toi_full[(active_toi_full.tic == tic) & np.isclose(active_toi_full.period.astype(float), p, atol=hw_p)]
-                if not m_toi.empty:
-                    r_m = m_toi.iloc[0]
-                    if np.isnan(dur_h) and pd.notna(r_m.dur_h):
-                        dur_h = float(r_m.dur_h)
-                    if np.isnan(depth_ppm) and pd.notna(r_m.depth_ppm):
-                        depth_ppm = float(r_m.depth_ppm)
-                    if np.isnan(t0) and pd.notna(r_m.epoch_bjd):
-                        t0 = float(r_m.epoch_bjd) - 2457000.0
-
-        ps_targets.append({
-            "tic": tic,
-            "name": str(getattr(r, "pl_name", "")),
-            "period": p,
-            "t0": t0,
-            "dur_h": dur_h,
-            "depth_ppm": depth_ppm,
-            "type": "ps",
-        })
+        p = _f(getattr(r, "pl_orbper", np.nan))
+        depth_pct = _f(getattr(r, "pl_trandep", np.nan))                  # pscomppars: percent
+        vals = dict(depth_ppm=depth_pct * 1e4 if np.isfinite(depth_pct) else np.nan,
+                    dur_h=_f(getattr(r, "pl_trandur", np.nan)),            # hours
+                    t0=_f(getattr(r, "pl_tranmid", np.nan)) - BTJD_OFFSET)  # BJD -> BTJD
+        src = {k: ("pscomppars" if np.isfinite(v) else "") for k, v in vals.items()}
+        if any(not np.isfinite(v) for v in vals.values()) and np.isfinite(p):
+            m = toi[(toi.tic == tic) & (np.abs(toi.period.astype(float) - p) <= tol(p, tic))]
+            if len(m):
+                rm = m.iloc[0]
+                fill = dict(depth_ppm=_f(rm.depth_ppm), dur_h=_f(rm.dur_h), t0=_f(rm.epoch_bjd) - BTJD_OFFSET)
+                for k in vals:
+                    if not np.isfinite(vals[k]) and np.isfinite(fill[k]):
+                        vals[k] = fill[k]
+                        src[k] = f"exofop_toi {rm.toi}"
+        ps_targets.append(dict(tic=tic, name=_s(getattr(r, "pl_name", "")), type="ps", period=p, **vals,
+                               depth_src=src["depth_ppm"], dur_src=src["dur_h"], t0_src=src["t0"]))
 
     toi_targets = []
-    for r in active_toi_full.itertuples():
-        tic = int(r.tic)
-        p = float(r.period) if pd.notna(r.period) else np.nan
-        dur_h = float(r.dur_h) if pd.notna(getattr(r, "dur_h", np.nan)) else np.nan
-        depth_ppm = float(r.depth_ppm) if pd.notna(getattr(r, "depth_ppm", np.nan)) else np.nan
-        t0 = float(r.epoch_bjd) - 2457000.0 if pd.notna(getattr(r, "epoch_bjd", np.nan)) else np.nan
-        toi_targets.append({
-            "tic": tic,
-            "name": f"TOI {r.toi}",
-            "period": p,
-            "t0": t0,
-            "dur_h": dur_h,
-            "depth_ppm": depth_ppm,
-            "type": "toi",
-        })
+    for r in toi.itertuples():
+        vals = dict(depth_ppm=_f(r.depth_ppm), dur_h=_f(r.dur_h), t0=_f(r.epoch_bjd) - BTJD_OFFSET)
+        src = {k: ("exofop_toi" if np.isfinite(v) else "") for k, v in vals.items()}
+        toi_targets.append(dict(tic=int(r.tic), name=f"TOI {r.toi}", type="toi", period=_f(r.period), **vals,
+                                depth_src=src["depth_ppm"], dur_src=src["dur_h"], t0_src=src["t0"]))
 
-    # A3: Dedupe within ps_targets itself, then add TOI rows if no matching (TIC, period within tolerance)
-    final_targets = []
-    deduped_ps = []
+    def same(a, b):
+        return (a["tic"] == b["tic"] and np.isfinite(a["period"]) and np.isfinite(b["period"])
+                and abs(a["period"] - b["period"]) <= tol(b["period"], b["tic"]))
+
+    final = []
     for pt in ps_targets:
-        t_tic = pt["tic"]
-        t_p = pt["period"]
-        if np.isnan(t_p) or t_p <= 0:
-            deduped_ps.append(pt)
-            continue
-        hw = get_plateau_halfwidth(t_p, tic=t_tic, sector=sector)
-        matched = False
-        for ex in deduped_ps:
-            if ex["tic"] == t_tic and np.isfinite(ex["period"]) and abs(ex["period"] - t_p) <= hw:
-                matched = True
-                break
-        if not matched:
-            deduped_ps.append(pt)
-
-    final_targets.extend(deduped_ps)
-
-    # Dedupe within toi_targets and match against final_targets
-    deduped_toi = []
+        if not any(same(ex, pt) for ex in final):
+            final.append(pt)
+    n_ps = len(final)
     for tt in toi_targets:
-        t_tic = tt["tic"]
-        t_p = tt["period"]
-        if np.isnan(t_p) or t_p <= 0:
-            deduped_toi.append(tt)
-            continue
-        hw = get_plateau_halfwidth(t_p, tic=t_tic, sector=sector)
-        matched = False
-        for ex in deduped_toi:
-            if ex["tic"] == t_tic and np.isfinite(ex["period"]) and abs(ex["period"] - t_p) <= hw:
-                matched = True
-                break
-        if not matched:
-            deduped_toi.append(tt)
-
-    for tt in deduped_toi:
-        t_tic = tt["tic"]
-        t_p = tt["period"]
-        if np.isnan(t_p) or t_p <= 0:
-            final_targets.append(tt)
-            continue
-        hw = get_plateau_halfwidth(t_p, tic=t_tic, sector=sector)
-        matched = False
-        for pt in deduped_ps:
-            if pt["tic"] == t_tic and np.isfinite(pt["period"]) and abs(pt["period"] - t_p) <= hw:
-                matched = True
-                break
-        if not matched:
-            final_targets.append(tt)
-
-    return pd.DataFrame(final_targets)
+        if not any(same(ex, tt) for ex in final):
+            final.append(tt)
+    cols = ["tic", "name", "type", "period", "t0", "dur_h", "depth_ppm", "depth_src", "dur_src", "t0_src"]
+    return pd.DataFrame(final, columns=cols)
 
 
-def evaluate_known_planets(
-    targets_df: pd.DataFrame,
-    search_results_df: pd.DataFrame,
-    s_star: float,
-    durations: np.ndarray = search.DURATIONS,
-    cfg: Optional[Dict[str, Any]] = None,
-) -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    """Evaluate known planet / active TOI recovery on searched stars.
-    
-    B3: S* is passed in; error if not supplied.
-    """
+# ---------------------------------------------------------------- expected S and eligibility (computed once)
+def derive_expected(rd: Dict[str, Any], cfg: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Threshold-independent part of eligibility plus expected S from the frozen inputs of one target."""
+    cfg = cfg if cfg is not None else settings.cfg()
+    kp = cfg.get("known_planets", {})
+    contam_tol = float(kp.get("contamination_diff_tol", 0.20))
+    min_tr = int(kp.get("min_transits", 2))
+    window = float(kp.get("detrend_window_d", DETREND_WINDOW_DAYS))
+    P, dur_h, depth_ppm, t0 = _f(rd.get("period")), _f(rd.get("dur_h")), _f(rd.get("depth_ppm")), _f(rd.get("t0"))
+    ap = _f(rd.get("aperture_contamination"))
+    cr = _f(rd.get("contratio"))
+    err = _s(rd.get("error"))
+    n_raw = int(_f(rd.get("n_raw")) if np.isfinite(_f(rd.get("n_raw"))) else 0)
+    n_tr = int(_f(rd.get("n_tr")) if np.isfinite(_f(rd.get("n_tr"))) else 0)
+    cdpp = _f(rd.get("cdpp_d"))
+    flag = bool(np.isfinite(ap) and ap > 0 and np.isfinite(cr) and cr >= 0
+                and abs(ap - 1.0 / (1.0 + cr)) / max(ap, 1e-4) > contam_tol)
+    reason = ""
+    if not (P > 0):
+        reason = "missing_period"
+    elif not (dur_h > 0):
+        reason = "missing_duration"
+    elif not (depth_ppm > 0):
+        reason = "missing_depth"
+    elif not np.isfinite(t0):
+        reason = "missing_epoch"
+    elif not err and not (ap > 0):
+        reason = "missing_aperture_contamination"
+    exp_s = np.nan
+    if not reason and not err:
+        if n_raw < min_tr:
+            reason = "transits_under_two"
+        elif n_tr < min_tr or window < 3.0 * dur_h / 24.0:
+            reason = "in_declared_mask"
+        if np.isfinite(cdpp) and cdpp > 0 and n_tr > 0:
+            exp_s = float(depth_ppm * 1e-6 * ap * np.sqrt(n_tr) / cdpp)
+        elif not reason:
+            err = "no finite CDPP at catalogue duration"
+    return dict(contamination_flag=flag, n_raw=n_raw, n_tr=n_tr, expected_S=exp_s,
+                base_ineligible_reason=reason, error=err)
+
+
+def apply_threshold(df: pd.DataFrame, s_star: float) -> pd.DataFrame:
+    """Eligibility at S* from the frozen expected S: 'eligible' | 'ineligible' | 'error'; required = eligible or error.
+    An error row (missing light curve, runtime error) is never ineligible."""
     if s_star is None or not np.isfinite(s_star) or s_star <= 0:
         raise ValueError("s_star must be provided as a positive float")
-
-    if cfg is None:
-        cfg = settings.cfg()
-    kp_cfg = cfg.get("known_planets", {})
-    contam_tol = float(kp_cfg.get("contamination_diff_tol", 0.20))
-    alias_ratios = tuple(float(x) for x in kp_cfg.get("alias_ratios", [2.0, 0.5]))
-    detrend_window_days = float(kp_cfg.get("detrend_window_d", DETREND_WINDOW_DAYS))
-
-    res_by_tic = {}
-    if not search_results_df.empty:
-        for r in search_results_df.itertuples():
-            tic = int(r.tic)
-            P = getattr(r, "period", None)
-            if P is None or pd.isna(P):
-                P = getattr(r, "P_grid", None)
-            S = getattr(r, "S", None)
-            stat = getattr(r, "status", "ok")
-            err_r = getattr(r, "error", None)
-            # A7: exactly one real-search row per registered TIC (conflicting duplicates are an error)
-            if tic in res_by_tic:
-                prev = res_by_tic[tic]
-                if prev.get("period") != P or prev.get("S") != S or prev.get("status") != stat:
-                    raise ValueError(f"Conflicting duplicate real-search rows for TIC {tic}: {prev} vs {r}")
-            res_by_tic[tic] = dict(period=P, S=S, status=stat, error=err_r)
-
-    rows = []
-    baseline = 27.0
-
-    for row in targets_df.itertuples():
-        tic = int(row.tic)
-        name = str(getattr(row, "name", getattr(row, "toi", getattr(row, "pl_name", ""))))
-        P_cat = float(getattr(row, "period", np.nan))
-        dur_h = float(getattr(row, "duration_hours", getattr(row, "dur_h", np.nan)))
-        dur_d = dur_h / 24.0 if np.isfinite(dur_h) else np.nan
-        depth_ppm = float(getattr(row, "depth_ppm", np.nan))
-        depth_cat = depth_ppm * 1e-6 if np.isfinite(depth_ppm) else np.nan
-
-        # Aperture contamination
-        aperture_val = getattr(row, "aperture_contamination", getattr(row, "crowdsap", None))
-        if aperture_val is not None and pd.notna(aperture_val):
-            aperture_val = float(aperture_val)
+    out = df.copy()
+    elig, reason = [], []
+    for r in out.itertuples():
+        base, err = _s(r.base_ineligible_reason), _s(r.error)
+        if base:
+            elig.append("ineligible"); reason.append(base)
+        elif err:
+            elig.append("error"); reason.append("")
+        elif not (_f(r.expected_S) >= s_star):
+            elig.append("ineligible"); reason.append("expected_s_below_threshold")
         else:
-            aperture_val = None
+            elig.append("eligible"); reason.append("")
+    out["eligibility"] = elig
+    out["ineligible_reason"] = reason
+    out["required"] = out.eligibility.isin(["eligible", "error"])
+    return out
 
-        contratio = getattr(row, "contratio", None)
-        if contratio is not None and pd.notna(contratio):
-            contratio = float(contratio)
-        else:
-            contratio = None
 
-        # Flag > 20% difference between aperture model and TIC contratio
-        contamination_flag = False
-        if aperture_val is not None and contratio is not None and contratio >= 0:
-            tic_target_flux_frac = 1.0 / (1.0 + contratio)
-            if abs(aperture_val - tic_target_flux_frac) / max(aperture_val, 1e-4) > contam_tol:
-                contamination_flag = True
+def read_frozen(path: Union[str, Path]) -> pd.DataFrame:
+    """Frozen eligibility CSV -> typed DataFrame (round trip of freeze_eligibility; blank strings stay '')."""
+    df = pd.read_csv(path, dtype={c: str for c in FROZEN_STR}, keep_default_na=False, na_values={
+        c: ["", "nan", "NaN"] for c in FROZEN_FLOAT + FROZEN_INT})
+    missing = [c for c in FROZEN_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"frozen eligibility file {Path(path).name} lacks columns {missing}")
+    for c in FROZEN_STR:
+        df[c] = df[c].map(_s)
+    for c in FROZEN_FLOAT:
+        df[c] = pd.to_numeric(df[c], errors="raise").astype(float)
+    for c in FROZEN_INT:
+        df[c] = pd.to_numeric(df[c], errors="raise").astype(np.int64)
+    for c in FROZEN_BOOL:
+        df[c] = df[c].map(lambda x: str(x).strip().lower() in ("true", "1"))
+    return df
 
-        # Check eligibility reasons (B4, B5)
-        ineligible_reason = getattr(row, "ineligible_reason", None)
-        if ineligible_reason is None:
-            if np.isnan(P_cat) or P_cat <= 0:
-                ineligible_reason = "missing_period"
-            elif np.isnan(dur_h) or dur_h <= 0:
-                ineligible_reason = "missing_duration"
-            elif np.isnan(depth_ppm) or depth_ppm <= 0:
-                ineligible_reason = "missing_depth"
-            elif getattr(row, "t0", None) is None or pd.isna(getattr(row, "t0", np.nan)):
-                ineligible_reason = "missing_epoch"
-            elif aperture_val is None:
-                ineligible_reason = "missing_aperture_contamination"
 
-        # Transits and noise
-        n_tr = int(getattr(row, "n_tr", 0))
-        n_raw = int(getattr(row, "n_raw", n_tr))
-        cdpp_d = float(getattr(row, "cdpp_d", getattr(row, "cdpp", np.nan)))
-
-        # Expected S
-        expected_s = 0.0
-        if (
-            ineligible_reason is None
-            and depth_cat is not None
-            and aperture_val is not None
-            and np.isfinite(cdpp_d)
-            and cdpp_d > 0
-            and n_tr > 0
-        ):
-            depth_exp = depth_cat * aperture_val
-            expected_s = float(depth_exp * np.sqrt(n_tr) / cdpp_d)
-        else:
-            depth_exp = np.nan
-
-        # Check further eligibility requirements
-        # Distinguish declared mask kills (n_raw >= 2 but n_tr < 2) vs few raw transits (n_raw < 2)
-        if ineligible_reason is None:
-            if n_raw < 2:
-                ineligible_reason = "transits_under_two"
-            elif n_tr < 2 or (dur_d is not None and np.isfinite(dur_d) and detrend_window_days < 3.0 * dur_d):
-                ineligible_reason = "in_declared_mask"
-            elif expected_s < s_star:
-                ineligible_reason = "expected_s_below_threshold"
-
-        eligible = bool(ineligible_reason is None)
-
-        half_width = get_plateau_halfwidth(P_cat, baseline=baseline) if np.isfinite(P_cat) else 0.0
-
-        # Found peak
-        found = res_by_tic.get(tic, {})
-        P_found = found.get("period")
-        S_found = found.get("S")
-
-        # Required set = eligible (B5)
-        required = eligible
-
-        recovered, alias_flag = check_recovery(
-            P_cat, P_found, half_width, alias_ratios=alias_ratios, s_found=S_found, s_star=s_star
-        ) if (eligible and P_found is not None) else (False, None)
-
-        miss_cause = None
-        if not recovered:
-            err = getattr(row, "error", None)
-            if (err is None or pd.isna(err) or str(err).strip() == "") and found.get("error"):
-                err = found.get("error")
-            if (err is None or pd.isna(err) or str(err).strip() == "") and found.get("status") == "error":
-                err = "pipeline search error"
-            if (err is None or pd.isna(err) or str(err).strip() == "") and eligible and (tic not in res_by_tic):
-                err = "missing light curve / search result"
-            err_str = str(err) if (err is not None and pd.notna(err) and str(err).strip() != "") else None
-            miss_cause = determine_miss_cause(
-                n_raw=n_raw,
-                dur_d=dur_d if np.isfinite(dur_d) else 0.1,
-                n_tr_surviving=n_tr,
-                expected_s=expected_s,
-                s_star=s_star,
-                p_cat=P_cat if np.isfinite(P_cat) else 1.0,
-                p_found=P_found,
-                half_width=half_width,
-                s_found=S_found,
-                error_msg=err_str,
-            )
-
-        rows.append(
-            dict(
-                tic=tic,
-                toi_or_planet=name,
-                P_cat=P_cat,
-                P_found=P_found,
-                expected_S=expected_s,
-                n_tr=n_tr,
-                aperture_contamination=aperture_val,
-                contratio=contratio,
-                contamination_flag=contamination_flag,
-                eligible=eligible,
-                ineligible_reason=ineligible_reason or "",
-                required=required,
-                recovered=recovered,
-                alias_flag=alias_flag,
-                miss_cause=miss_cause,
-            )
-        )
-
-    out_df = pd.DataFrame(rows)
-
-    # Any eligible/required target missed fails the test (B5: no excused misses)
-    req_df = out_df[out_df.required]
-    missed_required = req_df[~req_df.recovered]
-    pass_flag = bool(len(missed_required) == 0 and len(req_df) > 0)
-
-    summary = {
-        "s_star": float(s_star),
-        "total_targets": int(len(out_df)),
-        "eligible_targets": int(len(req_df)),
-        "eligible_recovered": int(req_df.recovered.sum()) if not req_df.empty else 0,
-        "eligible_missed": int(len(missed_required)),
-        "pass": pass_flag,
-        "miss_cause_counts": out_df.miss_cause.value_counts().to_dict(),
-    }
-
-    return out_df, summary
+def measure_target(rd: Dict[str, Any], path: Optional[Path], cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Light-curve inputs for one target: CROWDSAP, raw and surviving transit counts, CDPP at catalogue duration.
+    A missing light curve or any exception is returned as `error`, never swallowed."""
+    out = dict(aperture_contamination=np.nan, n_raw=0, n_tr=0, cdpp_d=np.nan, error="")
+    if path is None or not Path(path).exists():
+        out["error"] = "missing light curve"
+        return out
+    P, t0 = _f(rd.get("period")), _f(rd.get("t0"))
+    dur_d = _f(rd.get("dur_h")) / 24.0
+    try:
+        cs = read_crowdsap_from_fits(path)
+        out["aperture_contamination"] = cs if cs is not None else np.nan
+        if not (P > 0 and dur_d > 0 and np.isfinite(t0)):
+            return out
+        t, f, e, q, _ = lightcurve.load_spoc_raw(path)
+        good = lightcurve.good_mask(f, e, q)
+        med = np.nanmedian(f[good])
+        tg, fg, eg = t[good], f[good] / med, e[good] / med
+        out["n_raw"] = count_surviving_transits(tg, P, t0, dur_d)
+        d = pipeline.prepare(tg, fg, eg, cfg, prewhiten_on=True, gap_trim=0.3)
+        tf, ff, _ = d["flat"]
+        out["n_tr"] = count_surviving_transits(tf, P, t0, dur_d)
+        prof = bls.noise_profile(tf, ff, [dur_d])
+        out["cdpp_d"] = float(prof[2][float(dur_d)][0])
+    except Exception as exc:                                    # recorded as an error row, never as ineligible
+        out["error"] = f"{type(exc).__name__}: {exc}"[:300]
+    return out
 
 
 def freeze_eligibility(
@@ -564,120 +490,196 @@ def freeze_eligibility(
     sector: int = 70,
     commit: str = "",
     config_hash: str = "",
+    targets_df: Optional[pd.DataFrame] = None,
+    lc_lookup=None,
+    contratio_map: Optional[Dict[int, float]] = None,
+    cfg: Optional[Dict[str, Any]] = None,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    """Compute eligibility pre-run from pscomppars + active TOIs and write dated file + sidecar JSON."""
+    """Compute expected S once, pre-run, for every target and write the frozen CSV + sidecar JSON (sha256).
+
+    lc_lookup(tic) -> light-curve path or None (default: the sector's SPOC manifest, local files only)."""
     if s_star is None or not np.isfinite(s_star) or s_star <= 0:
         raise ValueError("s_star must be provided as a positive float")
-
+    cfg = cfg if cfg is not None else settings.cfg()
     out_p = Path(out_file)
     out_p.parent.mkdir(parents=True, exist_ok=True)
-
-    df_tgt = select_known_planet_targets(sector=sector)
-
-    # Enrich with light curve, CDPP, and aperture contamination
-    man = None
-    try:
+    prov = {}
+    if targets_df is None:
+        ps_df, ps_path = load_pscomppars()
+        toi_df, toi_path = load_toi_table()
+        targets_df = select_known_planet_targets(sector=sector, ps_df=ps_df, toi_df=toi_df)
+        prov = dict(pscomppars_file=ps_path.name, pscomppars_sha256=_sha256(ps_path),
+                    toi_file=toi_path.name, toi_sha256=_sha256(toi_path))
+    if lc_lookup is None:
         man = targets.fetch_manifest(sector).set_index("tic")
-    except Exception:
-        pass
 
-    # Read contratio from tic82_params if cached
-    tic82_map = {}
-    tic82_p = config.CATALOG_DIR / "tic82_params.parquet"
-    if tic82_p.exists():
-        try:
-            df_82 = pd.read_parquet(tic82_p)
-            for r in df_82.itertuples():
-                tic82_map[int(r.ID)] = getattr(r, "contratio", np.nan)
-        except Exception:
-            pass
+        def lc_lookup(tic):
+            return batch.lc_path(sector, man.loc[tic].fname, download=False) if tic in man.index else None
+    if contratio_map is None:
+        contratio_map = {}
+        p82 = config.CATALOG_DIR / "tic82_params.parquet"
+        if p82.exists():
+            d82 = pd.read_parquet(p82)
+            if "contratio" in d82.columns:
+                contratio_map = {int(r.ID): _f(r.contratio) for r in d82.itertuples()}
 
-    cfg = settings.cfg()
-    enriched_rows = []
+    rows = []
+    for r in targets_df.to_dict(orient="records"):
+        tic = int(r["tic"])
+        rd = {c: r.get(c, "") for c in ("tic", "name", "type", "period", "t0", "dur_h", "depth_ppm",
+                                        "depth_src", "dur_src", "t0_src")}
+        rd["tic"] = tic
+        rd["contratio"] = contratio_map.get(tic, np.nan)
+        rd.update(measure_target(rd, lc_lookup(tic), cfg))
+        rd.update(derive_expected(rd, cfg))
+        rows.append(rd)
+    df = apply_threshold(pd.DataFrame(rows, columns=[c for c in FROZEN_COLUMNS if c not in
+                                                     ("eligibility", "ineligible_reason", "required")]), s_star)
+    df = df[list(FROZEN_COLUMNS)]
+    df.to_csv(out_p, index=False)
 
-    for row in df_tgt.itertuples():
-        rdict = dict(row._asdict())
-        tic = int(rdict["tic"])
-        P = float(rdict["period"]) if pd.notna(rdict["period"]) else np.nan
-        dur_h = float(rdict["dur_h"]) if pd.notna(rdict["dur_h"]) else np.nan
-        dur_d = dur_h / 24.0 if np.isfinite(dur_h) else np.nan
-        t0 = float(rdict["t0"]) if pd.notna(rdict["t0"]) else np.nan
+    sidecar = dict(
+        timestamp_utc=dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+        s_star=float(s_star), sector=int(sector),
+        commit=commit or settings.commit(), config_hash=config_hash or settings.config_hash(),
+        sha256=_sha256(out_p), total_targets=int(len(df)),
+        eligibility_counts=df.eligibility.value_counts().to_dict(),
+        ineligible_reasons=df[df.eligibility == "ineligible"].ineligible_reason.value_counts().to_dict(),
+        **prov,
+    )
+    Path(str(out_p) + ".meta.json").write_text(json.dumps(sidecar, indent=2))
+    return df, sidecar
 
-        contratio = tic82_map.get(tic, np.nan)
-        rdict["contratio"] = contratio
 
-        # Look up lightcurve and CROWDSAP
-        fname = man.loc[tic].fname if (man is not None and tic in man.index) else None
-        p = batch.lc_path(sector, fname, download=False) if fname else None
-        crowdsap = None
-        n_raw = 0
-        n_tr = 0
-        cdpp_d = np.nan
-        err = None
+# ---------------------------------------------------------------- evaluation
+def _search_index(search_results_df: Optional[pd.DataFrame]) -> Dict[int, Dict[str, Any]]:
+    res = {}
+    if search_results_df is None or search_results_df.empty:
+        return res
+    d = search_results_df
+    if "mode" in d.columns:
+        d = d[d["mode"] == "real"]
+    for r in d.to_dict(orient="records"):
+        tic = int(r["tic"])
+        P = r.get("period")
+        if P is None or not np.isfinite(_f(P)):
+            P = r.get("P_grid")
+        rec = dict(period=_f(P), S=_f(r.get("S")), status=_s(r.get("status")) or "ok", error=_s(r.get("error")),
+                   plateaus=r.get("plateaus") if _s(r.get("plateaus")) else None, grid_df=_f(r.get("grid_df")),
+                   vetted=(None if "passed_lc_checks" not in r or not np.isfinite(_f(r.get("passed_lc_checks")))
+                           else bool(_f(r.get("passed_lc_checks")))))
+        if tic in res:      # A7: exactly one real-search row per TIC
+            prev = res[tic]
+            if not (np.isclose(prev["period"], rec["period"], equal_nan=True) and
+                    np.isclose(prev["S"], rec["S"], equal_nan=True) and prev["status"] == rec["status"]):
+                raise ValueError(f"Conflicting duplicate real-search rows for TIC {tic}")
+        res[tic] = rec
+    return res
 
-        if p and p.exists():
-            crowdsap = read_crowdsap_from_fits(p)
-            if crowdsap is not None:
-                try:
-                    t, f, e, q, meta = lightcurve.load_spoc_raw(p)
-                    good = lightcurve.good_mask(f, e, q)
-                    tg = t[good]
-                    fg = f[good] / np.nanmedian(f[good])
-                    eg = e[good] / np.nanmedian(f[good])
-                    n_raw = count_surviving_transits(t, P, t0, dur_d) if np.isfinite(P) and np.isfinite(t0) and np.isfinite(dur_d) else 0
 
-                    d = pipeline.prepare(tg, fg, eg, cfg, prewhiten_on=True, gap_trim=0.3)
-                    tf, ff, ef = d["flat"]
-                    n_tr = count_surviving_transits(tf, P, t0, dur_d) if np.isfinite(P) and np.isfinite(t0) and np.isfinite(dur_d) else 0
+def evaluate_known_planets(
+    targets_df: pd.DataFrame,
+    search_results_df: Optional[pd.DataFrame],
+    s_star: float,
+    durations: np.ndarray = search.DURATIONS,
+    cfg: Optional[Dict[str, Any]] = None,
+    diagnostics_df: Optional[pd.DataFrame] = None,
+    sector: int = 70,
+) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """Evaluate recovery of the frozen targets against the real-search rows (one per TIC).
 
-                    prof = bls.noise_profile(tf, ff, [dur_d])
-                    cdpp_d = prof[2].get(dur_d, (np.nan, 1.0))[0]
-                except Exception as exc:
-                    err = str(exc)
-            else:
-                err = "missing CROWDSAP in FITS header"
+    targets_df: the frozen eligibility table (read_frozen), or raw target rows, for which the frozen quantities are
+    derived here with the same function freeze_eligibility uses. diagnostics_df (optional, keyed by tic + name):
+    S_cat, n_tr_cat, depth_ratio_cat at the catalogue ephemeris, used only to name the losing stage.
+    B3: S* is passed in; error if not supplied.
+    """
+    if s_star is None or not np.isfinite(s_star) or s_star <= 0:
+        raise ValueError("s_star must be provided as a positive float")
+    cfg = cfg if cfg is not None else settings.cfg()
+    kp = cfg.get("known_planets", {})
+    alias_ratios = tuple(float(x) for x in kp.get("alias_ratios", [2.0, 0.5]))
+
+    tdf = targets_df.copy()
+    if "period" not in tdf.columns and "P_cat" in tdf.columns:
+        tdf = tdf.rename(columns={"P_cat": "period"})
+    if "expected_S" not in tdf.columns or "base_ineligible_reason" not in tdf.columns:
+        recs = []
+        for r in tdf.to_dict(orient="records"):
+            r.update(derive_expected(r, cfg))
+            recs.append(r)
+        tdf = pd.DataFrame(recs)
+    for c in ("name", "error", "type"):
+        if c not in tdf.columns:
+            tdf[c] = ""
+    tdf = apply_threshold(tdf, s_star)
+
+    res_by_tic = _search_index(search_results_df)
+    diag = {}
+    if diagnostics_df is not None and not diagnostics_df.empty:
+        for r in diagnostics_df.to_dict(orient="records"):
+            diag[(int(r["tic"]), _s(r.get("name")))] = r
+
+    rows = []
+    for r in tdf.to_dict(orient="records"):
+        tic, name = int(r["tic"]), _s(r.get("name"))
+        P_cat = _f(r.get("period"))
+        found = res_by_tic.get(tic)
+        err = _s(r.get("error"))
+        if found is None:
+            search_err = "missing search result"
+        elif found["status"] != "ok":
+            search_err = f"search error: {found['error'] or found['status']}"
         else:
-            err = "missing light curve"
+            search_err = ""
+        P_found = found["period"] if found else np.nan
+        S_found = found["S"] if found else np.nan
+        hw = get_plateau_halfwidth(P_cat, plateaus_list=found["plateaus"] if found else None,
+                                   grid_df=found["grid_df"] if found else None, tic=tic, sector=sector) \
+            if np.isfinite(P_cat) else 0.0
+        rec, mt = check_recovery(P_cat, P_found, hw, alias_ratios=alias_ratios, s_found=S_found, s_star=s_star) \
+            if not search_err else (False, "none")
+        vetted = found["vetted"] if found else None
+        recovered = bool(rec and (vetted is None or vetted))
+        stage = ""
+        if r["required"] and not recovered:
+            dg = diag.get((tic, name), {})
+            stage = losing_stage(mt, S_found, s_star, vetted, error=err or search_err, s_cat=dg.get("S_cat"),
+                                 n_tr_cat=dg.get("n_tr_cat"), depth_ratio_cat=dg.get("depth_ratio_cat"))
+        rows.append(dict(
+            tic=tic, toi_or_planet=name, type=_s(r.get("type")), P_cat=P_cat, depth_ppm=_f(r.get("depth_ppm")),
+            dur_h=_f(r.get("dur_h")), t0=_f(r.get("t0")), n_tr=int(_f(r.get("n_tr")) or 0) if np.isfinite(_f(r.get("n_tr"))) else 0,
+            expected_S=_f(r.get("expected_S")), aperture_contamination=_f(r.get("aperture_contamination")),
+            contratio=_f(r.get("contratio")), contamination_flag=bool(r.get("contamination_flag", False)),
+            eligibility=r["eligibility"], ineligible_reason=r["ineligible_reason"], error=err or search_err,
+            required=bool(r["required"]), P_found=P_found, S_found=S_found, half_width=hw, match_type=mt,
+            vetted=vetted, recovered=recovered if r["required"] else bool(rec and (vetted is None or vetted)),
+            stage=stage,
+        ))
+    out_df = pd.DataFrame(rows)
+    req = out_df[out_df.required] if len(out_df) else out_df
+    missed = req[~req.recovered] if len(req) else req
+    summary = dict(
+        s_star=float(s_star),
+        total_targets=int(len(out_df)),
+        eligible_targets=int((out_df.eligibility == "eligible").sum()) if len(out_df) else 0,
+        error_targets=int((out_df.eligibility == "error").sum()) if len(out_df) else 0,
+        required_targets=int(len(req)),
+        eligible_recovered=int(req.recovered.sum()) if len(req) else 0,
+        eligible_missed=int(len(missed)),
+        required_aliases=int(req.match_type.isin(["2x", "0.5x"]).sum()) if len(req) else 0,
+        stage_counts=missed.stage.value_counts().to_dict() if len(missed) else {},
+        pass_=bool(len(missed) == 0 and len(req) > 0),
+    )
+    summary["pass"] = summary.pop("pass_")
+    return out_df, summary
 
-        rdict.update(
-            aperture_contamination=crowdsap,
-            n_raw=n_raw,
-            n_tr=n_tr,
-            cdpp_d=cdpp_d,
-            error=err,
-        )
-        enriched_rows.append(rdict)
 
-    df_enriched = pd.DataFrame(enriched_rows)
-    eval_df, summary = evaluate_known_planets(df_enriched, pd.DataFrame(columns=["tic", "period", "S"]), s_star=s_star)
-
-    # Save CSV
-    eval_df.to_csv(out_p, index=False)
-
-    # Sidecar JSON
-    import datetime as dt
-    utc_timestamp = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
-    if not commit:
-        commit = settings.commit()
-    if not config_hash:
-        config_hash = settings.config_hash()
-
-    sha256 = hashlib.sha256(out_p.read_bytes()).hexdigest()
-    sidecar = {
-        "timestamp_utc": utc_timestamp,
-        "s_star": float(s_star),
-        "sector": sector,
-        "commit": commit,
-        "config_hash": config_hash,
-        "sha256": sha256,
-        "total_targets": len(eval_df),
-        "eligible_targets": int(eval_df.eligible.sum()),
-        "ineligible_reasons": eval_df[~eval_df.eligible].ineligible_reason.value_counts().to_dict(),
-    }
-    sidecar_p = Path(str(out_p) + ".meta.json")
-    sidecar_p.write_text(json.dumps(sidecar, indent=2))
-
-    return eval_df, sidecar
+def _read_table(p: Union[str, Path]) -> pd.DataFrame:
+    p = Path(p)
+    if p.is_dir():
+        from . import run
+        return run.load_rows(p)
+    return pd.read_parquet(p) if p.suffix == ".parquet" else pd.read_csv(p)
 
 
 def run_known_planet_recovery(
@@ -687,89 +689,68 @@ def run_known_planet_recovery(
     sector: int = 70,
     frozen_eligibility_file: Optional[Union[str, Path]] = None,
     cfg: Optional[Dict[str, Any]] = None,
+    diagnostics_path: Optional[Union[str, Path]] = None,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    """Run known-planet recovery evaluation and write CSV and JSON outputs.
-    
-    Refuses to run without frozen eligibility file (B5).
-    """
+    """Known-planet recovery report from the frozen eligibility file and the real-search rows.
+
+    Refuses to run without the frozen eligibility file or with a sha256 mismatch (B5); a missing search-results
+    path is an error, not an empty result."""
     if s_star is None or not np.isfinite(s_star) or s_star <= 0:
         raise ValueError("s_star must be provided as a positive float")
-
-    if cfg is None:
-        cfg = settings.cfg()
-
+    cfg = cfg if cfg is not None else settings.cfg()
     if not frozen_eligibility_file:
         frozen_eligibility_file = cfg.get("known_planets", {}).get("frozen_eligibility_file")
-
     if not frozen_eligibility_file or not Path(frozen_eligibility_file).exists():
         raise RuntimeError("Frozen eligibility file required for known-planet recovery evaluation (Spec B5).")
-
-    # Verify sidecar sha256
     meta_p = Path(str(frozen_eligibility_file) + ".meta.json")
     if not meta_p.exists():
-        raise FileNotFoundError(f"Missing sidecar metadata file: {meta_p} (Spec B5)")
-
+        raise FileNotFoundError(f"Missing sidecar metadata file: {meta_p.name} (Spec B5)")
     meta = json.loads(meta_p.read_text())
-    cur_sha = hashlib.sha256(Path(frozen_eligibility_file).read_bytes()).hexdigest()
-    if cur_sha != meta.get("sha256"):
-        raise ValueError(f"Eligibility file sha256 mismatch: {cur_sha} != {meta.get('sha256')}")
+    cur = _sha256(frozen_eligibility_file)
+    if cur != meta.get("sha256"):
+        raise ValueError(f"Eligibility file sha256 mismatch: {cur} != {meta.get('sha256')}")
+    if not search_results_path or not Path(search_results_path).exists():
+        raise FileNotFoundError("search results required (real-search rows, CSV / parquet / run output dir)")
 
+    df_frozen = read_frozen(frozen_eligibility_file)
+    df_search = _read_table(search_results_path)
+    df_diag = _read_table(diagnostics_path) if diagnostics_path else None
+    out_df, summary = evaluate_known_planets(df_frozen, df_search, s_star=s_star, cfg=cfg, diagnostics_df=df_diag,
+                                             sector=sector)
+    summary["frozen_eligibility_sha256"] = cur
     out_p = Path(out_dir)
     out_p.mkdir(parents=True, exist_ok=True)
-
-    df_eligible = pd.read_csv(frozen_eligibility_file)
-
-    if search_results_path and Path(search_results_path).exists():
-        df_search = pd.read_csv(search_results_path)
-    else:
-        df_search = pd.DataFrame(columns=["tic", "period", "S"])
-
-    out_df, summary = evaluate_known_planets(df_eligible, df_search, s_star=s_star, cfg=cfg)
-
-    csv_path = out_p / "known_planets_recovery.csv"
-    out_df.to_csv(csv_path, index=False)
-
-    json_path = out_p / "known_planets_summary.json"
-    with open(json_path, "w") as fp:
-        json.dump(summary, fp, indent=2, default=float)
-
+    out_df.to_csv(out_p / "known_planets_recovery.csv", index=False)
+    (out_p / "known_planets_summary.json").write_text(json.dumps(summary, indent=2, default=float))
     return out_df, summary
 
 
 def main():
     ap = argparse.ArgumentParser(description="v1.1 Known planet / active TOI recovery test (T2)")
     sp = ap.add_subparsers(dest="cmd", required=True)
-
+    fp = sp.add_parser("fetch-pscomppars", help="fetch pscomppars with transit columns (dated cache + sha256)")
+    fp.add_argument("--date-tag")
     fe = sp.add_parser("freeze-eligibility")
     fe.add_argument("--s-star", type=float, required=True, help="Detection threshold S*")
     fe.add_argument("--out", required=True, help="Output path for frozen eligibility CSV")
     fe.add_argument("--sector", type=int, default=70, help="TESS Sector")
-
     r = sp.add_parser("report")
     r.add_argument("--s-star", type=float, required=True, help="Detection threshold S*")
-    r.add_argument("--results", help="Search results CSV path")
+    r.add_argument("--results", required=True, help="Real-search rows (CSV, parquet or run output dir)")
     r.add_argument("--frozen-eligibility", help="Path to frozen eligibility CSV")
+    r.add_argument("--diagnostics", help="Optional catalogue-ephemeris diagnostics (tic, name, S_cat, ...)")
     r.add_argument("--out", required=True, help="Output directory")
     r.add_argument("--sector", type=int, default=70, help="TESS Sector")
-
     a = ap.parse_args()
-
-    if a.cmd == "freeze-eligibility":
-        freeze_eligibility(
-            s_star=a.s_star,
-            out_file=a.out,
-            sector=a.sector,
-            commit=settings.commit(),
-            config_hash=settings.config_hash(),
-        )
+    if a.cmd == "fetch-pscomppars":
+        print(fetch_pscomppars(date_tag=a.date_tag))
+    elif a.cmd == "freeze-eligibility":
+        freeze_eligibility(s_star=a.s_star, out_file=a.out, sector=a.sector)
     else:
-        run_known_planet_recovery(
-            s_star=a.s_star,
-            search_results_path=a.results,
-            out_dir=a.out,
-            sector=a.sector,
-            frozen_eligibility_file=a.frozen_eligibility,
-        )
+        _, s = run_known_planet_recovery(s_star=a.s_star, search_results_path=a.results, out_dir=a.out,
+                                         sector=a.sector, frozen_eligibility_file=a.frozen_eligibility,
+                                         diagnostics_path=a.diagnostics)
+        print(json.dumps(s, indent=1, default=float))
 
 
 if __name__ == "__main__":

@@ -78,8 +78,7 @@ def _status(r, subs):
         return "submitted"
     if _known(r):
         return "known"
-    passed_v10 = getattr(r, "passed_screens_v10", r.passed == 1)
-    if passed_v10:
+    if r.passed_screens_v10:
         if _deep(r) & deepvet.REJECT:
             return "rejected"
         return "needs_review" if r.passed == 1 else "uncalibrated"

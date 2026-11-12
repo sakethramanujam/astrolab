@@ -43,9 +43,9 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from .. import batch, lightcurve, targets
+from .. import batch, config, lightcurve, targets
 from .. import holdout
-from . import grid, run, search, settings
+from . import grid, pipeline, run, search, settings
 
 BASE_SEED = 20261112
 INJECTION_RUNS = [12, 13, 14, 15]
@@ -380,30 +380,42 @@ def evaluate_pw2_report(
     # Spec B1: Denominator is 23 stars. At least 90% must be clean
     crit1_pass = bool(total_gaia >= 23 and total_clean_rate >= 0.90)
 
-    # Spec C4: Negative control on unfiltered run
+    # Spec C4: Negative control on the unfiltered run. It must be complete (all 23 registered non-holdout stars) and
+    # must FAIL part one; missing or incomplete unfiltered results make the test invalid (never a silent pass).
     test_invalid = False
-    unfiltered_clean_rate = 0.0
-    if unfiltered_gaia_results is not None:
+    invalid_reason = ""
+    unfiltered_clean_rate = float("nan")
+    unf_total = 0
+    if deduped_unfiltered is None:
+        test_invalid, invalid_reason = True, "negative_control_missing"
+    else:
         unf_clean_count = 0
-        unf_total = 0
-        for ug in unfiltered_gaia_results:
+        for ug in deduped_unfiltered:
             u_tic = int(ug["tic"])
             if u_tic in HOLDOUT_GAIA_TICS:
                 continue
             unf_total += 1
+            if ug.get("unclean_reason"):
+                continue  # not evaluable -> counts as failing part one, but completeness is checked below
             u_p = float(ug.get("period", 0.0))
             u_freqs = ug.get("pulsation_frequencies", [])
-            u_res_snr = float(ug.get("max_residual_snr", 0.0))
+            if "max_residual_snr" not in ug or ug["max_residual_snr"] is None:
+                raise ValueError(f"unfiltered row for TIC {u_tic} has no max_residual_snr")
+            u_res_snr = float(ug["max_residual_snr"])
             is_p, _ = check_peak_pulsation_contamination(u_p, u_freqs)
             if u_res_snr > 4.0 or is_p:
                 pass  # Failed part one as expected
             else:
                 unf_clean_count += 1
-        unfiltered_clean_rate = float(unf_clean_count / unf_total) if unf_total > 0 else 1.0
-        # If unfiltered run did NOT fail (clean rate >= 0.90), negative control fails -> test_invalid
-        if unf_total >= 23 and unfiltered_clean_rate >= 0.90:
-            test_invalid = True
-            crit1_pass = False
+        n_missing = sum(1 for ug in deduped_unfiltered if ug.get("unclean_reason") == "missing_search_task")
+        unfiltered_clean_rate = float(unf_clean_count / unf_total) if unf_total > 0 else float("nan")
+        if unf_total < 23 or n_missing > 0:
+            test_invalid, invalid_reason = True, f"negative_control_incomplete ({unf_total - n_missing}/23 evaluated)"
+        elif unfiltered_clean_rate >= 0.90:
+            # unfiltered run did NOT fail part one -> the part-one check cannot tell filtering from no filtering
+            test_invalid, invalid_reason = True, "negative_control_passed_part_one"
+    if test_invalid:
+        crit1_pass = False
 
     # Criterion (ii): Injection recovery on Gaia stars vs quiet stars (Spec B2 / 8c)
     # One-sided; star is variance unit (average per star first)
@@ -630,6 +642,7 @@ def evaluate_pw2_report(
     return {
         "pass": overall_pass,
         "test_invalid": test_invalid,
+        "test_invalid_reason": invalid_reason,
         "s_star": float(s_star),
         "criterion_1_real_gaia_search": {
             "pass": crit1_pass,
@@ -641,6 +654,7 @@ def evaluate_pw2_report(
             "groups": crit1_groups,
             "real_gaia_table": df_gaia_real.to_dict(orient="records"),
             "unfiltered_clean_rate": unfiltered_clean_rate,
+            "unfiltered_total": unf_total,
         },
         "criterion_2_gaia_vs_quiet_injections": {
             "pass": crit2_pass,
@@ -682,11 +696,7 @@ def freeze_frequencies(
     all_tics = df_gaia["tic"].dropna().astype(int).tolist()
     valid_tics = [t for t in all_tics if t not in HOLDOUT_GAIA_TICS]
 
-    man = None
-    try:
-        man = targets.fetch_manifest(sector).set_index("tic")
-    except Exception:
-        pass
+    man = targets.fetch_manifest(sector).set_index("tic")
 
     rows = []
     missing_lcs = []
@@ -786,26 +796,24 @@ def build_pw2_manifests(
     pulsator_tics = set()
     vari_path = config.CATALOG_DIR / "gaia_dr3_vari.parquet"
     if vari_path.exists():
-        try:
-            df_vari = pd.read_parquet(vari_path)
-            if "tic" in df_vari.columns:
-                pulsator_tics = set(df_vari["tic"].dropna().astype(int))
-        except Exception:
-            pass
+        df_vari = pd.read_parquet(vari_path)
+        if "tic" not in df_vari.columns:
+            raise ValueError(f"{vari_path.name} has no 'tic' column")
+        pulsator_tics = set(df_vari["tic"].dropna().astype(int))
     else:
-        # Check configurable exclusion file from configs/v1.1.json validation_pw2.quiet_exclude_pulsators_file
+        # Configurable exclusion file from configs/v1.1.json validation_pw2.quiet_exclude_pulsators_file;
+        # a configured file that is missing or has no tic column is an error, never an empty exclusion.
         val_cfg = settings.cfg().get("validation_pw2", {})
         ex_rel = val_cfg.get("quiet_exclude_pulsators_file")
         if ex_rel:
             ex_p = settings.ROOT / ex_rel
-            if ex_p.exists():
-                try:
-                    df_ex = pd.read_csv(ex_p)
-                    col = "tic" if "tic" in df_ex.columns else ("TIC" if "TIC" in df_ex.columns else None)
-                    if col:
-                        pulsator_tics = set(df_ex[col].dropna().astype(int))
-                except Exception:
-                    pass
+            if not ex_p.exists():
+                raise FileNotFoundError(f"quiet_exclude_pulsators_file not found: {ex_rel}")
+            df_ex = pd.read_csv(ex_p)
+            col = "tic" if "tic" in df_ex.columns else ("TIC" if "TIC" in df_ex.columns else None)
+            if col is None:
+                raise ValueError(f"quiet_exclude_pulsators_file {ex_rel} has no tic column")
+            pulsator_tics = set(df_ex[col].dropna().astype(int))
 
     quiet_hosts = set(quiet_hosts_df.tic.astype(int)) - gaia_tics - pulsator_tics
 
@@ -869,8 +877,9 @@ def run_pw2_report(
     if cfg is None:
         cfg = settings.cfg()
 
-    if s_star is None:
-        s_star = float(cfg.get("s_star", 10.0))
+    if s_star is None or not np.isfinite(float(s_star)) or float(s_star) <= 0:
+        raise ValueError("s_star must be supplied as a positive float (Spec B3); it is never defaulted")
+    s_star = float(s_star)
 
     if not frozen_frequencies_file:
         val_cfg = cfg.get("validation_pw2", {})
@@ -904,6 +913,29 @@ def run_pw2_report(
     out_p = Path(out_dir)
     out_p.mkdir(parents=True, exist_ok=True)
 
+    man_cache = {}
+
+    def residual_snr(tic: int, puls_freqs: List[float], prewhiten_on: bool) -> float:
+        """Max residual LS S/N at the frozen frequencies on the star's own prepared light curve (Breger S/N > 4).
+        A star with no frozen frequency has nothing to test (0.0). A missing light curve or any failure raises."""
+        if not puls_freqs:
+            return 0.0
+        if "man" not in man_cache:
+            man_cache["man"] = targets.fetch_manifest(sector).set_index("tic")
+        man = man_cache["man"]
+        if tic not in man.index:
+            raise RuntimeError(f"TIC {tic}: not in the sector {sector} light-curve manifest; residual S/N unavailable")
+        p_lc = batch.lc_path(sector, man.loc[tic].fname, download=False)
+        if p_lc is None or not Path(p_lc).exists():
+            raise RuntimeError(f"TIC {tic}: light curve missing; residual S/N unavailable")
+        t_raw, f_raw, e_raw, q_raw, _ = lightcurve.load_spoc_raw(p_lc)
+        good = lightcurve.good_mask(f_raw, e_raw, q_raw)
+        med = np.nanmedian(f_raw[good])
+        d_prep = pipeline.prepare(t_raw[good], f_raw[good] / med, e_raw[good] / med, cfg,
+                                  prewhiten_on=prewhiten_on, gap_trim=0.3)
+        tf_flat, ff_flat, _ = d_prep["flat"]
+        return float(max(measure_residual_ls_snr(tf_flat, ff_flat, f0) for f0 in puls_freqs))
+
     df_rows = pd.concat([run.load_rows(d) for d in dirs], ignore_index=True) if dirs else pd.DataFrame()
     if "status" in df_rows.columns:
         df_rows = df_rows[df_rows.status == "ok"].copy()
@@ -927,26 +959,7 @@ def run_pw2_report(
         if pd.isna(period):
             period = getattr(r, "P_grid", 0.0)
 
-        # Check residual S/N if light curve is accessible
-        res_snr = getattr(r, "max_residual_snr", None)
-        if res_snr is None:
-            # Try to compute residual LS S/N if lightcurve file is available
-            try:
-                fname = man.loc[tic].fname if (man is not None and tic in man.index) else None
-                p_lc = batch.lc_path(sector, fname, download=False) if fname else None
-                if p_lc and p_lc.exists() and puls_freqs:
-                    t_raw, f_raw, e_raw, q_raw, _ = lightcurve.load_spoc_raw(p_lc)
-                    good_mask = lightcurve.good_mask(f_raw, e_raw, q_raw)
-                    tg, fg, eg = t_raw[good_mask], f_raw[good_mask] / np.nanmedian(f_raw[good_mask]), e_raw[good_mask] / np.nanmedian(f_raw[good_mask])
-                    d_prep = pipeline.prepare(tg, fg, eg, cfg, prewhiten_on=True, gap_trim=0.3)
-                    tf_flat, ff_flat, _ = d_prep["flat"]
-                    res_snrs = [measure_residual_ls_snr(tf_flat, ff_flat, f0) for f0 in puls_freqs]
-                    res_snr = float(max(res_snrs)) if res_snrs else 0.0
-            except Exception:
-                pass
-        if res_snr is None:
-            res_snr = 0.0
-
+        res_snr = residual_snr(tic, puls_freqs, prewhiten_on=True)
         gaia_results.append({
             "tic": tic,
             "group": group_by_tic.get(tic, "unclassified"),
@@ -975,26 +988,7 @@ def run_pw2_report(
             continue
         period = getattr(r, "period", getattr(r, "P_grid", 0.0))
         puls_freqs = freqs_by_tic.get(tic, [])
-        res_snr = getattr(r, "max_residual_snr", None)
-        if res_snr is None:
-            try:
-                fname = man.loc[tic].fname if (man is not None and tic in man.index) else None
-                p_lc = batch.lc_path(sector, fname, download=False) if fname else None
-                if p_lc and p_lc.exists() and puls_freqs:
-                    t_raw, f_raw, e_raw, q_raw, _ = lightcurve.load_spoc_raw(p_lc)
-                    good_mask = lightcurve.good_mask(f_raw, e_raw, q_raw)
-                    tg, fg, eg = t_raw[good_mask], f_raw[good_mask] / np.nanmedian(f_raw[good_mask]), e_raw[good_mask] / np.nanmedian(f_raw[good_mask])
-                    d_prep = pipeline.prepare(tg, fg, eg, cfg, prewhiten_on=False, gap_trim=0.3)
-                    tf_flat, ff_flat, _ = d_prep["flat"]
-                    res_snrs = [measure_residual_ls_snr(tf_flat, ff_flat, f0) for f0 in puls_freqs]
-                    res_snr = float(max(res_snrs)) if res_snrs else 0.0
-            except Exception:
-                pass
-        if res_snr is None:
-            # If lightcurve wasn't available, evaluate peak contamination against frozen frequencies
-            # If neither residual S/N nor peak contamination fires, default to 0.0 (never blindly 10.0)
-            res_snr = 0.0
-
+        res_snr = residual_snr(tic, puls_freqs, prewhiten_on=False)
         unfiltered_results.append({
             "tic": tic,
             "group": group_by_tic.get(tic, "unclassified"),
@@ -1002,6 +996,16 @@ def run_pw2_report(
             "pulsation_frequencies": puls_freqs,
             "max_residual_snr": float(res_snr),
         })
+    unf_tics = {u["tic"] for u in unfiltered_results}
+    for tic in valid_gaia_tics:
+        if tic not in unf_tics:
+            unfiltered_results.append({
+                "tic": tic,
+                "group": group_by_tic.get(tic, "unclassified"),
+                "period": 0.0,
+                "pulsation_frequencies": freqs_by_tic.get(tic, []),
+                "unclean_reason": "missing_search_task",
+            })
 
     # Injections
     df_g_inj = df_rows[df_rows.task.str.startswith("gaia_inj_pw_r")] if "task" in df_rows.columns else pd.DataFrame()
