@@ -21,12 +21,12 @@
       3
     ],
     "comb_ratio_tol": 2.0,
-    "comb_min_snr": 2.0,
+    "comb_min_snr": 3.0,
     "comb_p_range_d": [
       0.2,
       5.0
     ],
-    "comb_phase_tol": 0.25,
+    "comb_phase_tol": 0.15,
     "comb_max_harmonic_factor": 2.5,
     "comb_exclusion_width": 2.0,
     "comb_max_coverage": 0.2,

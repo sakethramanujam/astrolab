@@ -137,6 +137,14 @@ def test_box_ladder_small_duty_cycle():
     assert not prewhiten.is_comb(6.0, 1.0, 0.05, 0.02)
 
 
+def test_comb_guard_false_comb_rate_on_pure_pulsators():
+    """Comb guard false-comb rate on pure pulsators must be <= 5% (Spec A9)."""
+    from exosearch.v11 import synth
+    cfg = _cfg()
+    rate, count = synth.false_comb_rate(cfg, range(50))
+    assert rate <= 0.05, f"False comb rate {rate:.2f} ({count}/50) exceeds 5% threshold"
+
+
 # ---------------------------------------------------------------- vetting rule
 def _st(d_odd, d_even, e, d_sec=0.0, e_sec=1e-4, depth=1e-3):
     return dict(depth=(depth, 1e-5), depth_odd=(d_odd, e), depth_even=(d_even, e), depth_phased=(d_sec, e_sec),

@@ -20,7 +20,7 @@ Iterative sinusoid removal on the quality-masked, normalised flux before detrend
        - Require at least one additional harmonic (e.g. k=2 or k=3) with SNR >= comb_min_snr and
          consistent epoch.
      If a transit comb is detected, log it in combs, exclude the harmonic series k * (f / m)
-     from later picks (+-1/baseline) up to h_max = comb_max_harmonic_factor / (dmin * f0), capping
+     from later picks (+-comb_exclusion_width/baseline) up to h_max = comb_max_harmonic_factor / (dmin * f0), capping
      total exclusion coverage to comb_max_coverage (default 20%), and do not remove f.
   5. Two-halves sector coherence (glitch and transient rejector): verify that candidate pulsation f is
      coherent across both halves of the observation baseline (significant in both halves >= half_min_snr,
@@ -231,8 +231,9 @@ def prewhiten(t, f, cfg, comb_guard=None):
     if snr_max < min_detect_snr:
         return r, dict(prewhiten_n=0, prewhiten_comb=0, prewhiten_terms="[]", prewhiten_comb_freqs="[]")
 
-    # Low-frequency spectrum for local noise estimation at f0 < fmin
-    lf_freqs = np.arange(0.1, min(10.0, fmin + 1.0), df)
+    # Low-frequency spectrum for local noise estimation at f0 < fmin, extending high enough
+    # for local-noise windows (window ~ 1.0 c/d) around f0 and its harmonics k*f0 up to ~10 c/d
+    lf_freqs = np.arange(0.1, max(12.0, fmin + 2.0), df)
     lf_amp = _amp_spectrum(t, r, lf_freqs)
 
     t_mid = 0.5 * (t.min() + t.max())
