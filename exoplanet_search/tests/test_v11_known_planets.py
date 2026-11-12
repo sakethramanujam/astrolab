@@ -80,13 +80,23 @@ def test_select_targets_pscomppars_first_with_toi_fill_and_dedupe():
         dict(tic=102, toi="102.01", period=5.0, disp="PC", dur_h=3.0, depth_ppm=800.0, epoch_bjd=2460000.5),
         dict(tic=103, toi="103.01", period=1.5, disp="FP", dur_h=1.0, depth_ppm=500.0, epoch_bjd=2460000.2),
         dict(tic=104, toi="104.01", period=2.2, disp="", dur_h=1.5, depth_ppm=700.0, epoch_bjd=2460000.3),
+        dict(tic=105, toi="105.01", period=4.004, disp="KP", dur_h=2.0, depth_ppm=900.0, epoch_bjd=2460000.4),
     ])
-    ps = pd.DataFrame([dict(tic=101, pl_name="Planet-101 b", pl_orbper=3.14160, pl_trandep=0.15, pl_trandur=np.nan,
-                            pl_tranmid=2460000.12)])
-    out = known_planets.select_known_planet_targets(sector=70, searched_tics={101, 102, 103, 104}, ps_df=ps,
+    ps = pd.DataFrame([
+        dict(tic=101, pl_name="Planet-101 b", tran_flag=1, pl_orbper=3.14160, pl_trandep=0.15, pl_trandur=np.nan,
+             pl_tranmid=2460000.12),
+        # same planet as TOI 105.01, catalogue periods 0.1% apart (many grid steps): TOI row dropped
+        dict(tic=105, pl_name="Planet-105 b", tran_flag=1, pl_orbper=4.0, pl_trandep=np.nan, pl_trandur=np.nan,
+             pl_tranmid=2460000.4, pl_ratror=0.03, pl_ratdor=10.0, pl_imppar=0.3),
+        dict(tic=106, pl_name="RV-only b", tran_flag=0, pl_orbper=12.0, pl_trandep=np.nan, pl_trandur=np.nan,
+             pl_tranmid=np.nan),
+    ])
+    out = known_planets.select_known_planet_targets(sector=70, searched_tics={101, 102, 103, 104, 105, 106}, ps_df=ps,
                                                     toi_df=toi, pgh_table=pd.DataFrame())
     r = out.set_index("tic")
-    assert sorted(r.index) == [101, 102, 104]                   # FP dropped, TOI 101.01 deduped onto the PS row
+    assert sorted(r.index) == [101, 102, 104, 105]              # FP and RV-only dropped, TOIs deduped onto PS rows
+    assert r.loc[105, "name"] == "Planet-105 b"
+    assert np.isclose(r.loc[105, "depth_ppm"], 900.0) and r.loc[105, "depth_src"] == "exofop_toi 105.01"
     assert r.loc[101, "type"] == "ps" and r.loc[101, "name"] == "Planet-101 b"
     assert np.isclose(r.loc[101, "depth_ppm"], 1500.0) and r.loc[101, "depth_src"] == "pscomppars"
     assert np.isclose(r.loc[101, "dur_h"], 2.5) and r.loc[101, "dur_src"] == "exofop_toi 101.01"

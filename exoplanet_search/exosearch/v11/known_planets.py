@@ -16,8 +16,11 @@ depth_exp = catalogue depth scaled by aperture contamination ratio:
   A factor of 1.0 is never assumed.
 Catalogue parameters: confirmed planets from the NASA Exoplanet Archive pscomppars table (fetched over TAP with
   pl_trandep, pl_trandur, pl_tranmid and cached under a dated filename with a sha256 sidecar); active TOIs from the
-  ExoFOP TOI table (Depth (ppm), Duration (hours), Epoch (BJD)). A pscomppars row missing a transit parameter takes
-  it from the matching TOI row, and the source of every parameter is recorded.
+  ExoFOP TOI table (Depth (ppm), Duration (hours), Epoch (BJD)). Only transiting pscomppars rows (tran_flag = 1). A
+  pscomppars row missing a transit parameter takes it from the matching TOI row, else from its own catalogue values
+  (depth = (Rp/R*)^2; T14 from P, a/R*, b, Rp/R*); the source of every parameter is recorded. A TOI within 1% in
+  period of a confirmed planet on the same star is that planet (dropped). eph_sigma_h: catalogue ephemeris
+  uncertainty propagated to mid-S70 (diagnostic).
 Recovered: the star's reported peak period lies within the star's own plateau half-width of the catalogue period
   (p_grid_halfwidth.locate on that star's search plateaus and grid spacing; falling back to 0.5 * P^2 * df only where
   locate itself falls back), with S >= S*. 2x and 0.5x aliases use the same tolerance and are reported as aliases;
@@ -47,22 +50,27 @@ from . import pipeline, search, settings
 DETREND_WINDOW_DAYS = 0.75
 
 PS_TAP_URL = "https://exoplanetarchive.ipac.caltech.edu/TAP/sync"
-PS_COLUMNS = ("pl_name", "hostname", "tic_id", "pl_orbper", "pl_trandep", "pl_trandur", "pl_tranmid", "disc_facility")
+PS_COLUMNS = ("pl_name", "hostname", "tic_id", "tran_flag", "pl_orbper", "pl_orbpererr1", "pl_trandep", "pl_trandur",
+              "pl_tranmid", "pl_tranmiderr1", "pl_ratror", "pl_ratdor", "pl_imppar", "disc_facility")
 PS_QUERY = "select " + ",".join(PS_COLUMNS) + " from pscomppars where tic_id is not null"
 PS_PREFIX = "nasa_pscomppars_full_"
 TOI_FILE = "exofop_toi.csv"
-TOI_RENAME = {"TIC ID": "tic", "TOI": "toi", "Period (days)": "period", "TFOPWG Disposition": "disp",
-              "Epoch (BJD)": "epoch_bjd", "Duration (hours)": "dur_h", "Depth (ppm)": "depth_ppm"}
+TOI_RENAME = {"TIC ID": "tic", "TOI": "toi", "Period (days)": "period", "Period (days) err": "period_err",
+              "TFOPWG Disposition": "disp", "Epoch (BJD)": "epoch_bjd", "Epoch (BJD) err": "epoch_err",
+              "Duration (hours)": "dur_h", "Depth (ppm)": "depth_ppm"}
+S70_MID_BTJD = 3221.1          # mid-sector reference for ephemeris propagation uncertainty (diagnostic only)
+CATALOG_MATCH_REL = 0.01       # PS-vs-TOI same-planet match: |dP| / P (two planets cannot orbit 1% apart)
 BTJD_OFFSET = 2457000.0
 
 # Frozen eligibility schema (one row per target; written once pre-run, read back by the report)
 FROZEN_STR = ("name", "type", "depth_src", "dur_src", "t0_src", "base_ineligible_reason", "error",
               "eligibility", "ineligible_reason")
-FROZEN_FLOAT = ("period", "t0", "dur_h", "depth_ppm", "aperture_contamination", "contratio", "cdpp_d", "expected_S")
+FROZEN_FLOAT = ("period", "t0", "dur_h", "depth_ppm", "eph_sigma_h", "aperture_contamination", "contratio", "cdpp_d",
+                "expected_S")
 FROZEN_INT = ("tic", "n_raw", "n_tr")
 FROZEN_BOOL = ("contamination_flag", "required")
 FROZEN_COLUMNS = ("tic", "name", "type", "period", "t0", "dur_h", "depth_ppm", "depth_src", "dur_src", "t0_src",
-                  "aperture_contamination", "contratio", "contamination_flag", "n_raw", "n_tr", "cdpp_d",
+                  "eph_sigma_h", "aperture_contamination", "contratio", "contamination_flag", "n_raw", "n_tr", "cdpp_d",
                   "expected_S", "base_ineligible_reason", "error", "eligibility", "ineligible_reason", "required")
 
 STAGES = ("error", "masked", "detrending", "below_S*", "outranked", "vetting")
@@ -327,6 +335,14 @@ def select_known_planet_targets(
     toi = toi_df[toi_df.tic.astype(np.int64).isin(searched_tics)].copy()
     toi = toi[~toi.disp.map(_s).isin(["FP", "FA"])]
     ps = ps_df[ps_df.tic.astype(np.int64).isin(searched_tics)].copy()
+    if "tran_flag" in ps.columns:                       # transiting planets only (RV-only planets have no transit)
+        ps = ps[pd.to_numeric(ps.tran_flag, errors="coerce") == 1]
+
+    def eph_sigma_h(P, sP, sT0, t0):
+        if not (np.isfinite(P) and P > 0 and np.isfinite(t0)):
+            return np.nan
+        n = abs(S70_MID_BTJD - t0) / P
+        return float(24.0 * np.hypot(_f(sT0) if np.isfinite(_f(sT0)) else 0.0, n * (_f(sP) if np.isfinite(_f(sP)) else 0.0)))
 
     ps_targets = []
     for r in ps.itertuples():
@@ -338,7 +354,7 @@ def select_known_planet_targets(
                     t0=_f(getattr(r, "pl_tranmid", np.nan)) - BTJD_OFFSET)  # BJD -> BTJD
         src = {k: ("pscomppars" if np.isfinite(v) else "") for k, v in vals.items()}
         if any(not np.isfinite(v) for v in vals.values()) and np.isfinite(p):
-            m = toi[(toi.tic == tic) & (np.abs(toi.period.astype(float) - p) <= tol(p, tic))]
+            m = toi[(toi.tic == tic) & (np.abs(toi.period.astype(float) - p) <= max(tol(p, tic), CATALOG_MATCH_REL * p))]
             if len(m):
                 rm = m.iloc[0]
                 fill = dict(depth_ppm=_f(rm.depth_ppm), dur_h=_f(rm.dur_h), t0=_f(rm.epoch_bjd) - BTJD_OFFSET)
@@ -346,29 +362,42 @@ def select_known_planet_targets(
                     if not np.isfinite(vals[k]) and np.isfinite(fill[k]):
                         vals[k] = fill[k]
                         src[k] = f"exofop_toi {rm.toi}"
+        # last resort, still catalogue values: depth = (Rp/R*)^2, T14 from P, a/R*, b, Rp/R* (circular orbit)
+        k_rr, a_r, b_imp = _f(getattr(r, "pl_ratror", np.nan)), _f(getattr(r, "pl_ratdor", np.nan)), \
+            _f(getattr(r, "pl_imppar", np.nan))
+        if not np.isfinite(vals["depth_ppm"]) and k_rr > 0:
+            vals["depth_ppm"], src["depth_ppm"] = 1e6 * k_rr ** 2, "pscomppars pl_ratror^2"
+        if not np.isfinite(vals["dur_h"]) and k_rr > 0 and a_r > 1 and np.isfinite(b_imp) and p > 0:
+            arg = np.sqrt(max((1 + k_rr) ** 2 - b_imp ** 2, 0.0)) / (a_r * np.sqrt(max(1 - (b_imp / a_r) ** 2, 1e-12)))
+            if 0 < arg <= 1:
+                vals["dur_h"], src["dur_h"] = 24.0 * p / np.pi * float(np.arcsin(arg)), "pscomppars T14(P,a/R*,b,Rp/R*)"
+        sig = eph_sigma_h(p, getattr(r, "pl_orbpererr1", np.nan), getattr(r, "pl_tranmiderr1", np.nan), vals["t0"]) \
+            if src["t0"] == "pscomppars" else np.nan
         ps_targets.append(dict(tic=tic, name=_s(getattr(r, "pl_name", "")), type="ps", period=p, **vals,
-                               depth_src=src["depth_ppm"], dur_src=src["dur_h"], t0_src=src["t0"]))
+                               depth_src=src["depth_ppm"], dur_src=src["dur_h"], t0_src=src["t0"], eph_sigma_h=sig))
 
     toi_targets = []
     for r in toi.itertuples():
         vals = dict(depth_ppm=_f(r.depth_ppm), dur_h=_f(r.dur_h), t0=_f(r.epoch_bjd) - BTJD_OFFSET)
         src = {k: ("exofop_toi" if np.isfinite(v) else "") for k, v in vals.items()}
+        sig = eph_sigma_h(_f(r.period), getattr(r, "period_err", np.nan), getattr(r, "epoch_err", np.nan), vals["t0"])
         toi_targets.append(dict(tic=int(r.tic), name=f"TOI {r.toi}", type="toi", period=_f(r.period), **vals,
-                                depth_src=src["depth_ppm"], dur_src=src["dur_h"], t0_src=src["t0"]))
+                                depth_src=src["depth_ppm"], dur_src=src["dur_h"], t0_src=src["t0"], eph_sigma_h=sig))
 
-    def same(a, b):
+    def same(a, b, rel=0.0):
         return (a["tic"] == b["tic"] and np.isfinite(a["period"]) and np.isfinite(b["period"])
-                and abs(a["period"] - b["period"]) <= tol(b["period"], b["tic"]))
+                and abs(a["period"] - b["period"]) <= max(tol(b["period"], b["tic"]), rel * b["period"]))
 
     final = []
     for pt in ps_targets:
         if not any(same(ex, pt) for ex in final):
             final.append(pt)
-    n_ps = len(final)
     for tt in toi_targets:
-        if not any(same(ex, tt) for ex in final):
+        # a TOI is the same planet as a confirmed planet on the star within CATALOG_MATCH_REL (catalogue periods of
+        # one planet differ by far more than one grid step); TOIs among themselves use the registered tolerance
+        if not any(same(ex, tt, CATALOG_MATCH_REL if ex["type"] == "ps" else 0.0) for ex in final):
             final.append(tt)
-    cols = ["tic", "name", "type", "period", "t0", "dur_h", "depth_ppm", "depth_src", "dur_src", "t0_src"]
+    cols = ["tic", "name", "type", "period", "t0", "dur_h", "depth_ppm", "depth_src", "dur_src", "t0_src", "eph_sigma_h"]
     return pd.DataFrame(final, columns=cols)
 
 
@@ -528,6 +557,7 @@ def freeze_eligibility(
         tic = int(r["tic"])
         rd = {c: r.get(c, "") for c in ("tic", "name", "type", "period", "t0", "dur_h", "depth_ppm",
                                         "depth_src", "dur_src", "t0_src")}
+        rd["eph_sigma_h"] = _f(r.get("eph_sigma_h", np.nan))
         rd["tic"] = tic
         rd["contratio"] = contratio_map.get(tic, np.nan)
         rd.update(measure_target(rd, lc_lookup(tic), cfg))
@@ -647,7 +677,7 @@ def evaluate_known_planets(
                                  n_tr_cat=dg.get("n_tr_cat"), depth_ratio_cat=dg.get("depth_ratio_cat"))
         rows.append(dict(
             tic=tic, toi_or_planet=name, type=_s(r.get("type")), P_cat=P_cat, depth_ppm=_f(r.get("depth_ppm")),
-            dur_h=_f(r.get("dur_h")), t0=_f(r.get("t0")), n_tr=int(_f(r.get("n_tr")) or 0) if np.isfinite(_f(r.get("n_tr"))) else 0,
+            dur_h=_f(r.get("dur_h")), t0=_f(r.get("t0")), eph_sigma_h=_f(r.get("eph_sigma_h")), n_tr=int(_f(r.get("n_tr")) or 0) if np.isfinite(_f(r.get("n_tr"))) else 0,
             expected_S=_f(r.get("expected_S")), aperture_contamination=_f(r.get("aperture_contamination")),
             contratio=_f(r.get("contratio")), contamination_flag=bool(r.get("contamination_flag", False)),
             eligibility=r["eligibility"], ineligible_reason=r["ineligible_reason"], error=err or search_err,
