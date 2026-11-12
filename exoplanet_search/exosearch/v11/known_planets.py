@@ -523,6 +523,7 @@ def freeze_eligibility(
     lc_lookup=None,
     contratio_map: Optional[Dict[int, float]] = None,
     cfg: Optional[Dict[str, Any]] = None,
+    searched_tics: Optional[set] = None,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """Compute expected S once, pre-run, for every target and write the frozen CSV + sidecar JSON (sha256).
 
@@ -536,9 +537,10 @@ def freeze_eligibility(
     if targets_df is None:
         ps_df, ps_path = load_pscomppars()
         toi_df, toi_path = load_toi_table()
-        targets_df = select_known_planet_targets(sector=sector, ps_df=ps_df, toi_df=toi_df)
+        targets_df = select_known_planet_targets(sector=sector, searched_tics=searched_tics, ps_df=ps_df, toi_df=toi_df)
         prov = dict(pscomppars_file=ps_path.name, pscomppars_sha256=_sha256(ps_path),
-                    toi_file=toi_path.name, toi_sha256=_sha256(toi_path))
+                    toi_file=toi_path.name, toi_sha256=_sha256(toi_path),
+                    n_searched_stars=None if searched_tics is None else len(searched_tics))
     if lc_lookup is None:
         man = targets.fetch_manifest(sector).set_index("tic")
 
@@ -764,6 +766,7 @@ def main():
     fe.add_argument("--s-star", type=float, required=True, help="Detection threshold S*")
     fe.add_argument("--out", required=True, help="Output path for frozen eligibility CSV")
     fe.add_argument("--sector", type=int, default=70, help="TESS Sector")
+    fe.add_argument("--searched-tics", help="JSON list of searched TICs (default: the results store for the sector)")
     r = sp.add_parser("report")
     r.add_argument("--s-star", type=float, required=True, help="Detection threshold S*")
     r.add_argument("--results", required=True, help="Real-search rows (CSV, parquet or run output dir)")
@@ -775,7 +778,8 @@ def main():
     if a.cmd == "fetch-pscomppars":
         print(fetch_pscomppars(date_tag=a.date_tag))
     elif a.cmd == "freeze-eligibility":
-        freeze_eligibility(s_star=a.s_star, out_file=a.out, sector=a.sector)
+        st = set(int(x) for x in json.loads(Path(a.searched_tics).read_text())) if a.searched_tics else None
+        freeze_eligibility(s_star=a.s_star, out_file=a.out, sector=a.sector, searched_tics=st)
     else:
         _, s = run_known_planet_recovery(s_star=a.s_star, search_results_path=a.results, out_dir=a.out,
                                          sector=a.sector, frozen_eligibility_file=a.frozen_eligibility,
