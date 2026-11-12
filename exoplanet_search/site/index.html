@@ -14,7 +14,7 @@
 <canvas id="stars" aria-hidden="true"></canvas>
 <nav><div class="wrap">
   <a class="brand" href="./"><span class="orb"></span>Transit Hunt</a>
-  <div class="links"><a class="on" href="./">Dashboard</a><a href="learn.html">Learn</a><a href="methods.html">Methods</a><a href="contribute.html">Run it yourself</a></div>
+  <div class="links"><a class="on" href="./">Dashboard</a><a href="learn.html">Learn</a><a href="methods.html">Methods</a><a href="research-note.html">Research note</a><a href="contribute.html">Run it yourself</a></div>
 </div></nav>
 
 <header class="hero"><div class="wrap">
@@ -24,7 +24,7 @@
     crosses its star, throw out the usual impostors, and check everything against known planets. This page updates after every run.</p>
   <div class="note"><span>⚠️</span><div><b>Nothing here is a discovery.</b> Every row below is a <i>threshold-crossing signal</i> produced by an automated
     screen. A signal only becomes a planet candidate after human vetting, other sectors, pixel-level checks and follow-up
-    observations, and only becomes a planet after independent confirmation. "Known" means our search re-found something already catalogued.</div></div>
+    observations, and only becomes a planet after independent confirmation. "Known" means our search re-found something already catalogued. See the <a href="research-note.html">pre-v1.1 methods note</a> on why the Sector 70 search misses known planets.</div></div>
   <div class="meta" id="updated">loading…</div>
 </div></header>
 
@@ -97,7 +97,7 @@
   Data: NASA <a href="https://tess.mit.edu/">TESS</a> via <a href="https://archive.stsci.edu/missions-and-data/tess">MAST</a>;
   known objects from <a href="https://exofop.ipac.caltech.edu/tess/">ExoFOP-TESS</a> and the
   <a href="https://exoplanetarchive.ipac.caltech.edu/">NASA Exoplanet Archive</a>. Pipeline: wotan + astropy BLS + Dask.
-  Raw summary: <a href="data/progress.json">progress.json</a> · <a href="data/candidates.csv">candidates.csv</a>.
+  Raw summary: <a href="data/progress.json">progress.json</a> · <a href="data/candidates.csv">candidates.csv</a>. Methods note: <a href="research-note.html">pre-v1.1 research note</a>.
 </div></footer>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script type="module" src="assets/app.js"></script>

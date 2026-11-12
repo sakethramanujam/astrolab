@@ -1,0 +1,69 @@
+\documentclass[RNAAS]{aastex631}
+
+\begin{document}
+
+\title{Missed Known Planets in a TESS Sector 70 BLS Search: A Pre-v1.1 Failure Taxonomy}
+
+\author{Saketh Ramanujam}
+\correspondingauthor{Saketh Ramanujam}
+
+\begin{abstract}
+We present a pre-v1.1 methods audit of why a single-sector Box-fitting Least Squares (BLS) search of \textit{TESS} Sector~70 fails to recover already known planets. This Research Note is not a detection claim. Of 222 TESS Object of Interest (TOI) host stars, the single retained BLS peak period-matched a known TOI on 136 stars, and 106 of those also passed the pipeline vetting screens. The 86 period-match failures are classified at the in-pipeline screening floor of 7.0 and at the provisional Sector~70 threshold $S^{*}=11.07$ (95\% confidence interval 9.32--13.32). Most misses have fewer than two transits in the sector or fall below threshold. A minority are caused by keeping one peak per star, a 0.75~day detrending window, or quality masking. We compare these results with recent \textit{TESS} search and vetting studies and outline registered remedies for pipeline version 1.1.
+\end{abstract}
+
+\section{Introduction}
+
+The Transiting Exoplanet Survey Satellite \citep[\textit{TESS};][]{ricker15} has assembled a large catalog of TESS Objects of Interest \citep[TOIs;][]{guerrero21}. Independent Box-fitting Least Squares \citep[BLS;][]{kovacs02} searches remain useful both for new candidates and for measuring completeness against that catalog. Completeness is often quoted as a single recovery fraction. Here we instead diagnose \emph{why} known planets are missed.
+
+The audit uses the public \texttt{exosearch} pipeline in the \texttt{astrolab} repository,\footnote{\url{https://github.com/sakethramanujam/astrolab}, branch \texttt{exoplanet-search}, directory \texttt{exoplanet\_search/}.} frozen at git commit \texttt{68452b7} with configuration hash \texttt{80ffc7f29943}. All counts below come from the Sector~70 clean audit of that tree. They predate pipeline version 1.1 and are not a planet detection or a Community TOI submission.
+
+\section{Pipeline and Audit}
+
+We search Science Processing Operations Center 2-minute PDCSAP light curves after a quality mask and gap-edge trim. Trends are removed with a \texttt{wotan} biweight filter and a 0.75~day window \citep{hippke19}. BLS is run from 0.5~days to half the sector baseline, and version 1.0 keeps one peak per star. The search statistic is
+\begin{equation}
+S_{\rm exact}=\mathrm{depth}\times\sqrt{n_{\rm tr}}/\mathrm{CDPP}_{D},
+\end{equation}
+where $n_{\rm tr}$ is the number of transits and $\mathrm{CDPP}_{D}$ is the combined differential photometric precision evaluated at the trial duration $D$. The detection threshold $S^{*}$ is obtained from a generalized Pareto distribution fit to the tail of null (flux-flipped and scrambled) light curves. The provisional, pre-v1.1 Sector~70 value is $S^{*}=11.07$ (95\% confidence interval 9.32--13.32), fit on 7,148 null stars; the frozen threshold will come from the v1.1 run. The in-pipeline screening floor is 7.0.
+
+A host is counted as period-matched if the retained peak lies within 1\% in period of a catalogued TOI. The 86 hosts that fail this test are assigned a single mutually exclusive cause, in fixed order (\texttt{exosearch/missed.py}): fewer than two transits of the TOI ephemeris with at least half of their cadences present in the raw sector data; a biweight window shorter than three times the TOI duration; at least two raw transits but fewer than two surviving the quality mask and gap-edge trim; $S$ measured at the TOI ephemeris below the threshold under test; or $S$ at that ephemeris at or above threshold, but a stronger peak retained because only one peak is kept per star.
+
+\section{Failure Taxonomy}
+
+Sector~70 contains 222 TOI host stars. The retained peak period-matched a known TOI on 136 of them; 106 of those also passed the pipeline vetting screens. Table~\ref{tab:misses} classifies the 86 period-match failures at both thresholds. Both columns sum to 86. The few-transit (25), masked (6), and detrending-window (2) counts do not depend on the threshold. Raising the cut from 7.0 to $S^{*}=11.07$ moves 7 of the 8 ``outcompeted'' hosts into the below-threshold bin (45 to 52, and 8 to 1), as expected when $S$ at the TOI ephemeris lies between the two values.
+
+We do not quote a recovery fraction at $S^{*}=11.07$. The 136 period matches describe the single retained peak and are not, in the frozen numbers used here, further split by whether that peak also exceeds $S^{*}$.
+
+\begin{deluxetable}{lcc}
+\tablecaption{Diagnosis of the 86 Sector~70 TOI hosts whose single retained BLS peak did not period-match a known TOI. Buckets are mutually exclusive and assigned in the order given in the text. Both columns sum to 86.\label{tab:misses}}
+\tablehead{\colhead{Cause} & \colhead{Floor $S=7.0$} & \colhead{Provisional $S^{*}=11.07$}}
+\startdata
+Below threshold & 45 & 52 \\
+Fewer than two transits in the sector & 25 & 25 \\
+Outcompeted by a stronger peak & 8 & 1 \\
+Removed by quality mask or gap-edge trim & 6 & 6 \\
+Removed by the 0.75~day detrending window & 2 & 2 \\
+Total & 86 & 86 \\
+\enddata
+\end{deluxetable}
+
+\section{Comparison with Recent Work}
+
+\cite{lafarga26} recover 2633 of 3098 TOIs (84.99\%) with BLS on \textit{TESS} full-frame-image light curves from Sectors~1--55, keeping the five highest BLS peaks and searching periods of 0.5--16~days after a 4~day Savitzky--Golay detrend. That $\sim$85\% recovery is therefore not a like-for-like comparison with a single-sector search that retains one peak per star.
+
+\cite{taaki25} report a 73\% recall rate, matching a known TOI to any above-threshold statistic, and a 63\% detection rate, matching only the top statistic, for known TOIs in three years of \textit{TESS} continuous viewing zone 2-minute data. Their detection rate is the closer analogue to our one-peak-per-star period match, but they search year-long light curves over periods of 1--100~days rather than a single TESS sector.
+
+\cite{kunimoto25} and \cite{valizadegan25} address automated vetting and classification of already-detected transit-like signals, not BLS search completeness. The 91\% completeness and 97\% reliability of LEO-Vetter on simulated data, and the ExoMiner++ classification of 1797 of 2506 ExoFOP planet-candidate TOIs as planet candidates, should not be read as search-recovery fractions.
+
+\section{Outlook}
+
+The taxonomy points to specific, already registered changes for version 1.1, which are future work and are not reported here. An iterative mask-and-research step, run for 3--5 rounds with $S^{*}$ taken from the maximum over rounds, is intended to recover planets that lose the single-peak contest. The detrending window will be required to be at least three times the maximum trial duration. The noise-only threshold will be recalibrated with a segment-rotation scramble null, in which each contiguous segment between data gaps is cyclically rotated. A known-planet recovery test will be registered before the v1.1 search is run. Until that freeze, no signal from this pipeline is to be called a detection.
+
+\acknowledgments
+
+This paper includes data collected by the \textit{TESS} mission, which are publicly available from the Mikulski Archive for Space Telescopes (MAST). This research has made use of the Exoplanet Follow-up Observation Program (ExoFOP) website, which is operated by the California Institute of Technology under contract with NASA. A large language model was used to draft portions of this Research Note. The author reviewed the text, the citations, and every reported number, and takes responsibility for their accuracy.
+
+\facilities{TESS, MAST, ExoFOP}
+
+\bibliography{refs}
+
+\end{document}

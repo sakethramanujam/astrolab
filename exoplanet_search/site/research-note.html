@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Missed Known Planets in a TESS Sector 70 BLS Search: A Pre-v1.1 Failure Taxonomy · Transit Hunt</title>
+<meta name="description" content="Draft, pre-v1.1 methods note, not peer reviewed, no detection claims. A Sector 70 audit of why a one-peak BLS search misses known TESS planets.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='22' fill='%23ffb86b'/%3E%3Ccircle cx='20' cy='30' r='7' fill='%2305070f'/%3E%3C/svg%3E">
+<style>
+  .draft-banner{margin:22px 0 8px;padding:16px 18px;border-radius:var(--r);
+    background:linear-gradient(90deg,rgba(251,191,36,.16),rgba(251,191,36,.04));
+    border:1px solid rgba(251,191,36,.45);color:#ffe08a;font:700 16px/1.45 var(--font)}
+  .paper h2{margin-top:0}
+  .paper .card{margin:16px 0}
+  .paper .downloads{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 0}
+  .author{color:var(--muted);font:16px var(--font);margin-top:8px}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<canvas id="stars" aria-hidden="true"></canvas>
+<nav><div class="wrap">
+  <a class="brand" href="./"><span class="orb"></span>Transit Hunt</a>
+  <div class="links"><a href="./">Dashboard</a><a href="learn.html">Learn</a><a href="methods.html">Methods</a><a class="on" href="research-note.html">Research note</a><a href="contribute.html">Run it yourself</a></div>
+</div></nav>
+<header class="hero"><div class="wrap">
+  <div class="draft-banner" role="status">Draft, pre-v1.1 methods note, not peer reviewed, no detection claims.</div>
+  <div class="eyebrow">Research note · pre-v1.1 · methods audit</div>
+  <h1>Missed Known Planets in a TESS Sector 70 BLS Search: A Pre-v1.1 Failure Taxonomy</h1>
+  <p class="author">Saketh Ramanujam</p>
+  <div class="downloads">
+    <a class="btn" href="research-note/draft.tex">Download draft.tex</a>
+    <a class="btn" href="research-note/refs.bib">Download refs.bib</a>
+  </div>
+</div></header>
+<main class="wrap paper" id="main" tabindex="-1">
+<section class="card lesson" id="abstract">
+<h2>Abstract</h2>
+<p>We present a pre-v1.1 methods audit of why a single-sector Box-fitting Least Squares (BLS) search of <i>TESS</i> Sector 70 fails to recover already known planets. This Research Note is not a detection claim. Of 222 TESS Object of Interest (TOI) host stars, the single retained BLS peak period-matched a known TOI on 136 stars, and 106 of those also passed the pipeline vetting screens. The 86 period-match failures are classified at the in-pipeline screening floor of 7.0 and at the provisional Sector 70 threshold <i>S*</i> = 11.07 (95% confidence interval 9.32–13.32). Most misses have fewer than two transits in the sector or fall below threshold. A minority are caused by keeping one peak per star, a 0.75 day detrending window, or quality masking. We compare these results with recent <i>TESS</i> search and vetting studies and outline registered remedies for pipeline version 1.1.</p>
+</section>
+<section class="card lesson" id="1-introduction">
+<h2>1. Introduction</h2>
+<p>The Transiting Exoplanet Survey Satellite (<i>TESS</i>; Ricker et al. 2015) has assembled a large catalog of TESS Objects of Interest (TOIs; Guerrero et al. 2021). Independent Box-fitting Least Squares (BLS; Kovács et al. 2002) searches remain useful both for new candidates and for measuring completeness against that catalog. Completeness is often quoted as a single recovery fraction. Here we instead diagnose <i>why</i> known planets are missed.</p>
+<p>The audit uses the public <code>exosearch</code> pipeline in the <code>astrolab</code> repository (<a href="https://github.com/sakethramanujam/astrolab">github.com/sakethramanujam/astrolab</a>, branch <code>exoplanet-search</code>, directory <code>exoplanet_search/</code>), frozen at git commit <code>68452b7</code> with configuration hash <code>80ffc7f29943</code>. All counts below come from the Sector 70 clean audit of that tree. They predate pipeline version 1.1 and are not a planet detection or a Community TOI submission.</p>
+</section>
+<section class="card lesson" id="2-pipeline-and-audit">
+<h2>2. Pipeline and Audit</h2>
+<p>We search Science Processing Operations Center 2-minute PDCSAP light curves after a quality mask and gap-edge trim. Trends are removed with a <code>wotan</code> biweight filter and a 0.75 day window (Hippke et al. 2019). BLS is run from 0.5 days to half the sector baseline, and version 1.0 keeps one peak per star. The search statistic is</p>
+<p><i>S</i><sub>exact</sub> = depth × √(<i>n</i><sub>tr</sub>) / CDPP<sub><i>D</i></sub>,</p>
+<p>where <i>n</i><sub>tr</sub> is the number of transits and CDPP<sub><i>D</i></sub> is the combined differential photometric precision evaluated at the trial duration <i>D</i>. The detection threshold <i>S*</i> is obtained from a generalized Pareto distribution fit to the tail of null (flux-flipped and scrambled) light curves. The provisional, pre-v1.1 Sector 70 value is <i>S*</i> = 11.07 (95% confidence interval 9.32–13.32), fit on 7,148 null stars; the frozen threshold will come from the v1.1 run. The in-pipeline screening floor is 7.0.</p>
+<p>A host is counted as period-matched if the retained peak lies within 1% in period of a catalogued TOI. The 86 hosts that fail this test are assigned a single mutually exclusive cause, in fixed order (<code>exosearch/missed.py</code>): fewer than two transits of the TOI ephemeris with at least half of their cadences present in the raw sector data; a biweight window shorter than three times the TOI duration; at least two raw transits but fewer than two surviving the quality mask and gap-edge trim; <i>S</i> measured at the TOI ephemeris below the threshold under test; or <i>S</i> at that ephemeris at or above threshold, but a stronger peak retained because only one peak is kept per star.</p>
+</section>
+<section class="card lesson" id="3-failure-taxonomy">
+<h2>3. Failure Taxonomy</h2>
+<p>Sector 70 contains 222 TOI host stars. The retained peak period-matched a known TOI on 136 of them; 106 of those also passed the pipeline vetting screens. Table 1 classifies the 86 period-match failures at both thresholds. Both columns sum to 86. The few-transit (25), masked (6), and detrending-window (2) counts do not depend on the threshold. Raising the cut from 7.0 to <i>S*</i> = 11.07 moves 7 of the 8 “outcompeted” hosts into the below-threshold bin (45 to 52, and 8 to 1), as expected when <i>S</i> at the TOI ephemeris lies between the two values.</p>
+<p>We do not quote a recovery fraction at <i>S*</i> = 11.07. The 136 period matches describe the single retained peak and are not, in the frozen numbers used here, further split by whether that peak also exceeds <i>S*</i>.</p>
+<p><b>Table 1.</b> Diagnosis of the 86 Sector 70 TOI hosts whose single retained BLS peak did not period-match a known TOI. Buckets are mutually exclusive and assigned in the order given in the text. Both columns sum to 86.</p>
+<div class="vscroll"><table class="mini"><caption class="sr">Failure taxonomy of 86 missed TOI hosts</caption><thead><tr><th>Cause</th><th class="num">Floor <i>S</i> = 7.0</th><th class="num">Provisional <i>S*</i> = 11.07</th></tr></thead><tbody><tr><td>Below threshold</td><td class="num">45</td><td class="num">52</td></tr><tr><td>Fewer than two transits in the sector</td><td class="num">25</td><td class="num">25</td></tr><tr><td>Outcompeted by a stronger peak</td><td class="num">8</td><td class="num">1</td></tr><tr><td>Removed by quality mask or gap-edge trim</td><td class="num">6</td><td class="num">6</td></tr><tr><td>Removed by the 0.75 day detrending window</td><td class="num">2</td><td class="num">2</td></tr><tr><td>Total</td><td class="num">86</td><td class="num">86</td></tr></tbody></table></div>
+</section>
+<section class="card lesson" id="4-comparison-with-recent-work">
+<h2>4. Comparison with Recent Work</h2>
+<p>Lafarga et al. (2026) recover 2633 of 3098 TOIs (84.99%) with BLS on <i>TESS</i> full-frame-image light curves from Sectors 1–55, keeping the five highest BLS peaks and searching periods of 0.5–16 days after a 4 day Savitzky–Golay detrend. That ~85% recovery is therefore not a like-for-like comparison with a single-sector search that retains one peak per star.</p>
+<p>Taaki et al. (2025) report a 73% recall rate, matching a known TOI to any above-threshold statistic, and a 63% detection rate, matching only the top statistic, for known TOIs in three years of <i>TESS</i> continuous viewing zone 2-minute data. Their detection rate is the closer analogue to our one-peak-per-star period match, but they search year-long light curves over periods of 1–100 days rather than a single TESS sector.</p>
+<p>Kunimoto et al. (2025) and Valizadegan et al. (2025) address automated vetting and classification of already-detected transit-like signals, not BLS search completeness. The 91% completeness and 97% reliability of LEO-Vetter on simulated data, and the ExoMiner++ classification of 1797 of 2506 ExoFOP planet-candidate TOIs as planet candidates, should not be read as search-recovery fractions.</p>
+</section>
+<section class="card lesson" id="5-outlook">
+<h2>5. Outlook</h2>
+<p>The taxonomy points to specific, already registered changes for version 1.1, which are future work and are not reported here. An iterative mask-and-research step, run for 3–5 rounds with <i>S*</i> taken from the maximum over rounds, is intended to recover planets that lose the single-peak contest. The detrending window will be required to be at least three times the maximum trial duration. The noise-only threshold will be recalibrated with a segment-rotation scramble null, in which each contiguous segment between data gaps is cyclically rotated. A known-planet recovery test will be registered before the v1.1 search is run. Until that freeze, no signal from this pipeline is to be called a detection.</p>
+</section>
+<section class="card lesson" id="acknowledgments">
+<h2>Acknowledgments</h2>
+<p>This paper includes data collected by the <i>TESS</i> mission, which are publicly available from the Mikulski Archive for Space Telescopes (MAST). This research has made use of the Exoplanet Follow-up Observation Program (ExoFOP) website, which is operated by the California Institute of Technology under contract with NASA. A large language model was used to draft portions of this Research Note. The author reviewed the text, the citations, and every reported number, and takes responsibility for their accuracy.</p>
+<p><i>Facilities:</i> TESS, MAST, ExoFOP.</p>
+</section>
+<section class="card lesson" id="references">
+<h2>References</h2>
+<p>Guerrero, N. M., Seager, S., Huang, C. X., et al. 2021, ApJS, 254, 39, doi:<a href="https://doi.org/10.3847/1538-4365/abefe1">10.3847/1538-4365/abefe1</a></p>
+<p>Hippke, M., David, T. J., Mulders, G. D., &amp; Heller, R. 2019, AJ, 158, 143, doi:<a href="https://doi.org/10.3847/1538-3881/ab3984">10.3847/1538-3881/ab3984</a></p>
+<p>Kovács, G., Zucker, S., &amp; Mazeh, T. 2002, A&amp;A, 391, 369, doi:<a href="https://doi.org/10.1051/0004-6361:20020802">10.1051/0004-6361:20020802</a></p>
+<p>Kunimoto, M., Bryson, S., Jaffee, D., et al. 2025, AJ, 170, 280, doi:<a href="https://doi.org/10.3847/1538-3881/ae070a">10.3847/1538-3881/ae070a</a></p>
+<p>Lafarga, M., Armstrong, D. J., Cui, K., et al. 2026, MNRAS, 548, stag512, doi:<a href="https://doi.org/10.1093/mnras/stag512">10.1093/mnras/stag512</a></p>
+<p>Ricker, G. R., Winn, J. N., Vanderspek, R., et al. 2015, JATIS, 1, 014003, doi:<a href="https://doi.org/10.1117/1.JATIS.1.1.014003">10.1117/1.JATIS.1.1.014003</a></p>
+<p>Taaki, J. S., Kemball, A. J., &amp; Kamalabadi, F. 2025, AJ, 170, 14, doi:<a href="https://doi.org/10.3847/1538-3881/add15a">10.3847/1538-3881/add15a</a></p>
+<p>Valizadegan, H., Martinho, M. J. S., Jenkins, J. M., et al. 2025, AJ, 170, 287, doi:<a href="https://doi.org/10.3847/1538-3881/ae03a4">10.3847/1538-3881/ae03a4</a></p>
+</section>
+</main>
+<footer><div class="wrap">
+  Draft, pre-v1.1 methods note, not peer reviewed, no detection claims.
+  Source: <a href="https://github.com/sakethramanujam/astrolab">github.com/sakethramanujam/astrolab</a>.
+  <a href="research-note/draft.tex">draft.tex</a> · <a href="research-note/refs.bib">refs.bib</a>.
+</div></footer>
+<script type="module">import { starfield } from "./assets/ui.js"; starfield();</script>
+</body>
+</html>
