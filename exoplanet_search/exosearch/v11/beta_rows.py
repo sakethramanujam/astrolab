@@ -28,6 +28,11 @@ Rule: TOST (beta_select.tost, margin 0.5 on the 90% CI), bootstrap (2,000, seed 
 """
 from __future__ import annotations
 
+import os
+
+for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMBA_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+    os.environ[_v] = "1"          # as beta_select: before numpy is imported (also when run as __main__)
+
 import glob
 import gzip
 import hashlib
@@ -46,7 +51,7 @@ EXPECTED = {"invert": 12797, "scramble_r0": 12512}
 SECTOR = 70
 PROV_COLS = ("tree", "commit", "config_hash", "pipeline_version")
 STAT_COLS = ("S",) + tuple(f"S_opt_{o}" for o in bs.OPTIONS)
-EXACT_COLS = ("P_grid",) + tuple(f"P_grid_opt_{o}" for o in bs.OPTIONS)
+EXACT_COLS = ("P_grid", "period", "flags", "deep_flags", "checks_logged") + tuple(f"P_grid_opt_{o}" for o in bs.OPTIONS)
 TOL = 1e-6
 
 
@@ -92,13 +97,16 @@ def _agree(g):
     ok = g[g.status == "ok"]
     if len(ok) < 2:
         return True
+    missing = [c for c in STAT_COLS + EXACT_COLS if c not in ok]
+    if missing:
+        raise RowsError(f"row columns missing: {missing}")
     a = ok.iloc[0]
     for _, b in ok.iloc[1:].iterrows():
         for c in STAT_COLS:
-            if c in ok and not ((pd.isna(a[c]) and pd.isna(b[c])) or abs(float(a[c]) - float(b[c])) <= TOL):
+            if not ((pd.isna(a[c]) and pd.isna(b[c])) or abs(float(a[c]) - float(b[c])) <= TOL):
                 return False
         for c in EXACT_COLS:
-            if c in ok and not ((pd.isna(a[c]) and pd.isna(b[c])) or a[c] == b[c]):
+            if not ((pd.isna(a[c]) and pd.isna(b[c])) or a[c] == b[c]):
                 return False
     return True
 
@@ -242,6 +250,8 @@ def decide(res, comp=None, ind=None, sectors=(SECTOR,)):
 def injection_completeness(q, s_star):
     """beta_select.injections and .completeness on the sector-70 interim injections (the injection input the rule
     names), each option at its v1.1 S70 S*. S106 has no v1.1 S* in this run and enters with no rows."""
+    if not glob.glob(str(interim.PROD / "injections" / "*" / "part-*.parquet")):
+        raise FileNotFoundError("no interim injection part files under " + str(interim.PROD / "injections"))
     inj = bs.injections(q)
     inj = inj[inj.sector == SECTOR].copy()
     if not len(inj):

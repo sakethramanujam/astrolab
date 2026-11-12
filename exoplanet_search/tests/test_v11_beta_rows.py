@@ -53,6 +53,11 @@ def test_conflicting_duplicates_rejected():
     df = pd.concat([flip.assign(_src=0), scr.assign(_src=1), bad.assign(_src=2)], ignore_index=True)
     with pytest.raises(br.RowsError, match="different results"):
         br.merge_rows(df, exp)
+    bad = flip.iloc[:1].copy()
+    bad["flags"] = "odd_even"                          # vetting inputs must agree too
+    df = pd.concat([flip.assign(_src=0), scr.assign(_src=1), bad.assign(_src=2)], ignore_index=True)
+    with pytest.raises(br.RowsError, match="different results"):
+        br.merge_rows(df, exp)
 
 
 def test_tree_mismatch_rejected():
@@ -129,7 +134,7 @@ def test_vetting_matches_interim_definition():
     x.loc[62, "deep_flags"] = "v_shape"
     x.loc[63, "checks_logged"] = False
     v = br.with_vetting(x).set_index("tic").vetted
-    assert not v.loc[1:60].any() and not v.loc[61] and v.loc[62] and not v.loc[64]
+    assert not v.loc[1:60].any() and not v.loc[61] and v.loc[62] and not v.loc[63] and not v.loc[64]
     assert v.loc[65:].all()
 
 
