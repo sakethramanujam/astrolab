@@ -1,0 +1,25 @@
+{
+  "timestamp_utc": "2026-11-13T02:00:13+00:00",
+  "s_star": 13.71,
+  "sector": 72,
+  "commit": "3a1db81ab6d85765749a98c6b1fdd4380d2bae48",
+  "config_hash": "c0fd3d98b0e9",
+  "sha256": "15650be9e830f21747e805cf07149099acc8edd94ba86e6c436551de982dd283",
+  "total_targets": 438,
+  "eligibility_counts": {
+    "ineligible": 369,
+    "eligible": 69
+  },
+  "ineligible_reasons": {
+    "expected_s_below_threshold": 173,
+    "transits_under_min": 165,
+    "in_declared_mask": 17,
+    "missing_duration": 9,
+    "missing_period": 5
+  },
+  "pscomppars_file": "nasa_pscomppars_full_20261113.csv",
+  "pscomppars_sha256": "6dc56f25bad4516a80c1b000afbaa4f02b094bb2da2476187a677a27b1f78c3e",
+  "toi_file": "exofop_toi.csv",
+  "toi_sha256": "4e68b3f1c816d2ce0f11564d3728c63e237cf5edc3f7a397910429fd4e04133a",
+  "n_searched_stars": 12098
+}
