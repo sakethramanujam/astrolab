@@ -1,0 +1,18 @@
+{
+  "s_star": 13.71,
+  "total_targets": 306,
+  "eligible_targets": 51,
+  "error_targets": 0,
+  "required_targets": 19,
+  "eligible_recovered": 19,
+  "eligible_missed": 0,
+  "required_aliases": 0,
+  "stage_counts": {},
+  "tolerance": "bls_peak",
+  "alias_recovered": true,
+  "required_types": [
+    "ps"
+  ],
+  "pass": true,
+  "frozen_eligibility_sha256": "c41e1d84c5cfcf9073854d15011aeb7aa64817f9f820ba07e87a32149c22f68f"
+}

@@ -1,0 +1,173 @@
+{
+ "n_rows": 70024,
+ "n_ok": 69969,
+ "by_task": {
+  "real": 12797,
+  "invert": 12797,
+  "scramble_r0": 12512,
+  "scramble_r1": 12512,
+  "scramble_r2": 12512,
+  "inject_run0": 3447,
+  "inject_run1": 3447
+ },
+ "known_gate": {
+  "s_star": 13.71,
+  "total_targets": 306,
+  "eligible_targets": 51,
+  "error_targets": 0,
+  "required_targets": 19,
+  "eligible_recovered": 19,
+  "eligible_missed": 0,
+  "required_aliases": 0,
+  "stage_counts": {},
+  "tolerance": "bls_peak",
+  "alias_recovered": true,
+  "required_types": [
+   "ps"
+  ],
+  "pass": true,
+  "frozen_eligibility_sha256": "c41e1d84c5cfcf9073854d15011aeb7aa64817f9f820ba07e87a32149c22f68f",
+  "toi_eligible": 32,
+  "toi_recovered": 28
+ },
+ "flipped_known_hosts": {
+  "n": 51,
+  "not_vanished": 1
+ },
+ "null_above_sstar": {
+  "invert": {
+   "n": 12797,
+   "vetted_ge_S": 2,
+   "all_ge_S": 221
+  },
+  "scramble_r0": {
+   "n": 12512,
+   "vetted_ge_S": 3,
+   "all_ge_S": 385
+  },
+  "scramble_r1": {
+   "n": 12512,
+   "vetted_ge_S": 0,
+   "all_ge_S": 379
+  },
+  "scramble_r2": {
+   "n": 12512,
+   "vetted_ge_S": 3,
+   "all_ge_S": 370
+  }
+ },
+ "candidates_above_sstar": {
+  "total": 84,
+  "on_known_planet_or_toi_hosts": 67,
+  "other": 17,
+  "label": "candidates above S* in an UNVALIDATED run; none is called a detection"
+ },
+ "injection_recovery": {
+  "s_star": 13.71,
+  "n_total": 6894,
+  "n_ok": 6839,
+  "n_unphysical": 55,
+  "n_error": 0,
+  "all_ok": {
+   "n": 6839,
+   "matched": 3107,
+   "recovered_ge_S": 2205,
+   "vetted_ge_S": 1165,
+   "recovered_rate": 0.3224,
+   "vetted_rate": 0.1703
+  },
+  "allowed": {
+   "n": 6340,
+   "matched": 2643,
+   "recovered_ge_S": 1793,
+   "vetted_ge_S": 1122,
+   "recovered_rate": 0.2828,
+   "vetted_rate": 0.177
+  },
+  "allowed_snr_exp_ge_sstar": {
+   "n": 2238,
+   "matched": 2144,
+   "recovered_ge_S": 1792,
+   "vetted_ge_S": 1122,
+   "recovered_rate": 0.8007,
+   "vetted_rate": 0.5013
+  },
+  "allowed_snr_exp_15_25": {
+   "n": 428,
+   "matched": 392,
+   "recovered_ge_S": 135,
+   "vetted_ge_S": 97,
+   "recovered_rate": 0.3154,
+   "vetted_rate": 0.2266
+  },
+  "by_task": {
+   "inject_run0": {
+    "n_total": 3447,
+    "n_unphysical": 22,
+    "n": 3425,
+    "matched": 1542,
+    "recovered_ge_S": 1090,
+    "vetted_ge_S": 585,
+    "recovered_rate": 0.3182,
+    "vetted_rate": 0.1708
+   },
+   "inject_run1": {
+    "n_total": 3447,
+    "n_unphysical": 33,
+    "n": 3414,
+    "matched": 1565,
+    "recovered_ge_S": 1115,
+    "vetted_ge_S": 580,
+    "recovered_rate": 0.3266,
+    "vetted_rate": 0.1699
+   }
+  },
+  "by_dens_class": {
+   "binary": {
+    "n": 597,
+    "matched": 290,
+    "recovered_ge_S": 216,
+    "vetted_ge_S": 123,
+    "recovered_rate": 0.3618,
+    "vetted_rate": 0.206
+   },
+   "spread": {
+    "n": 533,
+    "matched": 240,
+    "recovered_ge_S": 174,
+    "vetted_ge_S": 38,
+    "recovered_rate": 0.3265,
+    "vetted_rate": 0.0713
+   },
+   "subgiant": {
+    "n": 568,
+    "matched": 271,
+    "recovered_ge_S": 190,
+    "vetted_ge_S": 26,
+    "recovered_rate": 0.3345,
+    "vetted_rate": 0.0458
+   },
+   "tic": {
+    "n": 5141,
+    "matched": 2306,
+    "recovered_ge_S": 1625,
+    "vetted_ge_S": 978,
+    "recovered_rate": 0.3161,
+    "vetted_rate": 0.1902
+   }
+  },
+  "aliases": {
+   "1/2x": 35,
+   "2x": 33,
+   "3x": 20,
+   "1/3x": 18
+  }
+ },
+ "thermal_pauses": {
+  "pause_episodes": 150,
+  "paused_ticks": 163,
+  "resumed": 150,
+  "max_temp_c": 98
+ },
+ "status": "UNVALIDATED (S72 gate failed 28/30)"
+}
