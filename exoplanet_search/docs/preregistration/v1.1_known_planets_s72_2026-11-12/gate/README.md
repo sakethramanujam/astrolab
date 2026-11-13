@@ -16,7 +16,7 @@ Both misses are at the catalogue period with S above S*, rejected by checks the 
 | TIC | planet | P cat (d) | P found (d) | expected S | S found | reject | detail |
 |---|---|---|---|---|---|---|---|
 | 468987719 | HAT-P-43 b | 3.3326 | 3.3314 | 31.32 | 37.03 | odd_even | odd 10,738 ppm vs even 12,804 ppm: 3.17 sigma and 17.6% (thresholds 3 sigma and 10%) |
-| 67512645 | TOI-6894 b | 3.3708 | 3.3718 | 44.11 | 46.69 | too_deep | box depth 13.97%, above the 10% depth cap (giant planet on a very low-mass M dwarf) |
+| 67512645 | TOI-6894 b | 3.3708 | 3.3718 | 44.11 | 46.69 | too_deep | box depth 13.97%, above the 5% depth cap (`vet.THRESH max_depth` 0.05) (giant planet on a very low-mass M dwarf) |
 
 All other 28 recovered directly (no aliases), vetted, S >= 13.71, including WASP-12 b, K2-34 b, GJ 3470 b and KELT-17 b.
 Per-planet rows: `known_planets_recovery_s72.csv`; summary: `known_planets_summary_s72.json`.
