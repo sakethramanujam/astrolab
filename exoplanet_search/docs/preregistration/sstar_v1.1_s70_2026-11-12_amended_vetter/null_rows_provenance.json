@@ -1,0 +1,39 @@
+{
+ "n_expected": 25309,
+ "n_unique": 25309,
+ "missing": 0,
+ "extra": 0,
+ "duplicates": 140,
+ "nonidentical_duplicates": 0,
+ "bad_keys": [],
+ "not_ok": 0,
+ "by_host": {
+  "h1": 22649,
+  "h3": 2660
+ },
+ "pass": true,
+ "sources_by_host": {
+  "h1": 22649,
+  "h3_tail_rows_written": 2800,
+  "h3_rows_kept_after_dedupe": 2660
+ },
+ "overlap_h3_vs_h1": {
+  "shared_tasks": 100,
+  "identical": 100,
+  "differing": 0,
+  "columns_compared": 130,
+  "ignored": [
+   "host_id",
+   "runtime_s",
+   "load_s"
+  ],
+  "rule": "float bit patterns equal; other columns repr equal"
+ },
+ "tail_duplicates_h3_vs_h1": {
+  "shared_tasks": 140,
+  "identical": 140,
+  "differing": 0,
+  "columns_compared": 130
+ },
+ "arch": "x86_64 on both hosts; identical lib_versions (numpy 2.5.4, scipy 1.18.1, numba 0.68.1, wotan 2.1, python 3.12.3)"
+}

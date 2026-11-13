@@ -1,0 +1,591 @@
+{
+ "reader": {
+  "n_rows_read": 25449,
+  "n_duplicate_rows": 280,
+  "n_after_dedupe": 25309,
+  "n_per_task": {
+   "invert": 12797,
+   "scramble_r0": 12512
+  },
+  "manifest_tasks": 25309,
+  "provenance": {
+   "tree": "0382861c530245f3afa9adb18f80839e731d9dbf",
+   "commit": "e2379bd256c6aff8e78ef7c366e5a8a39a83d6fd",
+   "config_hash": "33dd82f7e4d2",
+   "pipeline_version": "1.1.0",
+   "production": "False"
+  }
+ },
+ "verdict_changes": {
+  "invert": {
+   "fail_to_pass": 109,
+   "pass_to_fail": 0,
+   "vetted_old": 3514,
+   "vetted_new": 3623
+  },
+  "scramble_r0": {
+   "fail_to_pass": 118,
+   "pass_to_fail": 0,
+   "vetted_old": 3896,
+   "vetted_new": 4014
+  }
+ },
+ "old": {
+  "label": "old vetter (beta_rows.with_vetting)",
+  "per_sector_option": [
+   {
+    "sector": 70,
+    "option": "a",
+    "n_null_stars": 7979,
+    "n_stars_alpha": 10244,
+    "u_flip": 6.5,
+    "u_scr": 6.25,
+    "s_star_flip": 9.79679307359101,
+    "s_star_scr": 13.481328656194115,
+    "s_star": 13.481328656194115,
+    "diff": -3.6845355826031057,
+    "ci95_diff": [
+     -13.400657545419593,
+     0.8946182880908877
+    ],
+    "ci90_diff": [
+     -11.04947146658946,
+     0.3760789050344252
+    ],
+    "n_boot_ok": 2000,
+    "ci95_flip": [
+     8.586753654436285,
+     11.52781915341426
+    ],
+    "ci95_scr": [
+     9.086618026181018,
+     23.132139231664294
+    ],
+    "ci95_contains_0": true,
+    "gate_pass": false,
+    "null_peaks_moved_gt1pct": 0,
+    "vetted_flip": 2632,
+    "vetted_scr": 2995
+   },
+   {
+    "sector": 70,
+    "option": "b",
+    "n_null_stars": 7979,
+    "n_stars_alpha": 10244,
+    "u_flip": 6.5,
+    "u_scr": 6.0,
+    "s_star_flip": 9.698687059705202,
+    "s_star_scr": 11.821022522880586,
+    "s_star": 11.821022522880586,
+    "diff": -2.122335463175384,
+    "ci95_diff": [
+     -7.557142722579217,
+     1.140734780577056
+    ],
+    "ci90_diff": [
+     -6.216852586543681,
+     0.7328326186900096
+    ],
+    "n_boot_ok": 2000,
+    "ci95_flip": [
+     8.533673259399466,
+     11.043589175562431
+    ],
+    "ci95_scr": [
+     8.707796435101045,
+     17.005836918350067
+    ],
+    "ci95_contains_0": true,
+    "gate_pass": false,
+    "null_peaks_moved_gt1pct": 6898,
+    "vetted_flip": 2632,
+    "vetted_scr": 2995
+   },
+   {
+    "sector": 70,
+    "option": "c",
+    "n_null_stars": 7979,
+    "n_stars_alpha": 10244,
+    "u_flip": 6.5,
+    "u_scr": 6.25,
+    "s_star_flip": 9.816418227889917,
+    "s_star_scr": 13.621513775904855,
+    "s_star": 13.621513775904855,
+    "diff": -3.805095548014938,
+    "ci95_diff": [
+     -13.810692932966191,
+     0.8972444359229793
+    ],
+    "ci90_diff": [
+     -11.48590914088722,
+     0.4207112110185871
+    ],
+    "n_boot_ok": 2000,
+    "ci95_flip": [
+     8.588311077260286,
+     11.603858952039257
+    ],
+    "ci95_scr": [
+     9.068663376693628,
+     23.455403376744723
+    ],
+    "ci95_contains_0": true,
+    "gate_pass": false,
+    "null_peaks_moved_gt1pct": 1110,
+    "vetted_flip": 2632,
+    "vetted_scr": 2995
+   },
+   {
+    "sector": 70,
+    "option": "d",
+    "n_null_stars": 7979,
+    "n_stars_alpha": 10244,
+    "u_flip": 6.5,
+    "u_scr": 6.0,
+    "s_star_flip": 9.905645333238823,
+    "s_star_scr": 11.746531028102293,
+    "s_star": 11.746531028102293,
+    "diff": -1.84088569486347,
+    "ci95_diff": [
+     -6.4153824288219665,
+     1.4552259575255544
+    ],
+    "ci90_diff": [
+     -5.462787372524664,
+     0.9747365495030952
+    ],
+    "n_boot_ok": 2000,
+    "ci95_flip": [
+     8.635212724387687,
+     11.749675991496943
+    ],
+    "ci95_scr": [
+     8.852677303571788,
+     16.19869608101476
+    ],
+    "ci95_contains_0": true,
+    "gate_pass": false,
+    "null_peaks_moved_gt1pct": 1174,
+    "vetted_flip": 2632,
+    "vetted_scr": 2995
+   }
+  ],
+  "completeness_15_25": {
+   "a": {
+    "n": 304,
+    "vetted": 0.3651315789473684,
+    "per_sector": {
+     "70": {
+      "n": 304,
+      "vetted": 0.3651315789473684
+     },
+     "106": {
+      "n": 0,
+      "vetted": null
+     }
+    }
+   },
+   "b": {
+    "n": 304,
+    "vetted": 0.5592105263157895,
+    "per_sector": {
+     "70": {
+      "n": 304,
+      "vetted": 0.5592105263157895
+     },
+     "106": {
+      "n": 0,
+      "vetted": null
+     }
+    }
+   },
+   "c": {
+    "n": 304,
+    "vetted": 0.3355263157894737,
+    "per_sector": {
+     "70": {
+      "n": 304,
+      "vetted": 0.3355263157894737
+     },
+     "106": {
+      "n": 0,
+      "vetted": null
+     }
+    }
+   },
+   "d": {
+    "n": 304,
+    "vetted": 0.5789473684210527,
+    "per_sector": {
+     "70": {
+      "n": 304,
+      "vetted": 0.5789473684210527
+     },
+     "106": {
+      "n": 0,
+      "vetted": null
+     }
+    }
+   }
+  },
+  "completeness_note": "v1.0 interim sector-70 injections, scored at each option's S*",
+  "decision": {
+   "gate_tost": {
+    "a": false,
+    "b": false,
+    "c": false,
+    "d": false
+   },
+   "passing": [],
+   "chosen": "b",
+   "reason": "no option passes the TOST gate: b (most conservative) per rule 4; production is not launched",
+   "tied": [],
+   "gate_failed": true,
+   "completeness_diff_ci95": {
+    "a-b": [
+     -0.24013157894736842,
+     -0.15131578947368418
+    ],
+    "a-c": [
+     0.01315789473684209,
+     0.04934210526315791
+    ],
+    "a-d": [
+     -0.2598684210526316,
+     -0.1677631578947369
+    ],
+    "b-c": [
+     0.18083881578947367,
+     0.26973684210526316
+    ],
+    "b-d": [
+     -0.03618421052631582,
+     -0.006578947368421018
+    ],
+    "c-d": [
+     -0.2927631578947368,
+     -0.19736842105263158
+    ]
+   },
+   "descriptive": {
+    "ci95_contains_0": {
+     "a": true,
+     "b": true,
+     "c": true,
+     "d": true
+    },
+    "null_peaks_moved_gt1pct": {
+     "a": 0,
+     "b": 6898,
+     "c": 1110,
+     "d": 1174
+    }
+   }
+  },
+  "population": {
+   "n_alpha": 10244,
+   "flipped_tuning_quality": 8156,
+   "scrambled_tuning_quality": 7983,
+   "paired": 7979,
+   "excluded_removed_from_flipped": 173,
+   "flipped_unpaired_not_excluded": 0,
+   "scrambled_unpaired": 0,
+   "guard": {
+    "paired_count": 7983,
+    "flipped_count": 8156,
+    "scrambled_count": 7983,
+    "excluded_count": 285,
+    "excluded_in_paired": 0,
+    "status": "ok"
+   },
+   "paired_before_leak_drop": 7983,
+   "leakage_dropped": [
+    243015498,
+    2052927695,
+    620213822,
+    630275176
+   ]
+  },
+  "s_star_option_b": 11.821022522880586
+ },
+ "new": {
+  "label": "amended vetter (vet_amend rules a-d)",
+  "per_sector_option": [
+   {
+    "sector": 70,
+    "option": "a",
+    "n_null_stars": 7979,
+    "n_stars_alpha": 10244,
+    "u_flip": 6.5,
+    "u_scr": 6.25,
+    "s_star_flip": 9.729898838921567,
+    "s_star_scr": 13.852226853711523,
+    "s_star": 13.852226853711523,
+    "diff": -4.1223280147899555,
+    "ci95_diff": [
+     -13.941269566441557,
+     0.5393946237375505
+    ],
+    "ci90_diff": [
+     -11.664824314831028,
+     0.02086049061201148
+    ],
+    "n_boot_ok": 2000,
+    "ci95_flip": [
+     8.564769574707274,
+     11.275229453018994
+    ],
+    "ci95_scr": [
+     9.354249994821066,
+     23.441398604353456
+    ],
+    "ci95_contains_0": true,
+    "gate_pass": false,
+    "null_peaks_moved_gt1pct": 0,
+    "vetted_flip": 2652,
+    "vetted_scr": 3019
+   },
+   {
+    "sector": 70,
+    "option": "b",
+    "n_null_stars": 7979,
+    "n_stars_alpha": 10244,
+    "u_flip": 6.5,
+    "u_scr": 6.25,
+    "s_star_flip": 9.644786200048607,
+    "s_star_scr": 13.705599539834662,
+    "s_star": 13.705599539834662,
+    "diff": -4.060813339786055,
+    "ci95_diff": [
+     -14.769430432224812,
+     0.6562359556388665
+    ],
+    "ci90_diff": [
+     -11.979708807048825,
+     0.12940153722160158
+    ],
+    "n_boot_ok": 2000,
+    "ci95_flip": [
+     8.517547550783837,
+     10.83189246250301
+    ],
+    "ci95_scr": [
+     9.093549333909055,
+     24.099473340865572
+    ],
+    "ci95_contains_0": true,
+    "gate_pass": false,
+    "null_peaks_moved_gt1pct": 6898,
+    "vetted_flip": 2652,
+    "vetted_scr": 3019
+   },
+   {
+    "sector": 70,
+    "option": "c",
+    "n_null_stars": 7979,
+    "n_stars_alpha": 10244,
+    "u_flip": 6.5,
+    "u_scr": 6.25,
+    "s_star_flip": 9.745263921661333,
+    "s_star_scr": 13.997528554963255,
+    "s_star": 13.997528554963255,
+    "diff": -4.252264633301921,
+    "ci95_diff": [
+     -14.49419559899611,
+     0.5598505979444943
+    ],
+    "ci90_diff": [
+     -12.041116577697471,
+     0.09467366523929627
+    ],
+    "n_boot_ok": 2000,
+    "ci95_flip": [
+     8.562225140401502,
+     11.353046137675939
+    ],
+    "ci95_scr": [
+     9.366123064316874,
+     23.88467826715116
+    ],
+    "ci95_contains_0": true,
+    "gate_pass": false,
+    "null_peaks_moved_gt1pct": 1110,
+    "vetted_flip": 2652,
+    "vetted_scr": 3019
+   },
+   {
+    "sector": 70,
+    "option": "d",
+    "n_null_stars": 7979,
+    "n_stars_alpha": 10244,
+    "u_flip": 6.5,
+    "u_scr": 6.25,
+    "s_star_flip": 9.818993694180854,
+    "s_star_scr": 13.548263264338077,
+    "s_star": 13.548263264338077,
+    "diff": -3.729269570157223,
+    "ci95_diff": [
+     -12.313387437751745,
+     0.6657984071030185
+    ],
+    "ci90_diff": [
+     -10.435411711547989,
+     0.21104766498820682
+    ],
+    "n_boot_ok": 2000,
+    "ci95_flip": [
+     8.595917070668092,
+     11.452717146351825
+    ],
+    "ci95_scr": [
+     9.315465254325037,
+     22.081021463702204
+    ],
+    "ci95_contains_0": true,
+    "gate_pass": false,
+    "null_peaks_moved_gt1pct": 1174,
+    "vetted_flip": 2652,
+    "vetted_scr": 3019
+   }
+  ],
+  "completeness_15_25": {
+   "a": {
+    "n": 304,
+    "vetted": 0.3092105263157895,
+    "per_sector": {
+     "70": {
+      "n": 304,
+      "vetted": 0.3092105263157895
+     },
+     "106": {
+      "n": 0,
+      "vetted": null
+     }
+    }
+   },
+   "b": {
+    "n": 304,
+    "vetted": 0.3256578947368421,
+    "per_sector": {
+     "70": {
+      "n": 304,
+      "vetted": 0.3256578947368421
+     },
+     "106": {
+      "n": 0,
+      "vetted": null
+     }
+    }
+   },
+   "c": {
+    "n": 304,
+    "vetted": 0.26973684210526316,
+    "per_sector": {
+     "70": {
+      "n": 304,
+      "vetted": 0.26973684210526316
+     },
+     "106": {
+      "n": 0,
+      "vetted": null
+     }
+    }
+   },
+   "d": {
+    "n": 304,
+    "vetted": 0.3618421052631579,
+    "per_sector": {
+     "70": {
+      "n": 304,
+      "vetted": 0.3618421052631579
+     },
+     "106": {
+      "n": 0,
+      "vetted": null
+     }
+    }
+   }
+  },
+  "completeness_note": "v1.0 interim sector-70 injections, scored at each option's S*",
+  "decision": {
+   "gate_tost": {
+    "a": false,
+    "b": false,
+    "c": false,
+    "d": false
+   },
+   "passing": [],
+   "chosen": "b",
+   "reason": "no option passes the TOST gate: b (most conservative) per rule 4; production is not launched",
+   "tied": [],
+   "gate_failed": true,
+   "completeness_diff_ci95": {
+    "a-b": [
+     -0.029605263157894746,
+     -0.003289473684210509
+    ],
+    "a-c": [
+     0.019736842105263164,
+     0.0625
+    ],
+    "a-d": [
+     -0.0789473684210526,
+     -0.029605263157894746
+    ],
+    "b-c": [
+     0.032894736842105254,
+     0.08223684210526316
+    ],
+    "b-d": [
+     -0.05921052631578949,
+     -0.016447368421052655
+    ],
+    "c-d": [
+     -0.125,
+     -0.0625
+    ]
+   },
+   "descriptive": {
+    "ci95_contains_0": {
+     "a": true,
+     "b": true,
+     "c": true,
+     "d": true
+    },
+    "null_peaks_moved_gt1pct": {
+     "a": 0,
+     "b": 6898,
+     "c": 1110,
+     "d": 1174
+    }
+   }
+  },
+  "population": {
+   "n_alpha": 10244,
+   "flipped_tuning_quality": 8156,
+   "scrambled_tuning_quality": 7983,
+   "paired": 7979,
+   "excluded_removed_from_flipped": 173,
+   "flipped_unpaired_not_excluded": 0,
+   "scrambled_unpaired": 0,
+   "guard": {
+    "paired_count": 7983,
+    "flipped_count": 8156,
+    "scrambled_count": 7983,
+    "excluded_count": 285,
+    "excluded_in_paired": 0,
+    "status": "ok"
+   },
+   "paired_before_leak_drop": 7983,
+   "leakage_dropped": [
+    243015498,
+    2052927695,
+    620213822,
+    630275176
+   ]
+  },
+  "s_star_option_b": 13.705599539834662
+ },
+ "n_revet_rebuilt": 326,
+ "runtime_s": 210.06632685661316
+}
