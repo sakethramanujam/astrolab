@@ -1,0 +1,222 @@
+{
+ "pinned_commit": "c572bee4336a2398f5a47cd3031a38582905e30d",
+ "cfg": {
+  "name": "exosearch_v1.1",
+  "beta_option": "b",
+  "beta_option_note": "Set only by the dated registration that applies docs/preregistration/beta_treatment.md (a/b/c/d). Production refuses to start while this is null.",
+  "beta_prior_file": "configs/v1.1_beta_prior.json",
+  "prewhiten": {
+   "fmin_cpd": 5.0,
+   "snr_stop": 4.0,
+   "max_terms": 20,
+   "noise_window_cpd": 2.0,
+   "oversample": 5,
+   "snr_detect": 5.0,
+   "comb_guard": true,
+   "comb_durations_d": [
+    0.0208,
+    0.25
+   ],
+   "comb_multiples": [
+    1,
+    2,
+    3
+   ],
+   "comb_ratio_tol": 2.0,
+   "comb_min_snr": 3.0,
+   "comb_p_range_d": [
+    0.2,
+    5.0
+   ],
+   "comb_phase_tol": 0.15,
+   "comb_max_harmonic_factor": 2.5,
+   "comb_exclusion_width": 2.0,
+   "comb_max_coverage": 0.2,
+   "half_min_snr": 2.0,
+   "half_amp_ratio": 5.0,
+   "half_cos_phase": -0.5
+  },
+  "duration_cap": {
+   "margin": 3.0,
+   "q_max_no_density": 0.1
+  },
+  "refine_top_k": 5,
+  "refine_min_sep_rel": 0.01,
+  "vet": {
+   "odd_even_sigma": 3.0,
+   "odd_even_rel": 0.1,
+   "secondary_sigma": 3.0,
+   "secondary_rel": 0.1
+  },
+  "momentum_dump": {
+   "quality_bit": 32,
+   "window_d": 0.1,
+   "reject_max_epochs": 2
+  },
+  "s_floor_checks": 6.0,
+  "scramble": {
+   "gap_d": 0.5,
+   "gap_trim_d": 0.3,
+   "exclude_hosts_file": {
+    "70": "configs/scramble_exclude_s0070_2026-11-11.csv"
+   }
+  },
+  "validation_pw2": {
+   "snr_stop": 4.0,
+   "max_terms": 20,
+   "noise_window_cpd": 2.0,
+   "fmin_cpd": 0.1,
+   "max_k": 20,
+   "residual_snr_threshold": 4.0,
+   "frequency_file": null,
+   "base_seed": 20261112,
+   "injection_runs": [
+    12,
+    13,
+    14,
+    15
+   ],
+   "part1_min_clean_rate": 0.9,
+   "part2_max_drop": 0.05,
+   "part3_max_drop": 0.02,
+   "min_stars_per_bin": 5,
+   "s_bins": [
+    0.0,
+    10.0,
+    15.0,
+    25.0,
+    50.0,
+    500.0
+   ],
+   "quiet_exclude_pulsators_file": null
+  },
+  "known_planets": {
+   "frozen_eligibility_file": null,
+   "amendment": "docs/preregistration/v1.1_amendment_known_gate_2026-11-12.md",
+   "min_transits": 3,
+   "contamination_diff_tol": 0.2,
+   "alias_ratios": [
+    2.0,
+    0.5
+   ],
+   "detrend_window_d": 0.75,
+   "tolerance": "bls_peak",
+   "period_err_nsigma": 3.0,
+   "alias_recovered": true,
+   "required_types": [
+    "ps"
+   ],
+   "expected_s_scale": 0.66,
+   "expected_s_scale_source": "v1.0.0 injection_v1 products (runs 0 and 1): median S_obs / S_exp of period-matched injections"
+  }
+ },
+ "cfg_inj": {
+  "name": "injection_v1.1",
+  "spec": "injection_v1 (Scientist spec, 2026-11-10) re-run with the v1.1 code: same hosts, seeds and draws, plus the registered wrong-density subset (docs/v1.1_plan.md)",
+  "seed": 70106,
+  "sectors": [
+   70,
+   106
+  ],
+  "runs": {
+   "70": [
+    0,
+    1
+   ],
+   "106": [
+    0
+   ]
+  },
+  "hosts_per_sector": 4000,
+  "strata": {
+   "tmag_edges": [
+    0,
+    9,
+    10.5,
+    12,
+    13.5,
+    20
+   ],
+   "rstar_edges": [
+    0,
+    0.7,
+    1.2,
+    2.0,
+    100
+   ]
+  },
+  "exclude": [
+   "toi_hosts",
+   "tess_eb_catalog"
+  ],
+  "draws": {
+   "period": [
+    "loguniform",
+    0.5,
+    "half_baseline"
+   ],
+   "rp_earth": [
+    "loguniform",
+    0.5,
+    20.0
+   ],
+   "b": [
+    "uniform",
+    0.0,
+    1.0
+   ],
+   "ecc": 0.0,
+   "t0": "uniform within one period of the data start"
+  },
+  "model": {
+   "code": "batman",
+   "limb_darkening": "quadratic, Claret 2017 TESS at TIC Teff/logg",
+   "supersample": 1
+  },
+  "recovery": {
+   "period_tol": 0.01,
+   "t0_tol_durations": 0.5,
+   "aliases": [
+    2,
+    0.5,
+    3,
+    0.3333333333
+   ]
+  },
+  "inject_into": "normalised PDCSAP flux, all cadences, before quality masking, prewhitening and detrending",
+  "wrong_density": {
+   "fraction": 0.25,
+   "classes": [
+    "binary",
+    "subgiant",
+    "spread"
+   ],
+   "binary_radius_inflation": [
+    1.05,
+    1.41421356
+   ],
+   "subgiant_density_factor": [
+    3.0,
+    10.0
+   ],
+   "loguniform_density_factor": [
+    0.01,
+    100.0
+   ],
+   "note": "transit drawn from the true density (a/R* scales as rho^(1/3)); the search caps durations with the TIC density. Seed: sha256('v1.1-density:<sector>:<run>:<tic>')."
+  }
+ },
+ "weights": [
+  [
+   "h1",
+   1.0
+  ]
+ ],
+ "created": "2026-11-12T18:16:39-0800",
+ "hosts": {
+  "h1": {
+   "stars": 12746,
+   "tasks": 69922
+  }
+ }
+}

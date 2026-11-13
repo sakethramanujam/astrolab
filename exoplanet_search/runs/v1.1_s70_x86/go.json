@@ -1,0 +1,36 @@
+{
+ "pinned_commit": "c572bee4336a2398f5a47cd3031a38582905e30d",
+ "beta_option": "b",
+ "s_star": 13.71,
+ "s_star_record": "exoplanet_search/docs/preregistration/sstar_v1.1_s70_2026-11-12_amended_vetter (3a1db81)",
+ "vetter": "amended, rules a-d (e2379bd), applied post-search by exosearch.v11.vet_amend",
+ "known_planet_freeze_commit": "c572bee4336a2398f5a47cd3031a38582905e30d",
+ "known_planet_freeze": "exoplanet_search/docs/preregistration/v1.1_known_planets_s70_2026-11-12_s13.71",
+ "searchpath_hash": "fb958a4e3287588b376c6f57c752c0e130ffb9d3d581840e476a165c7e23ae07",
+ "sectors": [
+  70
+ ],
+ "workers": {
+  "h1": 10
+ },
+ "weights": "h1:1.0",
+ "order": [
+  "known (51 hosts of the 19 required confirmed planets and 32 eligible TOIs, run first)",
+  "rest"
+ ],
+ "manifests": {
+  "known": "exoplanet_search/runs/v1.1_s70_x86/known_h1.jsonl.gz",
+  "rest": "exoplanet_search/runs/v1.1_s70_x86/rest_h1.jsonl.gz"
+ },
+ "manifest_sha256": {
+  "known_h1.jsonl.gz": "750079bbd269fab4d065eb524c3a442b61769b834abf6cb5e54d4592dcacb0b0",
+  "rest_h1.jsonl.gz": "b99e35b7e33aac99de36967aa4aded78769a243c5aad07f0f9b78301f951f079"
+ },
+ "tasks": {
+  "known": 102,
+  "rest": 69922,
+  "total": 70024
+ },
+ "status": "UNVALIDATED: the sector 72 gate (last attempt on the amended vetter) failed 28/30 (ecd2bc0); run on Saketh's go of 2026-11-12 17:40 PT",
+ "note": "S70 only, x86 only (h1), no arm64 rows carried over; nice 19, 10 workers, thermal guard pause 90 C / resume 80 C. Gate: every required planet in the 13.71 freeze recovered."
+}
