@@ -1,39 +1,70 @@
 # S70 x86 production scoring (UNVALIDATED run). ONE verdict for every row, real / null / inject alike
-# (exosearch.vet_final.final_verdict = vet_amend.amended() + common_period + checks_logged; no re-vetting
-# pass and no light-curve rebuilds, so deep 'secondary_scan' rows get status 'needs_lc' and are bracketed:
-# lower bound counts them as rejected, upper bound as exempted). Known-planet gate at 13.71 (frozen list),
-# flipped-null check on known hosts, null counts above S*, candidates above S*, injection recovery scored
-# with the same verdict. Writes report/ only; commits nothing.
+# (exosearch.vet_final.final_verdict = vet_amend.amended() + common_period + checks_logged). For real and
+# null rows with deep 'secondary_scan', scan is rebuilt via vet_amend.rebuild_flat -> scan_depth ->
+# loo_scan_min (exactly as vet_amend.revet_one does) and passed to final_verdict; injection secondary_scan
+# rows stay bracketed ('needs_lc': lower bound rejected, upper bound exempted) for now. Known-planet gate at
+# 13.71 (frozen list), flipped-null check on known hosts, null counts above S*, candidates above S*,
+# injection recovery scored with the same verdict. Writes report/ only; commits nothing.
 import gzip, json, os, pandas as pd
-from exosearch.v11 import run, known_planets as kp
+from exosearch.v11 import run, vet_amend, known_planets as kp
 from exosearch import vet, vet_final
 P='/tmp/s70-v11-prod-x86-2026-11-12/'; R=P+'report/'; S=13.71
 FROZEN='docs/preregistration/v1.1_known_planets_s70_2026-11-12_s13.71/frozen_eligibility_s70_s13.71.csv'
 
 
 # ------------------------------------------------- the one verdict path (all modes)
-def row_verdict(row, jobs=None, *, fail_common_period=None, scan=None, needs_lc='reject'):
-    """final verdict for one row of ANY mode: vet_amend.amended() + common_period + checks_logged.
-    jobs: manifest jobs by TIC (only the TIC density rho is used; no light curve is ever rebuilt)."""
+def rebuild_scan(row, job=None, cfg=None):
+    """Compute the rebuilt-light-curve secondary scan for a real or null secondary_scan row,
+    exactly as vet_amend.revet_one does (rebuild_flat -> scan_depth -> loo_scan_min, reusing
+    the existing vet_amend helpers)."""
+    if 'secondary_scan' not in vet_amend._set(row.get('deep_flags')):
+        return None
+    if str(row.get('mode')) == 'inject':
+        # TODO: injection secondary_scan rows can be rebuilt deterministically from the seed via
+        # exosearch.v11.pipeline.inject_one and then scored with vet_amend.scan_depth +
+        # vet_amend.loo_scan_min; kept bracketed ('needs_lc') for now.
+        return None
+    t, f, e = vet_amend.rebuild_flat(dict(job or {}, cfg=cfg), row)
+    P, t0 = float(row['P_grid']), float(row['t0'])
+    scan = vet_amend.scan_depth(t, f, e, P, t0)
+    vet_final.check_scan_sigma(row, scan)
+    scan.update(vet_amend.loo_scan_min(t, f, e, P, t0, scan['t0_fine']))
+    return scan
+
+
+def row_verdict(row, jobs=None, cfg=None, *, fail_common_period=None, scan=None, needs_lc='reject'):
+    """Final verdict for one row of ANY mode: vet_amend.amended() + common_period + checks_logged.
+    jobs: manifest jobs by TIC (rho feeds a/R*; scan is the rebuilt secondary-scan dict when supplied)."""
     j = (jobs or {}).get(int(row['tic'])) or {}
     return vet_final.final_verdict(row, common_period=fail_common_period, checks_logged=row.get('checks_logged'),
                                    rho=j.get('rho'), scan=scan, needs_lc=needs_lc)
 
 
-def real_path(row, **kw):
-    """Verdict path for real rows (same function as every other mode)."""
-    return row_verdict(row, **kw)
+def real_path(row, jobs=None, cfg=None, *, scan=None, **kw):
+    """Verdict path for real rows: always rebuilds secondary_scan light curves via rebuild_scan when
+    scan is not already supplied, then passes scan to row_verdict -> vet_final.final_verdict."""
+    if scan is None and 'secondary_scan' in vet_amend._set(row.get('deep_flags')):
+        j = (jobs or {}).get(int(row['tic'])) or {}
+        scan = rebuild_scan(dict(row, mode='real'), j, cfg)
+    return row_verdict(row, jobs=jobs, cfg=cfg, scan=scan, **kw)
 
 
-def null_path(row, **kw):
-    """Verdict path for null rows (invert / scramble; same function as every other mode)."""
-    return row_verdict(row, **kw)
+def null_path(row, jobs=None, cfg=None, *, scan=None, **kw):
+    """Verdict path for null rows (invert / scramble): always rebuilds secondary_scan light curves via
+    rebuild_scan when scan is not already supplied, then passes scan to row_verdict -> vet_final.final_verdict."""
+    if scan is None and 'secondary_scan' in vet_amend._set(row.get('deep_flags')):
+        j = (jobs or {}).get(int(row['tic'])) or {}
+        mode = row.get('mode') if str(row.get('mode')) in ('invert', 'scramble') else 'invert'
+        scan = rebuild_scan(dict(row, mode=mode), j, cfg)
+    return row_verdict(row, jobs=jobs, cfg=cfg, scan=scan, **kw)
 
 
-def inject_path(row, **kw):
+def inject_path(row, jobs=None, cfg=None, *, scan=None, **kw):
     """Verdict path for injection rows (same function as every other mode; no inject skip, no
-    search-time passed_lc_checks any more)."""
-    return row_verdict(row, **kw)
+    search-time passed_lc_checks any more).
+    TODO: injection secondary_scan rows can be rebuilt exactly from the seed via
+    exosearch.v11.pipeline.inject_one; kept bracketed ('needs_lc') for now when scan is not supplied."""
+    return row_verdict(row, jobs=jobs, cfg=cfg, scan=scan, **kw)
 
 
 PATH_FOR_MODE = {'real': real_path, 'invert': null_path, 'scramble': null_path, 'inject': inject_path}
@@ -67,25 +98,46 @@ def main():
     rows = pd.concat([run.load_rows(P + 'rows_known'), run.load_rows(P + 'rows_rest')], ignore_index=True)
     summ = dict(n_rows=int(len(rows)), n_ok=int((rows.status == 'ok').sum()), by_task=rows.task.value_counts().to_dict())
     ok = rows[rows.status == 'ok']
-    # amended fields for every ok row (all modes; final_verdict_row never rebuilds a light curve).
-    # The per-row verdict fields of this first pass are placeholders: the common-period term is only
-    # known after the group flagging below, so they are dropped and re-attached there.
-    v = pd.DataFrame([{k: x for k, x in vet_final.final_verdict_row(
-                          r, checks_logged=r.get('checks_logged'), rho=(jobs.get(int(r['tic'])) or {}).get('rho')).items()
-                       if k not in vet_final.VERDICT_KEYS} for r in ok.to_dict('records')])
-    v = flag_common_periods_by_task(v)
+    # Amended fields for every ok row: real and null secondary_scan rows get the rebuilt scan
+    # (rebuild_flat -> scan_depth -> loo_scan_min, as vet_amend.revet_one does); injection rows stay
+    # bracketed (needs_lc) for now (TODO: rebuild from seed via pipeline.inject_one).  The per-row
+    # verdict fields of this first pass are placeholders: the common-period term is only known after
+    # the group flagging below, so they are dropped and re-attached there.
+    scans = {}
+    v_recs = []
+    for idx, r in enumerate(ok.to_dict('records')):
+        j = (jobs.get(int(r['tic'])) or {})
+        sc = rebuild_scan(r, j, cfg)
+        scans[idx] = sc
+        d = {k: x for k, x in vet_final.final_verdict_row(
+                 r, checks_logged=r.get('checks_logged'), rho=j.get('rho'), scan=sc).items()
+             if k not in vet_final.VERDICT_KEYS}
+        d['_idx'] = idx
+        v_recs.append(d)
+    v = flag_common_periods_by_task(pd.DataFrame(v_recs))
     # final verdict columns: lower bound (needs_lc rejected) and upper bound (needs_lc exempted)
     lo, hi = [], []
     for r in v.to_dict('records'):
-        kw = dict(jobs=jobs, fail_common_period=r['fail_common_period'])
+        sc = scans[int(r['_idx'])]
+        kw = dict(jobs=jobs, cfg=cfg, fail_common_period=r['fail_common_period'], scan=sc)
         a = path_for(r)(r, **kw)
         b = path_for(r)(r, needs_lc='exempt', **kw)
         lo.append(dict(passed_final=a.passed, first_failing_rule=a.first_failing_rule,
                        all_failing=','.join(a.all_failing), status_final=a.status))
         hi.append(dict(passed_upper=b.passed, all_failing_upper=','.join(b.all_failing)))
-    v = pd.concat([v, pd.DataFrame(lo), pd.DataFrame(hi)], axis=1)
+    v = pd.concat([v.drop(columns=['_idx']), pd.DataFrame(lo), pd.DataFrame(hi)], axis=1)
     v['vetted_v2'] = v.passed_final.astype(bool) & (v.status_final == vet_final.STATUS_OK)
     v['vetted_v2_upper'] = v.passed_upper.astype(bool)
+    nlc = v.status_final == vet_final.STATUS_NEEDS_LC
+    null_m = v['mode'].isin(['invert', 'scramble'])
+    summ['needs_lc'] = dict(
+        real=int((nlc & (v['mode'] == 'real')).sum()),
+        null=int((nlc & null_m).sum()),
+        inject=int((nlc & (v['mode'] == 'inject')).sum()),
+        invert=int((nlc & (v['mode'] == 'invert')).sum()),
+        scramble=int((nlc & (v['mode'] == 'scramble')).sum()),
+        total=int(nlc.sum()),
+    )
     v.to_parquet(R + 'rows_v2.parquet')
     real = v[v['mode'] == 'real'].drop(columns=['passed_lc_checks_v2']).rename(columns={'vetted_v2': 'passed_lc_checks_v2'})
     real.to_parquet(R + 'real_v2.parquet')
