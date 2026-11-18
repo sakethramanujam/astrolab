@@ -21,6 +21,14 @@ the rules are decided on it and the rebuilt sigma must reproduce the row's logge
 bracket those rows: count them as rejected in the lower bound (needs_lc="reject", the default) and exempt
 them in the upper bound (needs_lc="exempt", which drops only the 'secondary_scan' rejection; every other
 rule still applies).
+
+The too_deep depth screen is a setting, `cfg["vet"]["too_deep"]` (see vet.too_deep_cfg):
+    mode       'cut' (default) | 'flag' | 'off'
+    max_depth  0.05 (default; the v1.1 5% cap)
+Defaults reproduce v1.1 exactly (depth > 0.05 rejects, strict: equality is kept).  This verdict
+re-evaluates the screen from the row's `depth`, so it is authoritative over the stored (search-time)
+too_deep flag: 'cut' rejects when above the threshold, 'flag' records it in `too_deep_v2` without
+rejecting (it never enters reject_v2 / all_failing), and 'off' does not apply the screen at all.
 """
 from __future__ import annotations
 
@@ -58,6 +66,11 @@ __all__ = [
     "gap_edges",
     "odd_even_transit_mask",
     "masked_odd_even",
+    "TOO_DEEP",
+    "TOO_DEEP_MODES",
+    "DEFAULT_TOO_DEEP",
+    "too_deep_cfg",
+    "too_deep",
 ]
 
 COMMON_PERIOD = "common_period"          # vet.flag_common_periods group flag
@@ -90,6 +103,16 @@ odd_even_mask_enabled = vet11.odd_even_mask_enabled
 gap_edges = vet11.gap_edges
 odd_even_transit_mask = vet11.odd_even_transit_mask
 masked_odd_even = vet11.masked_odd_even
+
+# --- v1.2 step 5c: the too_deep depth screen as a setting (vet.too_deep; default 'cut' + 0.05 = v1.1) ---
+# The final verdict is the authority: the stored too_deep flag is removed and the screen is re-evaluated
+# from the row's `depth` with the current setting, so a rescore may change mode or max_depth.  'flag'
+# records the result in the *_v2 fields without rejecting; 'off' neither rejects nor applies the screen.
+TOO_DEEP = vet.TOO_DEEP
+TOO_DEEP_MODES = vet.TOO_DEEP_MODES
+DEFAULT_TOO_DEEP = dict(vet.DEFAULT_TOO_DEEP)
+too_deep_cfg = vet.too_deep_cfg
+too_deep = vet.too_deep
 
 
 class Verdict(tuple):
@@ -342,10 +365,24 @@ def final_verdict_row(
     the stored unmasked `odd_even` flag is never used as a fallback. If `lc` (and `odd_even`) is missing
     when the mask is on, `status_final` is `STATUS_NEEDS_LC` (`needs_lc="reject"` fails with
     `ODD_EVEN_NEEDS_LC`; `needs_lc="raise"` raises `ValueError`).
+
+    too_deep follows `cfg["vet"]["too_deep"]` (see `vet.too_deep_cfg`) and is re-evaluated from the
+    row's `depth`: the stored flag is dropped first, then in mode 'cut' the screen rejects only when
+    the row carries the search-time screen products (`passed_screens`) or the stored flag (a synthetic
+    row that was never screened keeps its v1.1 verdict).  'flag' records `too_deep_v2` without
+    rejecting; 'off' does not apply the screen.  The output fields `too_deep_v2`,
+    `too_deep_reject_v2`, `too_deep_mode_v2` and `too_deep_max_depth_v2` record the decision.
     """
     if needs_lc not in ("reject", "exempt", "raise"):
         raise ValueError(f"needs_lc must be 'reject', 'exempt' or 'raise', got {needs_lc!r}")
-    flags = _set(row.get("flags")) - {COMMON_PERIOD}
+    # too_deep is re-evaluated from the row's depth with the current setting (the stored flag is not the
+    # last word); removing it here lets 'flag' / 'off' rescore rows that were stored with the v1.1 flag.
+    # The screen is 'applied' to a row that carries the search-time screen products (passed_screens) or
+    # the stored flag: a synthetic row that was never screened keeps its v1.1 verdict.
+    stored_too_deep = TOO_DEEP in _set(row.get("flags"))
+    too_deep_applied = bool(stored_too_deep or "passed_screens" in row)
+    td = vet.too_deep(row.get("depth"), cfg)
+    flags = _set(row.get("flags")) - {COMMON_PERIOD, TOO_DEEP}
     mask_on = odd_even_mask_enabled(cfg, odd_even_mask) or (odd_even is not None)
     oe_res = odd_even
     oe_nlc = False
@@ -374,6 +411,8 @@ def final_verdict_row(
                 )
 
     row_eff = dict(row, flags=",".join(sorted(flags)))
+    if td["reject"] and too_deep_applied:
+        row_eff["flags"] = ",".join(sorted(flags | {TOO_DEEP}))   # mode 'cut': amended() rejects it
     if scan is not None and "secondary_scan" in _set(row.get("deep_flags")):
         check_scan_sigma(row, scan)             # revet_one's check: the scan must be the row's own
     sec_nlc = scan is None and "secondary_scan" in _set(row.get("deep_flags"))
@@ -422,7 +461,11 @@ def final_verdict_row(
                all_failing=",".join(all_failing),
                status_final=status,
                fail_common_period_final=cp,
-               checks_logged_final=cl)
+               checks_logged_final=cl,
+               too_deep_v2=td["flagged"],
+               too_deep_reject_v2=bool(td["reject"] and too_deep_applied),
+               too_deep_mode_v2=td["mode"],
+               too_deep_max_depth_v2=td["max_depth"])
     return out
 
 

@@ -984,3 +984,155 @@ def test_load_manifest_jobs_attaches_header_cfg_inj(tmp_path):
     # without the attach, the inject rebuild would return None at the cfg_inj guard
     bare = {k: v for k, v in jobs[11].items() if k != "cfg_inj"}
     assert fin._rebuild_inject_flat(row(mode="inject", task="inject_run0", seed=7), bare) is None
+
+
+# ------------------------------------------------------------------------------------------------
+# v1.2 step 5c: the too_deep depth screen as a setting (vet.too_deep; default 'cut' + 0.05 = v1.1)
+# ------------------------------------------------------------------------------------------------
+def _cfg_too_deep(mode="cut", max_depth=None):
+    from exosearch.v11 import settings
+    c = settings.cfg()
+    td = {"mode": mode}
+    if max_depth is not None:
+        td["max_depth"] = max_depth
+    c["vet"] = dict(c["vet"], too_deep=td)
+    return c
+
+
+def _cfg_without_too_deep():
+    from exosearch.v11 import settings
+    c = settings.cfg()
+    c["vet"] = {k: v for k, v in c["vet"].items() if k != "too_deep"}
+    return c
+
+
+def test_too_deep_default_cut_and_missing_keys_reproduce_v11():
+    """Default / 'cut' / absent keys: depth > 0.05 fails with too_deep, equality (0.05) and below pass."""
+    cfgs = (None, {}, {"vet": {}}, json_cfg_vet(), _cfg_without_too_deep())
+    # passed_screens marks a row that went through the search-time screens (as every stored v1.1 row did)
+    over, boundary, under = row(depth=0.06, passed_screens=1), row(depth=0.05, passed_screens=1), row(depth=0.04, passed_screens=1)
+    for cfg in cfgs:
+        v = vf.final_verdict(over, cfg=cfg)
+        assert not v.passed and v.all_failing == [vf.TOO_DEEP] and v.first_failing_rule == vf.TOO_DEEP
+        assert vf.final_verdict(boundary, cfg=cfg).passed
+        assert vf.final_verdict(under, cfg=cfg).passed
+        d = vf.final_verdict_row(over, cfg=cfg)
+        assert d["reject_v2"] == vf.TOO_DEEP and d["too_deep_v2"] is True
+        assert d["too_deep_reject_v2"] is True and d["too_deep_mode_v2"] == "cut"
+        assert d["too_deep_max_depth_v2"] == 0.05
+    # v1.1 reference: amended() with the stored search-time flag, and the exact-equality row kept
+    head_over = va.amended(row(depth=0.06, flags=vf.TOO_DEEP))
+    head_boundary = va.amended(row(depth=0.05))
+    assert head_over["reject_v2"] == vf.TOO_DEEP and head_boundary["reject_v2"] == ""
+    assert vf.final_verdict_row(over, cfg=json_cfg_vet())["reject_v2"] == head_over["reject_v2"]
+    assert vf.final_verdict_row(boundary, cfg=json_cfg_vet())["reject_v2"] == head_boundary["reject_v2"]
+    # re-evaluated from the row depth: a stored too_deep flag is not a rejection when depth <= threshold
+    for cfg in cfgs:
+        assert vf.final_verdict(row(depth=0.05, flags=vf.TOO_DEEP), cfg=cfg).passed
+        assert vf.final_verdict(row(depth=0.04, flags=vf.TOO_DEEP), cfg=cfg).passed
+        assert vf.TOO_DEEP not in vf.final_verdict_row(row(depth=0.04, flags=vf.TOO_DEEP), cfg=cfg)["reject_v2"]
+    # a synthetic row that never went through the screens (no passed_screens, no stored flag) is not
+    # retro-rejected: v1.1 had no rejection there either, so the v1.1 verdict is reproduced exactly.
+    assert vf.final_verdict(row(depth=0.06)).passed
+
+
+def test_too_deep_flag_records_without_rejecting():
+    """'flag': evaluated and recorded (too_deep_v2), but never in reject_v2 / all_failing; row can pass."""
+    cfg = _cfg_too_deep("flag")
+    r = row(depth=0.06, passed_screens=1)
+    v = vf.final_verdict(r, cfg=cfg)
+    assert v.passed and v.all_failing == []
+    d = vf.final_verdict_row(r, cfg=cfg)
+    assert d["too_deep_v2"] is True and d["too_deep_reject_v2"] is False
+    assert d["too_deep_mode_v2"] == "flag"
+    assert vf.TOO_DEEP not in vf._set(d["reject_v2"])
+    assert d["passed_lc_checks_v2"] is True and d["passed_final"] is True
+    # a stored v1.1 flag is not a rejection in flag mode; other failing rules still apply
+    assert vf.final_verdict(row(depth=0.06, flags=vf.TOO_DEEP), cfg=cfg).passed
+    v = vf.final_verdict(row(depth=0.06, flags="too_deep,v_shape"), cfg=cfg)
+    assert not v.passed and v.all_failing == ["v_shape"]
+    # below the threshold the flag is not recorded
+    assert vf.final_verdict_row(row(depth=0.05, passed_screens=1), cfg=cfg)["too_deep_v2"] is False
+
+
+def test_too_deep_off_not_applied():
+    """'off': a too-deep row is not a rejection and a stored too_deep flag is not a rejection either."""
+    cfg = _cfg_too_deep("off")
+    for depth in (0.06, 0.5):
+        for flags in ("", vf.TOO_DEEP):
+            v = vf.final_verdict(row(depth=depth, flags=flags, passed_screens=1), cfg=cfg)
+            assert v.passed and v.all_failing == []
+            d = vf.final_verdict_row(row(depth=depth, flags=flags, passed_screens=1), cfg=cfg)
+            assert d["too_deep_mode_v2"] == "off" and d["too_deep_v2"] is False
+            assert d["too_deep_reject_v2"] is False
+            assert vf.TOO_DEEP not in vf._set(d["reject_v2"])
+    # other rules are unchanged when the screen is off
+    v = vf.final_verdict(row(depth=0.06, flags="too_deep,v_shape"), cfg=cfg)
+    assert v.all_failing == ["v_shape"]
+
+
+def test_too_deep_threshold_setting():
+    """max_depth is a setting; the comparison stays strict and 'flag' uses the same threshold."""
+    r10 = row(depth=0.10, passed_screens=1)
+    assert vf.final_verdict(r10, cfg=_cfg_too_deep("cut", 0.20)).passed
+    assert vf.final_verdict(r10, cfg=_cfg_too_deep("cut", 0.05)).all_failing == [vf.TOO_DEEP]
+    # equality is kept at any threshold; strictly greater rejects
+    assert vf.final_verdict(row(depth=0.20, passed_screens=1), cfg=_cfg_too_deep("cut", 0.20)).passed
+    assert vf.final_verdict(row(depth=0.201, passed_screens=1), cfg=_cfg_too_deep("cut", 0.20)).all_failing == [vf.TOO_DEEP]
+    d20 = vf.final_verdict_row(r10, cfg=_cfg_too_deep("flag", 0.20))
+    assert d20["too_deep_v2"] is False and d20["too_deep_max_depth_v2"] == 0.20 and d20["passed_final"] is True
+    d05 = vf.final_verdict_row(r10, cfg=_cfg_too_deep("flag", 0.05))
+    assert d05["too_deep_v2"] is True and d05["passed_final"] is True
+    # the config file's keys drive the same behaviour
+    cfg = json_cfg_vet()
+    cfg["vet"]["too_deep"].update(mode="cut", max_depth=0.20)
+    assert vf.final_verdict(r10, cfg=cfg).passed
+    cfg["vet"]["too_deep"].update(mode="cut", max_depth=0.05)
+    assert vf.final_verdict(r10, cfg=cfg).all_failing == [vf.TOO_DEEP]
+
+
+def test_too_deep_real_null_inject_paths_agree():
+    """The setting is applied in one place, so real, null and injection rows get the same verdict."""
+    configs = (_cfg_too_deep("cut", 0.05), _cfg_too_deep("flag", 0.05),
+               _cfg_too_deep("off", 0.05), _cfg_too_deep("cut", 0.20))
+    for cfg in configs:
+        for depth, flags in ((0.06, ""), (0.06, vf.TOO_DEEP), (0.10, ""), (0.04, vf.TOO_DEEP)):
+            r = row(depth=depth, flags=flags, passed_screens=1)
+            verdicts = [p(dict(r, mode=m), cfg=cfg) for p, m in zip(PATHS, ("real", "invert", "inject"))]
+            assert verdicts[0] == verdicts[1] == verdicts[2]
+            assert verdicts[0] == vf.final_verdict(r, cfg=cfg)
+
+
+def test_too_deep_config_keys_defaults_and_validation():
+    td = json_cfg_vet()["vet"]["too_deep"]
+    assert td == {"mode": "cut", "max_depth": 0.05}
+    assert vf.DEFAULT_TOO_DEEP == {"mode": "cut", "max_depth": 0.05}
+    assert vf.TOO_DEEP_MODES == ("cut", "flag", "off")
+    assert vf.too_deep_cfg(None) == vf.too_deep_cfg({}) == {"mode": "cut", "max_depth": 0.05}
+    assert vf.too_deep_cfg({"vet": {}}) == {"mode": "cut", "max_depth": 0.05}
+    assert vf.too_deep_cfg({"vet": {"too_deep": {"mode": "FLAG", "max_depth": 0.2}}}) == \
+        {"mode": "flag", "max_depth": 0.2}
+    assert vf.too_deep_cfg(None, "off")["mode"] == "off"
+    assert vf.too_deep(0.05)["flagged"] is False and vf.too_deep(0.05 + 1e-12)["flagged"] is True
+    assert vf.too_deep(0.06, too_deep="flag")["flagged"] is True
+    assert vf.too_deep(0.06, too_deep="flag")["reject"] is False
+    assert vf.too_deep(0.06, too_deep="off")["flagged"] is False
+    assert vf.too_deep(0.06, too_deep="off")["reject"] is False
+    for bad in ({"mode": "bogus"}, {"max_depth": -0.1}, {"max_depth": float("nan")}):
+        with pytest.raises(ValueError):
+            vf.too_deep_cfg({"vet": {"too_deep": bad}})
+
+
+def test_too_deep_search_time_screens_follow_the_same_setting():
+    """vet11.screens reads the same helper: cut flags, flag warns/records, off does neither."""
+    from exosearch.v11 import settings, vet11
+    st = dict(depth=(0.06, 0.001), depth_odd=(0.06, 0.001), depth_even=(0.06, 0.001),
+              depth_phased=(0.0, 0.001), per_transit_count=np.array([1, 1, 1]))
+    best = dict(depth_exact=0.06, P_grid=3.0, duration=0.1, t0=0.5, n_dump_epochs=0, n_epochs=3)
+    base = settings.cfg()
+    for mode, in_flags, in_warns in (("cut", True, False), ("flag", False, True), ("off", False, False)):
+        cfg = dict(base, vet=dict(base["vet"], too_deep={"mode": mode, "max_depth": 0.05}))
+        out = vet11.screens(st, best, {"radius": 1.0}, cfg)
+        assert (vf.TOO_DEEP in out["flags"].split(",")) is in_flags
+        assert (vf.TOO_DEEP in out["warnings"].split(",")) is in_warns
+        assert (vf.TOO_DEEP in vf.final_verdict(row(depth=0.06, passed_screens=1), cfg=cfg).all_failing) is in_flags

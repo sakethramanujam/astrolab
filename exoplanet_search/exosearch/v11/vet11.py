@@ -548,8 +548,11 @@ def screens(st, best, meta, cfg, lc=None, dumps=None):
             flags.append("odd_even")
     if sec_sig > v["secondary_sigma"] and sec_rel > v["secondary_rel"]:
         flags.append("secondary")
-    if depth > th["max_depth"]:
-        flags.append("too_deep")
+    td = vet10.too_deep(depth, cfg)
+    if td["mode"] == "cut" and td["flagged"]:
+        flags.append(vet10.TOO_DEEP)
+    elif td["mode"] == "flag" and td["flagged"]:
+        warns.append(vet10.TOO_DEEP)          # recorded, not a screen rejection (vet_final is authoritative)
     if dur_ratio == dur_ratio and dur_ratio > th["max_dur_ratio"]:
         flags.append("too_long")
     if sec_sig < -th["variable_sigma"]:

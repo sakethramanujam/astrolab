@@ -58,6 +58,10 @@
       "enabled": false,
       "cap_rearth": 30.0,
       "cap_rearth_candidates": [22, 25, 30]
+    },
+    "too_deep": {
+      "mode": "cut",
+      "max_depth": 0.05
     }
   },
   "momentum_dump": {
