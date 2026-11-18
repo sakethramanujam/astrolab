@@ -29,17 +29,45 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 from . import vet
-from .v11 import vet_amend
+from .v11 import vet11, vet_amend
 
-__all__ = ["Verdict", "final_verdict", "final_verdict_row", "check_scan_sigma", "COMMON_PERIOD",
-           "CHECKS_NOT_LOGGED", "STATUS_OK", "STATUS_NEEDS_LC", "VERDICT_KEYS"]
+__all__ = [
+    "Verdict",
+    "final_verdict",
+    "final_verdict_row",
+    "check_scan_sigma",
+    "COMMON_PERIOD",
+    "CHECKS_NOT_LOGGED",
+    "ODD_EVEN",
+    "ODD_EVEN_TOO_FEW",
+    "ODD_EVEN_NEEDS_LC",
+    "STATUS_OK",
+    "STATUS_NEEDS_LC",
+    "VERDICT_KEYS",
+    "odd_even_mask_cfg",
+    "odd_even_mask_enabled",
+    "gap_edges",
+    "odd_even_transit_mask",
+    "masked_odd_even",
+]
 
 COMMON_PERIOD = "common_period"          # vet.flag_common_periods group flag
 CHECKS_NOT_LOGGED = "checks_not_logged"  # row['checks_logged'] false: deep checks were never run
+ODD_EVEN = vet11.ODD_EVEN
+# Distinct flag when < 2 odd or < 2 even transits remain after the odd-even transit mask.
+# Does not pass light-curve checks, and is not counted as an `odd_even` depth-comparison failure.
+ODD_EVEN_TOO_FEW = vet11.ODD_EVEN_TOO_FEW
+ODD_EVEN_NEEDS_LC = "odd_even_needs_lc"  # mask is enabled but no light curve was supplied
 STATUS_OK = "ok"
 STATUS_NEEDS_LC = "needs_lc"
 VERDICT_KEYS = ("passed_final", "first_failing_rule", "all_failing", "status_final",
                 "fail_common_period_final", "checks_logged_final")
+
+odd_even_mask_cfg = vet11.odd_even_mask_cfg
+odd_even_mask_enabled = vet11.odd_even_mask_enabled
+gap_edges = vet11.gap_edges
+odd_even_transit_mask = vet11.odd_even_transit_mask
+masked_odd_even = vet11.masked_odd_even
 
 
 class Verdict(tuple):
@@ -98,9 +126,46 @@ def checks_logged_of(row: Dict[str, Any], checks_logged: Optional[Any] = None) -
     return _bool(row.get("checks_logged"))
 
 
-def needs_lc_row(row: Dict[str, Any], scan: Optional[Dict[str, float]] = None) -> bool:
-    """True when amended() would need the rebuilt light curve (deep 'secondary_scan', scan not given)."""
-    return scan is None and "secondary_scan" in _set(row.get("deep_flags"))
+def _unpack_lc(lc: Any, dumps: Optional[Any] = None):
+    if isinstance(lc, dict):
+        if "binned" in lc:
+            t, f, e = lc["binned"]
+        elif "t" in lc:
+            t, f, e = lc["t"], lc["f"], lc["e"]
+        elif "flat" in lc:
+            t, f, e = lc["flat"]
+        else:
+            raise ValueError("lc dict must contain ('t', 'f', 'e') or 'binned' or 'flat'")
+        d = dumps if dumps is not None else lc.get("dumps")
+        ge = lc.get("gap_edges")
+        return t, f, e, d, ge
+    if isinstance(lc, (tuple, list)):
+        if len(lc) == 3:
+            t, f, e = lc
+            return t, f, e, dumps, None
+        if len(lc) == 4:
+            t, f, e, d_lc = lc
+            return t, f, e, (dumps if dumps is not None else d_lc), None
+        if len(lc) >= 5:
+            t, f, e, d_lc, ge = lc[:5]
+            return t, f, e, (dumps if dumps is not None else d_lc), ge
+    raise ValueError("lc must be (t, f, e[, dumps[, gap_edges]]) or a dict")
+
+
+def needs_lc_row(
+    row: Dict[str, Any],
+    scan: Optional[Dict[str, float]] = None,
+    *,
+    cfg: Optional[Dict[str, Any]] = None,
+    lc: Optional[Any] = None,
+    odd_even: Optional[Dict[str, Any]] = None,
+    odd_even_mask: Optional[Any] = None,
+) -> bool:
+    """True when the verdict needs a light curve that was not supplied (deep 'secondary_scan' without
+    `scan`, or the v1.2 odd-even transit mask enabled without `lc` or `odd_even`)."""
+    sec_nlc = scan is None and "secondary_scan" in _set(row.get("deep_flags"))
+    oe_nlc = odd_even_mask_enabled(cfg, odd_even_mask) and lc is None and odd_even is None
+    return bool(sec_nlc or oe_nlc)
 
 
 def check_scan_sigma(row: Dict[str, Any], scan: Dict[str, float]) -> None:
@@ -115,9 +180,20 @@ def check_scan_sigma(row: Dict[str, Any], scan: Dict[str, float]) -> None:
                            f"{row.get('sec_scan_sigma')}")
 
 
-def final_verdict_row(row: Dict[str, Any], *, common_period: Optional[Any] = None,
-                      checks_logged: Optional[Any] = None, rho: Optional[float] = None,
-                      scan: Optional[Dict[str, float]] = None, needs_lc: str = "reject") -> Dict[str, Any]:
+def final_verdict_row(
+    row: Dict[str, Any],
+    *,
+    common_period: Optional[Any] = None,
+    checks_logged: Optional[Any] = None,
+    rho: Optional[float] = None,
+    scan: Optional[Dict[str, float]] = None,
+    needs_lc: str = "reject",
+    cfg: Optional[Dict[str, Any]] = None,
+    lc: Optional[Any] = None,
+    dumps: Optional[Any] = None,
+    odd_even: Optional[Dict[str, Any]] = None,
+    odd_even_mask: Optional[Any] = None,
+) -> Dict[str, Any]:
     """Row dict + amended fields + the final verdict fields.
 
     common_period: the vet.flag_common_periods verdict for the row's group (bool); default reads the
@@ -125,24 +201,60 @@ def final_verdict_row(row: Dict[str, Any], *, common_period: Optional[Any] = Non
     manifest job's 'rho'); None falls back to a/R* from the duration, exactly as vet_amend.amended does.
     scan: vet_amend.scan_depth() output (plus loo_scan_min) when the caller did rebuild the light curve;
     for a deep 'secondary_scan' row it must reproduce the row's logged sec_scan_sigma (revet_one's check,
-    RuntimeError otherwise).  needs_lc: bracket policy for rows that would need a rebuild ("reject" =
-    lower bound, "exempt" = upper bound).
-    Output keys: every amended() key plus passed_final, first_failing_rule, all_failing, status_final,
-    fail_common_period_final, checks_logged_final.
+    RuntimeError otherwise).  needs_lc: policy for rows that require a light curve that was not supplied
+    ("reject" = lower bound, "exempt" = upper bound, "raise" = raise ValueError).
+
+    When the odd-even transit mask is enabled (via `cfg` or `odd_even_mask` or explicit `odd_even`),
+    odd/even depths are recomputed on the light curve `lc` using only transits that pass the mask, and
+    the stored unmasked `odd_even` flag is never used as a fallback. If `lc` (and `odd_even`) is missing
+    when the mask is on, `status_final` is `STATUS_NEEDS_LC` (`needs_lc="reject"` fails with
+    `ODD_EVEN_NEEDS_LC`; `needs_lc="raise"` raises `ValueError`).
     """
-    if needs_lc not in ("reject", "exempt"):
-        raise ValueError(f"needs_lc must be 'reject' or 'exempt', got {needs_lc!r}")
-    flags = _set(row.get("flags"))
-    # common_period is applied as its own term (as in finish.py: it flags the row after the amended
-    # verdict), so it must not also enter the amended rejection set.
-    row_eff = dict(row, flags=",".join(sorted(flags - {COMMON_PERIOD})))
+    if needs_lc not in ("reject", "exempt", "raise"):
+        raise ValueError(f"needs_lc must be 'reject', 'exempt' or 'raise', got {needs_lc!r}")
+    flags = _set(row.get("flags")) - {COMMON_PERIOD}
+    mask_on = odd_even_mask_enabled(cfg, odd_even_mask) or (odd_even is not None)
+    oe_res = odd_even
+    oe_nlc = False
+
+    if mask_on:
+        # Never fall back to the stored unmasked odd_even flag when the mask is enabled.
+        flags = flags - {ODD_EVEN, ODD_EVEN_TOO_FEW}
+        if oe_res is None and lc is not None:
+            t_lc, f_lc, e_lc, d_lc, ge_lc = _unpack_lc(lc, dumps)
+            P = vet_amend._f(row.get("P_grid"))
+            if not np.isfinite(P):
+                P = vet_amend._f(row.get("period"))
+            t0 = vet_amend._f(row.get("t0"))
+            dur = vet_amend._f(row.get("duration"))
+            oe_res = masked_odd_even(
+                t_lc, f_lc, e_lc, P, t0, dur, cfg=cfg, dumps=d_lc, gap_edges_t=ge_lc, odd_even_mask=odd_even_mask
+            )
+        if oe_res is not None:
+            if oe_res.get("flag"):
+                flags.add(str(oe_res["flag"]))
+        else:
+            oe_nlc = True
+            if needs_lc == "raise":
+                raise ValueError(
+                    f"TIC {row.get('tic')}: odd_even_mask is enabled but no light curve (lc) or odd_even was supplied"
+                )
+
+    row_eff = dict(row, flags=",".join(sorted(flags)))
     if scan is not None and "secondary_scan" in _set(row.get("deep_flags")):
         check_scan_sigma(row, scan)             # revet_one's check: the scan must be the row's own
+    sec_nlc = scan is None and "secondary_scan" in _set(row.get("deep_flags"))
+    if sec_nlc and needs_lc == "raise":
+        raise ValueError(f"TIC {row.get('tic')}: secondary_scan requires a rebuilt scan")
     a = vet_amend.amended(row_eff, scan, rho)
     rej = _set(a["reject_v2"])
-    status = STATUS_NEEDS_LC if needs_lc_row(row, scan) else STATUS_OK
-    if status == STATUS_NEEDS_LC and needs_lc == "exempt":
+    status = STATUS_NEEDS_LC if (sec_nlc or oe_nlc) else STATUS_OK
+    if sec_nlc and needs_lc == "exempt":
         rej = rej - {"secondary_scan"}          # upper bound: only the undecided scan rule is waived
+    if oe_nlc and needs_lc == "reject":
+        rej = rej | {ODD_EVEN_NEEDS_LC}
+        a["reject_v2"] = ",".join(sorted(rej))
+        a["passed_lc_checks_v2"] = False
     cp = fail_common_period_of(row, common_period)
     cl = checks_logged_of(row, checks_logged)
     all_failing: List[str] = sorted(rej)
@@ -151,6 +263,18 @@ def final_verdict_row(row: Dict[str, Any], *, common_period: Optional[Any] = Non
     if not cl:
         all_failing.append(CHECKS_NOT_LOGGED)
     out = dict(row, **a)
+    if oe_res is not None:
+        out.update(
+            depth_odd_v2=oe_res.get("depth_odd"),
+            depth_even_v2=oe_res.get("depth_even"),
+            odd_even_sigma_v2=oe_res.get("odd_even_sigma"),
+            odd_even_rel_v2=oe_res.get("odd_even_rel"),
+            n_odd_kept_v2=oe_res.get("n_odd"),
+            n_even_kept_v2=oe_res.get("n_even"),
+            odd_even_flag_v2=oe_res.get("flag"),
+            odd_even_loto_min_sigma_v2=oe_res.get("loto_min_sigma"),
+            odd_even_loto_max_sigma_v2=oe_res.get("loto_max_sigma"),
+        )
     out.update(passed_final=bool(not all_failing),
                first_failing_rule=all_failing[0] if all_failing else None,
                all_failing=",".join(all_failing),
@@ -160,19 +284,39 @@ def final_verdict_row(row: Dict[str, Any], *, common_period: Optional[Any] = Non
     return out
 
 
-def final_verdict(row: Dict[str, Any], *, common_period: Optional[Any] = None,
-                  checks_logged: Optional[Any] = None, rho: Optional[float] = None,
-                  scan: Optional[Dict[str, float]] = None, needs_lc: str = "reject") -> Verdict:
+def final_verdict(
+    row: Dict[str, Any],
+    *,
+    common_period: Optional[Any] = None,
+    checks_logged: Optional[Any] = None,
+    rho: Optional[float] = None,
+    scan: Optional[Dict[str, float]] = None,
+    needs_lc: str = "reject",
+    cfg: Optional[Dict[str, Any]] = None,
+    lc: Optional[Any] = None,
+    dumps: Optional[Any] = None,
+    odd_even: Optional[Dict[str, Any]] = None,
+    odd_even_mask: Optional[Any] = None,
+) -> Verdict:
     """(passed, first_failing_rule, all_failing, status) for one row of any mode.
 
     Exactly the recipe the v1.1 finish.py applied to real rows: vet_amend.amended() + common_period +
-    checks_logged.  For a deep 'secondary_scan' row the caller supplies the rebuilt-light-curve scan
-    (vet_amend.rebuild_flat -> scan_depth -> loo_scan_min, as revet_one does) and rules (a)/(d) are
-    decided on it exactly as revet_one decides them; without a scan the status is 'needs_lc'.  See
-    final_verdict_row for the arguments.
+    checks_logged, plus the v1.2 masked odd-even comparison when enabled in `cfg` / `odd_even_mask`.
+    See `final_verdict_row` for the arguments.
     """
-    d = final_verdict_row(row, common_period=common_period, checks_logged=checks_logged, rho=rho,
-                          scan=scan, needs_lc=needs_lc)
+    d = final_verdict_row(
+        row,
+        common_period=common_period,
+        checks_logged=checks_logged,
+        rho=rho,
+        scan=scan,
+        needs_lc=needs_lc,
+        cfg=cfg,
+        lc=lc,
+        dumps=dumps,
+        odd_even=odd_even,
+        odd_even_mask=odd_even_mask,
+    )
     return Verdict((d["passed_final"], d["first_failing_rule"],
                     [x for x in d["all_failing"].split(",") if x], d["status_final"]))
 

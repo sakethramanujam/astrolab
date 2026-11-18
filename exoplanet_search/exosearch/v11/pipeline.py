@@ -58,7 +58,8 @@ def analyse(d, job, meta, dumps, primary, cap=True, deep=True):
     from astropy.timeseries import BoxLeastSquares
     st = BoxLeastSquares(tb, fb, dy=eb).compute_stats(best["P_grid"], best["duration"], best["t0"])
     row = dict(best)
-    row.update(vet11.screens(st, best, dict(meta, radius=job.get("radius") or meta.get("radius")), cfg))
+    row.update(vet11.screens(st, best, dict(meta, radius=job.get("radius") or meta.get("radius")), cfg,
+                             lc=(tb, fb, eb), dumps=dumps))
     for o, v in sens.items():
         for k in ("S", "period", "P_grid", "duration", "t0", "P_grid_halfwidth"):
             row[f"{k}_opt_{o}"] = None if v is None else v[k]

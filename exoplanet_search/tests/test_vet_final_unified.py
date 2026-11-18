@@ -203,3 +203,175 @@ def test_repro_old_vs_new_identical_on_real_and_null(monkeypatch, tmp_path):
     assert summ["n_differing_rules"] == 0
     assert summ["all_real_null_identical"] is True
     assert summ["needs_lc"] == dict(real=0, null=0, inject=1, invert=0, scramble=0, total=1)
+
+
+# ---------------------------------------------------------------- v1.2 step 2: odd-even transit mask in unified vetter
+def _cfg_mask(enabled: bool = True, **overrides):
+    from exosearch.v11 import settings
+    c = settings.cfg()
+    m = dict(c["vet"]["odd_even_mask"], enabled=enabled, **overrides)
+    c["vet"] = dict(c["vet"], odd_even_mask=m)
+    return c
+
+
+def test_masked_odd_even_excludes_corrupted_partial_or_gappy_transit():
+    """Plant a deep partial/dump-adjacent transit on one parity that causes unmasked odd-even to fail,
+    and verify that when the mask is on it is excluded, depths match the clean kept transits, and the
+    unified verdict passes across real, null and inject paths."""
+    from astropy.timeseries import BoxLeastSquares
+    from exosearch.v11 import vet11
+
+    dt = 0.005
+    P, t0, D = 3.0, 1.0, 0.10
+    depth_true = 0.002
+    t_full = np.arange(0.0, 20.0, dt)
+    e_full = np.full(t_full.size, 1e-4)
+    f_full = np.ones_like(t_full)
+
+    # Epochs 0..6 at t_mid = 1, 4, 7, 10, 13, 16, 19:
+    # Even epochs: 0 (1.0), 2 (7.0), 4 (13.0), 6 (19.0)
+    # Odd epochs:  1 (4.0), 3 (10.0), 5 (16.0)
+    ep = np.round((t_full - t0) / P).astype(int)
+    in_tr = (t_full >= (t0 + ep * P - 0.5 * D - 1e-9)) & (t_full < (t0 + ep * P + 0.5 * D - 1e-9))
+    f_full[in_tr] -= depth_true
+
+    # Plant a 10x deeper corrupted transit on odd epoch 1 (t_mid = 4.0) and make it partial (50% coverage < 0.75)
+    f_full[in_tr & (ep == 1)] -= 9.0 * depth_true
+    drop_ep1_half = (t_full >= 3.95 - 1e-9) & (t_full < 4.00 - 1e-9)  # removes 10 of 20 cadences -> coverage = 0.50
+    t = t_full[~drop_ep1_half]
+    f = f_full[~drop_ep1_half]
+    e = e_full[~drop_ep1_half]
+
+    # Unmasked BoxLeastSquares.compute_stats includes the partial corrupted transit on epoch 1 -> fails odd_even
+    st = BoxLeastSquares(t, f, dy=e).compute_stats(P, D, t0)
+    best = dict(depth_exact=depth_true, P_grid=P, t0=t0, duration=D, n_dump_epochs=0, n_epochs=7)
+    scr_off = vet11.screens(st, best, {"radius": 1.0}, _cfg_mask(False), lc=(t, f, e))
+    assert "odd_even" in scr_off["flags"]
+
+    # Masked odd-even excludes epoch 1 (coverage 0.50 < 0.75) and keeps odd epochs 3 & 5 (n_odd=2, n_even=4)
+    oe_res = vf.masked_odd_even(t, f, e, P, t0, D, cfg=_cfg_mask(True))
+    assert 1 not in oe_res["mask"]["kept_odd_epochs"]
+    assert list(oe_res["mask"]["kept_odd_epochs"]) == [3, 5]
+    assert list(oe_res["mask"]["kept_even_epochs"]) == [0, 2, 4, 6]
+    assert np.isclose(oe_res["depth_odd"], depth_true, atol=1e-12)
+    assert np.isclose(oe_res["depth_even"], depth_true, atol=1e-12)
+    assert oe_res["odd_even_sigma"] < 1e-6
+    assert oe_res["flag"] is None and oe_res["passed"] is True
+
+    # screens() with mask on also passes
+    scr_on = vet11.screens(st, best, {"radius": 1.0}, _cfg_mask(True), lc=(t, f, e))
+    assert "odd_even" not in scr_on["flags"] and "odd_even_too_few" not in scr_on["flags"]
+
+    # Unified final_verdict: even when the stored row had unmasked flags="odd_even", mask-on recomputes from lc and passes
+    r_stored = row(P_grid=P, period=P, t0=t0, duration=D, flags="odd_even")
+    assert not vf.final_verdict(r_stored, cfg=_cfg_mask(False)).passed
+    for p in PATHS:
+        v_on = p(r_stored, cfg=_cfg_mask(True), lc=(t, f, e))
+        assert v_on.passed and v_on.all_failing == [] and v_on.status == vf.STATUS_OK
+
+
+def test_odd_even_too_few_flag_and_verdict():
+    """If < 2 odd or < 2 even transits survive the mask, `odd_even_too_few` is set, `odd_even` is NOT set,
+    and the row does not pass in any mode."""
+    dt = 0.005
+    P, t0, D = 3.0, 1.0, 0.10
+    # Baseline [0.0, 11.0): epochs 0 (1.0), 1 (4.0), 2 (7.0), 3 (10.0) -> 2 even (0, 2) and 2 odd (1, 3)
+    t = np.arange(0.0, 11.0, dt)
+    f = np.ones_like(t)
+    e = np.full(t.size, 1e-4)
+    ep = np.round((t - t0) / P).astype(int)
+    in_tr = (t >= (t0 + ep * P - 0.5 * D - 1e-9)) & (t < (t0 + ep * P + 0.5 * D - 1e-9))
+    f[in_tr] -= 0.002
+
+    # Put a momentum dump at t = 4.10 (within Y = 0.375 d of odd epoch 1 at t_mid = 4.0),
+    # leaving only 1 odd transit (epoch 3) and 2 even transits (epochs 0, 2) -> n_odd = 1 < 2!
+    dumps = np.array([4.10])
+    oe_res = vf.masked_odd_even(t, f, e, P, t0, D, cfg=_cfg_mask(True), dumps=dumps)
+    assert oe_res["n_odd"] == 1 and oe_res["n_even"] == 2
+    assert oe_res["too_few"] is True
+    assert oe_res["odd_even_fail"] is False
+    assert oe_res["flag"] == vf.ODD_EVEN_TOO_FEW
+    assert oe_res["passed"] is False
+
+    r = row(P_grid=P, period=P, t0=t0, duration=D, flags="odd_even")
+    for mode, p in zip(("real", "invert", "inject"), PATHS):
+        rm = dict(r, mode=mode)
+        v = p(rm, cfg=_cfg_mask(True), lc=(t, f, e), dumps=dumps)
+        assert not v.passed
+        assert v.first_failing_rule == "odd_even_too_few"
+        assert v.all_failing == ["odd_even_too_few"]
+        assert "odd_even" not in v.all_failing
+        assert v.status == vf.STATUS_OK
+
+
+def test_mask_off_reproduces_head_verdicts_without_lc():
+    """With the mask off (the default), final_verdict and final_verdict_row match HEAD logic on all rows
+    without requiring a light curve."""
+    cfg_default = _cfg_mask(False)
+    test_rows = [
+        row(),
+        row(flags="odd_even"),
+        row(flags="odd_even,secondary", secondary_depth=1e-6),
+        row(deep_flags="density_mismatch"),
+        row(deep_flags="v_shape"),
+        row(rp_rjup=2.8, rp_earth=31.0, deep_flags="rp_gt_2rjup"),
+        row(flags="common_period"),
+        row(checks_logged=False),
+    ]
+    for r in test_rows:
+        v_none = vf.final_verdict(r)
+        v_off = vf.final_verdict(r, cfg=cfg_default)
+        v_empty = vf.final_verdict(r, cfg={})
+        assert v_none == v_off == v_empty
+        d_none = vf.final_verdict_row(r)
+        d_off = vf.final_verdict_row(r, cfg=cfg_default)
+        for k in d_none:
+            val1, val2 = d_none[k], d_off[k]
+            if isinstance(val1, float) and np.isnan(val1):
+                assert np.isnan(val2)
+            else:
+                assert val1 == val2, k
+
+
+def test_mask_on_without_lc_does_not_silently_fallback_and_paths_agree():
+    """When the mask is on and no light curve is provided, final_verdict must not fall back to the
+    unmasked odd_even flag: it reports STATUS_NEEDS_LC (failing with odd_even_needs_lc under 'reject',
+    or raising ValueError under 'raise'), and real/null/inject paths agree."""
+    cfg_on = _cfg_mask(True)
+    r_unmasked_fail = row(flags="odd_even")
+    r_unmasked_pass = row(flags="")
+
+    for r in (r_unmasked_fail, r_unmasked_pass):
+        verdicts = [p(r, cfg=cfg_on) for p in PATHS]
+        assert verdicts[0] == verdicts[1] == verdicts[2]
+        v = verdicts[0]
+        assert v.status == vf.STATUS_NEEDS_LC
+        assert not v.passed
+        assert "odd_even" not in v.all_failing
+        assert vf.ODD_EVEN_NEEDS_LC in v.all_failing
+
+        with pytest.raises(ValueError, match="odd_even_mask is enabled"):
+            vf.final_verdict(r, cfg=cfg_on, needs_lc="raise")
+
+
+def test_real_null_inject_agree_when_mask_on_for_failing_odd_even():
+    """When >= 2 odd and >= 2 even transits survive the mask and their depths differ by > 3 sigma and > 10%,
+    all three paths (real, null, inject) reject with 'odd_even' identically."""
+    dt = 0.005
+    P, t0, D = 3.0, 1.0, 0.10
+    t = np.arange(0.0, 14.0, dt)  # epochs 0 (1.0), 1 (4.0), 2 (7.0), 3 (10.0), 4 (13.0) -> 3 even, 2 odd
+    f = np.ones_like(t)
+    e = np.full(t.size, 1e-4)
+    ep = np.round((t - t0) / P).astype(int)
+    in_tr = (t >= (t0 + ep * P - 0.5 * D - 1e-9)) & (t < (t0 + ep * P + 0.5 * D - 1e-9))
+    f[in_tr & (ep % 2 == 0)] -= 0.0020
+    f[in_tr & (ep % 2 == 1)] -= 0.0040  # persistent odd/even difference across both odd transits
+
+    cfg_on = _cfg_mask(True)
+    for mode in ("real", "invert", "scramble", "inject"):
+        r = row(mode=mode, P_grid=P, period=P, t0=t0, duration=D, flags="")
+        verdicts = [p(r, cfg=cfg_on, lc=(t, f, e)) for p in PATHS]
+        assert verdicts[0] == verdicts[1] == verdicts[2]
+        assert not verdicts[0].passed
+        assert verdicts[0].all_failing == ["odd_even"]
+        assert verdicts[0].status == vf.STATUS_OK

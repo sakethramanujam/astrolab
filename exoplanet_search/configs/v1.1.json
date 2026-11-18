@@ -44,7 +44,16 @@
     "odd_even_sigma": 3.0,
     "odd_even_rel": 0.1,
     "secondary_sigma": 3.0,
-    "secondary_rel": 0.1
+    "secondary_rel": 0.1,
+    "odd_even_mask": {
+      "enabled": false,
+      "min_coverage": 0.75,
+      "min_gap_dump_dist_d": 0.375,
+      "min_gap_dump_dist_h": 9.0,
+      "gap_d": 0.5,
+      "oot_baseline_t14": 1.0,
+      "oot_one_side": true
+    }
   },
   "momentum_dump": {
     "quality_bit": 32,

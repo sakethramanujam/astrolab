@@ -32,12 +32,15 @@ def rebuild_scan(row, job=None, cfg=None):
     return scan
 
 
-def row_verdict(row, jobs=None, cfg=None, *, fail_common_period=None, scan=None, needs_lc='reject'):
-    """Final verdict for one row of ANY mode: vet_amend.amended() + common_period + checks_logged.
+def row_verdict(row, jobs=None, cfg=None, *, fail_common_period=None, scan=None, needs_lc='reject',
+                lc=None, dumps=None, odd_even=None, odd_even_mask=None):
+    """Final verdict for one row of ANY mode: vet_amend.amended() + common_period + checks_logged
+    (+ masked odd-even when enabled in cfg / odd_even_mask).
     jobs: manifest jobs by TIC (rho feeds a/R*; scan is the rebuilt secondary-scan dict when supplied)."""
     j = (jobs or {}).get(int(row['tic'])) or {}
     return vet_final.final_verdict(row, common_period=fail_common_period, checks_logged=row.get('checks_logged'),
-                                   rho=j.get('rho'), scan=scan, needs_lc=needs_lc)
+                                   rho=j.get('rho'), scan=scan, needs_lc=needs_lc, cfg=cfg,
+                                   lc=lc, dumps=dumps, odd_even=odd_even, odd_even_mask=odd_even_mask)
 
 
 def real_path(row, jobs=None, cfg=None, *, scan=None, **kw):

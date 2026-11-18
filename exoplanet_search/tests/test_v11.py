@@ -367,3 +367,99 @@ def test_launcher_orders_guard_then_beta_select(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError):
         L.register({})
     assert "registration_checks" in calls[0]
+
+
+# ---------------------------------------------------------------- v1.2 step 2: odd-even transit mask
+def test_odd_even_mask_default_settings_in_config():
+    c = _cfg()
+    mcfg = vet11.odd_even_mask_cfg(c)
+    assert mcfg["enabled"] is False
+    assert mcfg["min_coverage"] == 0.75
+    assert mcfg["min_gap_dump_dist_d"] == 0.375
+    assert mcfg["min_gap_dump_dist_h"] == 9.0
+    assert mcfg["gap_d"] == 0.5
+    assert mcfg["oot_baseline_t14"] == 1.0
+    assert mcfg["oot_one_side"] is True
+    # Configs lacking the new keys behave as mask-off
+    assert vet11.odd_even_mask_enabled({}) is False
+    assert vet11.odd_even_mask_enabled(dict(vet=dict(odd_even_sigma=3.0, odd_even_rel=0.1))) is False
+
+
+def test_odd_even_mask_coverage_boundary():
+    # dt = 0.01 d, D = 0.20 d -> expected 20 cadences in [t_mid - 0.10, t_mid + 0.10)
+    dt = 0.01
+    P, t0, D = 3.0, 1.0, 0.20
+    t_full = np.arange(0.0, 20.0, dt)
+    # Epoch 0 at t_mid = 1.0 ([0.90, 1.10)): drop 6 of 20 cadences -> 14/20 = 0.70 < 0.75 (excluded)
+    # Epoch 1 at t_mid = 4.0 ([3.90, 4.10)): drop 5 of 20 cadences -> 15/20 = 0.75 == X (exact boundary, kept)
+    # Epoch 2 at t_mid = 7.0 ([6.90, 7.10)): drop 2 of 20 cadences -> 18/20 = 0.90 > 0.75 (kept)
+    drop0 = (t_full >= 0.92 - 1e-9) & (t_full < 0.98 - 1e-9)   # 6 cadences removed (0.06 d < gap_d=0.5 d)
+    drop1 = (t_full >= 3.92 - 1e-9) & (t_full < 3.97 - 1e-9)   # 5 cadences removed (15/20 = 0.75)
+    drop2 = (t_full >= 6.92 - 1e-9) & (t_full < 6.94 - 1e-9)   # 2 cadences removed (18/20 = 0.90)
+    t = t_full[~(drop0 | drop1 | drop2)]
+
+    m = vet11.odd_even_transit_mask(t, P, t0, D, min_coverage=0.75)
+    ep_map = {int(ep): i for i, ep in enumerate(m["epochs"])}
+    assert np.isclose(m["coverage"][ep_map[0]], 0.70) and not m["pass_coverage"][ep_map[0]] and not m["keep"][ep_map[0]]
+    assert np.isclose(m["coverage"][ep_map[1]], 0.75) and m["pass_coverage"][ep_map[1]] and m["keep"][ep_map[1]]
+    assert np.isclose(m["coverage"][ep_map[2]], 0.90) and m["pass_coverage"][ep_map[2]] and m["keep"][ep_map[2]]
+
+
+def test_odd_even_mask_gap_and_dump_distance_boundaries():
+    dt = 0.005
+    P, t0, D = 3.0, 1.0, 0.10
+    Y = 0.375  # 9 hours
+    t_full = np.arange(0.0, 22.0, dt)
+    # Create a data gap > 0.5 d whose right gap edge is at t = 4.0 - Y = 3.625 (exact distance Y from epoch 1 at 4.0)
+    # and left gap edge is at 3.625 - 0.600 = 3.025 (> 0.5 d gap).
+    # Create another gap whose left gap edge is at 7.0 + (Y - 0.005) = 7.370 (distance 0.370 < Y from epoch 2 at 7.0).
+    gap1 = (t_full > 3.025 + 1e-9) & (t_full < 3.625 - 1e-9)
+    gap2 = (t_full > 7.370 + 1e-9) & (t_full < 8.000 - 1e-9)
+    t = t_full[~(gap1 | gap2)]
+
+    # Momentum dump at exact distance Y from epoch 3 (t_mid = 10.0 -> dump at 10.375)
+    # and closer than Y from epoch 4 (t_mid = 13.0 -> dump at 13.370, distance 0.370 < Y)
+    dumps = np.array([10.375, 13.370])
+
+    m = vet11.odd_even_transit_mask(t, P, t0, D, dumps=dumps, min_gap_dump_dist_d=Y)
+    ep_map = {int(ep): i for i, ep in enumerate(m["epochs"])}
+
+    # Epoch 1 (t_mid = 4.0): nearest gap edge at 3.625 -> distance == 0.375 == Y -> KEPT
+    assert np.isclose(m["gap_dist"][ep_map[1]], Y) and m["pass_gap"][ep_map[1]] and m["keep"][ep_map[1]]
+    # Epoch 2 (t_mid = 7.0): nearest gap edge at 7.370 -> distance == 0.370 < Y -> EXCLUDED
+    assert np.isclose(m["gap_dist"][ep_map[2]], 0.370) and not m["pass_gap"][ep_map[2]] and not m["keep"][ep_map[2]]
+    # Epoch 3 (t_mid = 10.0): dump at 10.375 -> distance == 0.375 == Y -> KEPT
+    assert np.isclose(m["dump_dist"][ep_map[3]], Y) and m["pass_dump"][ep_map[3]] and m["keep"][ep_map[3]]
+    # Epoch 4 (t_mid = 13.0): dump at 13.370 -> distance == 0.370 < Y -> EXCLUDED
+    assert np.isclose(m["dump_dist"][ep_map[4]], 0.370) and not m["pass_dump"][ep_map[4]] and not m["keep"][ep_map[4]]
+
+
+def test_odd_even_mask_oot_baseline_one_side_and_both_sides():
+    dt = 0.01
+    P, D = 2.0, 0.10
+    # Epoch 0 at t0 = 0.15 -> ingress = 0.10, egress = 0.20.
+    # Start light curve at t = 0.00 -> exactly 1.0 * T14 = 0.10 d before ingress, and Plenty after egress.
+    # If we instead start at t = 0.05 -> only 0.5 * T14 before ingress, but plenty after egress (1 side has >= 1 T14).
+    t_one_side = np.arange(0.05, 10.0, dt)
+    m_def = vet11.odd_even_transit_mask(t_one_side, P, 0.15, D, oot_baseline_t14=1.0, oot_one_side=True)
+    assert not m_def["pass_oot_before"][0] and m_def["pass_oot_after"][0]
+    assert m_def["pass_oot"][0] and m_def["keep"][0]
+
+    # When both sides are required (oot_one_side=False), epoch 0 is excluded
+    m_both = vet11.odd_even_transit_mask(t_one_side, P, 0.15, D, oot_baseline_t14=1.0, oot_one_side=False)
+    assert not m_both["pass_oot"][0] and not m_both["keep"][0]
+
+    # A transit with < 1.0 * T14 on BOTH sides (e.g. isolated segment [0.05, 0.25) around [0.10, 0.20)) is excluded
+    t_neither = np.arange(0.05, 0.25, dt)
+    m_neither = vet11.odd_even_transit_mask(t_neither, P, 0.15, D, oot_baseline_t14=1.0, oot_one_side=True)
+    assert not m_neither["pass_oot_before"][0] and not m_neither["pass_oot_after"][0]
+    assert not m_neither["pass_oot"][0] and not m_neither["keep"][0]
+
+
+def test_screens_mask_on_without_lc_raises():
+    # Search-time screens() must not silently fall back to the unmasked BLS odd-even flag.
+    c = _cfg()
+    m = dict(c["vet"]["odd_even_mask"], enabled=True)
+    c["vet"] = dict(c["vet"], odd_even_mask=m)
+    with pytest.raises(ValueError, match="odd_even_mask is enabled"):
+        vet11.screens(_st(1.2e-3, 0.8e-3, 1e-5), _best(), {"radius": 1.0}, c)
