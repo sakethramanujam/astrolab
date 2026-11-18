@@ -801,6 +801,81 @@ def run_known_planet_recovery(
     return out_df, summary
 
 
+# ---------------------------------------------------------------- v1.2 frozen-settings entry points
+def evaluate_known_planets_v12(
+    targets_df: pd.DataFrame,
+    search_results_df: Optional[pd.DataFrame],
+    s_star: float,
+    durations: np.ndarray = search.DURATIONS,
+    cfg: Optional[Dict[str, Any]] = None,
+    diagnostics_df: Optional[pd.DataFrame] = None,
+    sector: int = 70,
+    settings_path: Optional[Union[str, Path]] = None,
+) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """v1.2 known-planet gate: require the frozen v1.2 settings, then evaluate as v1.1.
+
+    A caller-supplied ``cfg`` is accepted only after ``validate_v12_values``; otherwise the frozen
+    config returned by ``require_v12_settings`` is used.  The v1.1 ``evaluate_known_planets`` is
+    unchanged and never requires the v1.2 file.
+    """
+    from .. import v12_settings
+    frozen = v12_settings.require_v12_settings(settings_path)
+    if cfg is not None:
+        v12_settings.validate_v12_values(cfg)
+        frozen = cfg
+    return evaluate_known_planets(targets_df, search_results_df, s_star=s_star, durations=durations, cfg=frozen,
+                                  diagnostics_df=diagnostics_df, sector=sector)
+
+
+def freeze_eligibility_v12(
+    s_star: float,
+    out_file: Union[str, Path],
+    sector: int = 70,
+    commit: str = "",
+    config_hash: str = "",
+    targets_df: Optional[pd.DataFrame] = None,
+    lc_lookup=None,
+    contratio_map: Optional[Dict[int, float]] = None,
+    cfg: Optional[Dict[str, Any]] = None,
+    searched_tics: Optional[set] = None,
+    settings_path: Optional[Union[str, Path]] = None,
+) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """v1.2 frozen eligibility: require the frozen v1.2 settings, then delegate to ``freeze_eligibility``."""
+    from .. import v12_settings
+    frozen = v12_settings.require_v12_settings(settings_path)
+    if cfg is not None:
+        v12_settings.validate_v12_values(cfg)
+        frozen = cfg
+    return freeze_eligibility(s_star=s_star, out_file=out_file, sector=sector, commit=commit,
+                              config_hash=config_hash, targets_df=targets_df, lc_lookup=lc_lookup,
+                              contratio_map=contratio_map, cfg=frozen, searched_tics=searched_tics)
+
+
+def run_known_planet_recovery_v12(
+    s_star: float,
+    search_results_path: Optional[Union[str, Path]] = None,
+    out_dir: Union[str, Path] = Path("."),
+    sector: int = 70,
+    frozen_eligibility_file: Optional[Union[str, Path]] = None,
+    cfg: Optional[Dict[str, Any]] = None,
+    diagnostics_path: Optional[Union[str, Path]] = None,
+    settings_path: Optional[Union[str, Path]] = None,
+) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """v1.2 / S69 known-planet report: require the frozen v1.2 settings, then run the v1.1 report.
+
+    The settings gate is checked before the frozen eligibility file or search results, so a missing
+    or unregistered v1.2 file fails with ``V12SettingsError`` rather than a later data error.
+    """
+    from .. import v12_settings
+    frozen = v12_settings.require_v12_settings(settings_path)
+    if cfg is not None:
+        v12_settings.validate_v12_values(cfg)
+        frozen = cfg
+    return run_known_planet_recovery(s_star=s_star, search_results_path=search_results_path, out_dir=out_dir,
+                                     sector=sector, frozen_eligibility_file=frozen_eligibility_file, cfg=frozen,
+                                     diagnostics_path=diagnostics_path)
+
+
 def main():
     ap = argparse.ArgumentParser(description="v1.1 Known planet / active TOI recovery test (T2)")
     sp = ap.add_subparsers(dest="cmd", required=True)
@@ -811,6 +886,12 @@ def main():
     fe.add_argument("--out", required=True, help="Output path for frozen eligibility CSV")
     fe.add_argument("--sector", type=int, default=70, help="TESS Sector")
     fe.add_argument("--searched-tics", help="JSON list of searched TICs (default: the results store for the sector)")
+    fe12 = sp.add_parser("freeze-eligibility-v12", help="v1.2 frozen-eligibility (requires configs/v1.2.json)")
+    fe12.add_argument("--s-star", type=float, required=True, help="Detection threshold S*")
+    fe12.add_argument("--out", required=True, help="Output path for frozen eligibility CSV")
+    fe12.add_argument("--sector", type=int, default=70, help="TESS Sector")
+    fe12.add_argument("--searched-tics", help="JSON list of searched TICs (default: the results store for the sector)")
+    fe12.add_argument("--settings", help="Frozen v1.2 settings file (default: configs/v1.2.json)")
     r = sp.add_parser("report")
     r.add_argument("--s-star", type=float, required=True, help="Detection threshold S*")
     r.add_argument("--results", required=True, help="Real-search rows (CSV, parquet or run output dir)")
@@ -818,12 +899,29 @@ def main():
     r.add_argument("--diagnostics", help="Optional catalogue-ephemeris diagnostics (tic, name, S_cat, ...)")
     r.add_argument("--out", required=True, help="Output directory")
     r.add_argument("--sector", type=int, default=70, help="TESS Sector")
+    r12 = sp.add_parser("report-v12", help="v1.2 / S69 report (requires configs/v1.2.json)")
+    r12.add_argument("--s-star", type=float, required=True, help="Detection threshold S*")
+    r12.add_argument("--results", required=True, help="Real-search rows (CSV, parquet or run output dir)")
+    r12.add_argument("--frozen-eligibility", help="Path to frozen eligibility CSV")
+    r12.add_argument("--diagnostics", help="Optional catalogue-ephemeris diagnostics (tic, name, S_cat, ...)")
+    r12.add_argument("--out", required=True, help="Output directory")
+    r12.add_argument("--sector", type=int, default=70, help="TESS Sector")
+    r12.add_argument("--settings", help="Frozen v1.2 settings file (default: configs/v1.2.json)")
     a = ap.parse_args()
     if a.cmd == "fetch-pscomppars":
         print(fetch_pscomppars(date_tag=a.date_tag))
     elif a.cmd == "freeze-eligibility":
         st = set(int(x) for x in json.loads(Path(a.searched_tics).read_text())) if a.searched_tics else None
         freeze_eligibility(s_star=a.s_star, out_file=a.out, sector=a.sector, searched_tics=st)
+    elif a.cmd == "freeze-eligibility-v12":
+        st = set(int(x) for x in json.loads(Path(a.searched_tics).read_text())) if a.searched_tics else None
+        freeze_eligibility_v12(s_star=a.s_star, out_file=a.out, sector=a.sector, searched_tics=st,
+                               settings_path=a.settings)
+    elif a.cmd == "report-v12":
+        _, s = run_known_planet_recovery_v12(s_star=a.s_star, search_results_path=a.results, out_dir=a.out,
+                                             sector=a.sector, frozen_eligibility_file=a.frozen_eligibility,
+                                             diagnostics_path=a.diagnostics, settings_path=a.settings)
+        print(json.dumps(s, indent=1, default=float))
     else:
         _, s = run_known_planet_recovery(s_star=a.s_star, search_results_path=a.results, out_dir=a.out,
                                          sector=a.sector, frozen_eligibility_file=a.frozen_eligibility,

@@ -152,6 +152,38 @@ def rebuild_for_row(row, jobs=None, cfg=None, *, scan=None, lc=None, dumps=None,
     return rebuild_scan(row, j, cfg), lc, dumps
 
 
+# ------------------------------------------------- v1.2 frozen-settings rescore (step 6)
+def rescore_v12_cfg(path=None):
+    """Return the frozen v1.2 config, or raise ``V12SettingsError`` when it is missing / unregistered.
+
+    This is the gate for v1.2 rescoring.  It never changes ``main``: the historical S70 v1.1 scoring
+    (``python finish.py`` with no arguments) keeps its existing config and behaviour.
+    """
+    from exosearch import v12_settings
+    return v12_settings.require_v12_settings(path)
+
+
+def rescore_rows_v12(rows, jobs=None, path=None, fail_common_period=None):
+    """Rescore rows under the frozen v1.2 settings, including the step-5b light-curve rebuild path.
+
+    Requires the frozen v1.2 file first (so a forgotten v1.2 flag cannot silently score under v1.1
+    rules), then applies the same unified verdict path as ``main`` with that cfg.  Because the frozen
+    file has the odd-even mask on and ``needs_lc.rebuild`` true, ``rebuild_for_row`` rebuilds each
+    row's light curve once and passes it (with dumps and gap edges) to the verdict.
+    """
+    cfg = rescore_v12_cfg(path)
+    recs = rows.to_dict('records') if hasattr(rows, 'to_dict') else list(rows)
+    out = []
+    for r in recs:
+        j = (jobs or {}).get(int(r['tic'])) or {}
+        sc, lc_, dumps_ = rebuild_for_row(r, jobs, cfg)
+        v = row_verdict(r, jobs=jobs, cfg=cfg, fail_common_period=fail_common_period, scan=sc,
+                        lc=lc_, dumps=dumps_)
+        out.append(dict(tic=int(r['tic']), passed=v.passed, first_failing_rule=v.first_failing_rule,
+                        all_failing=','.join(v.all_failing), status=v.status))
+    return pd.DataFrame(out)
+
+
 # ------------------------------------------------- the one verdict path (all modes)
 def rebuild_scan(row, job=None, cfg=None, *, flat=None):
     """Compute the rebuilt-light-curve secondary scan for a real or null secondary_scan row,

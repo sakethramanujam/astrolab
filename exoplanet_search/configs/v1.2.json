@@ -1,0 +1,150 @@
+{
+  "name": "exosearch_v1.2",
+  "beta_option": "b",
+  "beta_option_note": "Set only by the dated registration that applies docs/preregistration/beta_treatment.md (a/b/c/d). Production refuses to start while this is null.",
+  "beta_prior_file": "configs/v1.1_beta_prior.json",
+  "prewhiten": {
+    "fmin_cpd": 5.0,
+    "snr_stop": 4.0,
+    "max_terms": 20,
+    "noise_window_cpd": 2.0,
+    "oversample": 5,
+    "snr_detect": 5.0,
+    "comb_guard": true,
+    "comb_durations_d": [
+      0.0208,
+      0.25
+    ],
+    "comb_multiples": [
+      1,
+      2,
+      3
+    ],
+    "comb_ratio_tol": 2.0,
+    "comb_min_snr": 3.0,
+    "comb_p_range_d": [
+      0.2,
+      5.0
+    ],
+    "comb_phase_tol": 0.15,
+    "comb_max_harmonic_factor": 2.5,
+    "comb_exclusion_width": 2.0,
+    "comb_max_coverage": 0.2,
+    "half_min_snr": 2.0,
+    "half_amp_ratio": 5.0,
+    "half_cos_phase": -0.5
+  },
+  "duration_cap": {
+    "margin": 3.0,
+    "q_max_no_density": 0.1
+  },
+  "refine_top_k": 5,
+  "refine_min_sep_rel": 0.01,
+  "vet": {
+    "odd_even_sigma": 3.0,
+    "odd_even_rel": 0.1,
+    "secondary_sigma": 3.0,
+    "secondary_rel": 0.1,
+    "odd_even_mask": {
+      "enabled": true,
+      "min_coverage": 0.75,
+      "min_gap_dump_dist_d": 0.375,
+      "min_gap_dump_dist_h": 9.0,
+      "gap_d": 0.5,
+      "oot_baseline_t14": 1.0,
+      "oot_one_side": true
+    },
+    "rp_cap": {
+      "enabled": true,
+      "cap_rearth": 30.0,
+      "cap_rearth_candidates": [
+        22,
+        25,
+        30
+      ],
+      "include_e_rad": true
+    },
+    "too_deep": {
+      "mode": "flag",
+      "max_depth": 0.05
+    }
+  },
+  "momentum_dump": {
+    "quality_bit": 32,
+    "window_d": 0.1,
+    "reject_max_epochs": 2
+  },
+  "s_floor_checks": 6.0,
+  "sstar": {
+    "fine_grid_enabled": true,
+    "grid_min": 6.0,
+    "grid_max": 30.0,
+    "grid_step": 0.005,
+    "interpolate": false
+  },
+  "t14_retention": {
+    "bin_edges_h": [
+      3.0,
+      6.0
+    ],
+    "tolerance": 0.5
+  },
+  "scramble": {
+    "gap_d": 0.5,
+    "gap_trim_d": 0.3,
+    "exclude_hosts_file": {
+      "70": "configs/scramble_exclude_s0070_2026-11-11.csv"
+    }
+  },
+  "validation_pw2": {
+    "snr_stop": 4.0,
+    "max_terms": 20,
+    "noise_window_cpd": 2.0,
+    "fmin_cpd": 0.1,
+    "max_k": 20,
+    "residual_snr_threshold": 4.0,
+    "frequency_file": null,
+    "base_seed": 20261112,
+    "injection_runs": [
+      12,
+      13,
+      14,
+      15
+    ],
+    "part1_min_clean_rate": 0.9,
+    "part2_max_drop": 0.05,
+    "part3_max_drop": 0.02,
+    "min_stars_per_bin": 5,
+    "s_bins": [
+      0.0,
+      10.0,
+      15.0,
+      25.0,
+      50.0,
+      500.0
+    ],
+    "quiet_exclude_pulsators_file": null
+  },
+  "known_planets": {
+    "frozen_eligibility_file": null,
+    "amendment": "docs/preregistration/v1.1_amendment_known_gate_2026-11-12.md",
+    "min_transits": 3,
+    "contamination_diff_tol": 0.2,
+    "alias_ratios": [
+      2.0,
+      0.5
+    ],
+    "detrend_window_d": 0.75,
+    "tolerance": "bls_peak",
+    "period_err_nsigma": 3.0,
+    "alias_recovered": true,
+    "required_types": [
+      "ps"
+    ],
+    "expected_s_scale": 0.66,
+    "expected_s_scale_source": "v1.0.0 injection_v1 products (runs 0 and 1): median S_obs / S_exp of period-matched injections"
+  },
+  "needs_lc": {
+    "rebuild": true
+  }
+}
