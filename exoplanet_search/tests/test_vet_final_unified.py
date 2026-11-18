@@ -747,3 +747,240 @@ def test_star_params_puts_tic_e_rad_on_job(monkeypatch):
     assert out[4] == {}
     j = v11run.base_job(70, 1, "f.fits", 1.1, 9.0, out[1])
     assert j["e_rad"] == 0.06 and j["radius"] == 1.1 and j["rad_tic"] == 1.1
+
+
+# ------------------------------------------------------------------------------------------------
+# v1.2 step 5b: finish.py rebuilds the light curve for a mask-on rescore (one rebuild per row)
+# ------------------------------------------------------------------------------------------------
+def _fake_rebuild(t, f, e, dumps=None, gaps=None):
+    """Stand-in for finish.rebuild_lc, so mask-on rescore tests need no TESS files."""
+    dumps = np.array([]) if dumps is None else np.asarray(dumps, float)
+    gaps = np.array([]) if gaps is None else np.asarray(gaps, float)
+
+    def _rb(row, job=None, cfg=None):
+        return t, f, e, dumps, gaps
+
+    return _rb
+
+
+def test_mask_off_does_not_rebuild_or_require_a_light_curve(monkeypatch):
+    """Mask off (default / mask keys absent): no rebuild is attempted and the verdicts are unchanged."""
+    def boom(*a, **k):
+        raise AssertionError("mask off must not rebuild a light curve")
+
+    monkeypatch.setattr(fin, "rebuild_lc", boom)
+    for cfg in (None, {}, _cfg_mask(False)):
+        for mode, p in (("real", fin.real_path), ("invert", fin.null_path),
+                        ("scramble", fin.null_path), ("inject", fin.inject_path)):
+            r = dict(row(mode=mode), flags="odd_even")
+            assert not p(r, jobs={1: {"tic": 1}}, cfg=cfg).passed      # stored odd_even still rejects
+            assert p(dict(r, flags=""), jobs={1: {"tic": 1}}, cfg=cfg).passed
+            assert p(dict(r, flags=""), jobs={}, cfg=cfg).passed
+
+
+def test_mask_on_rescore_rebuilds_lc_for_real_null_and_inject(monkeypatch):
+    """With a job and a rebuildable LC, a mask-on rescore feeds lc/dumps to the verdict for every mode,
+    so the row is not flagged odd_even_needs_lc by the finish.py paths."""
+    t, f, e, P, t0 = _synth_lc(one_orbit_only=False)
+    calls = []
+
+    def fake(row, job=None, cfg=None):
+        calls.append(str(row.get("mode")))
+        return t, f, e, np.array([]), np.array([])
+
+    monkeypatch.setattr(fin, "rebuild_lc", fake)
+    r = row(flags="odd_even", P_grid=P, period=P, t0=t0, duration=0.1)
+    verdicts = []
+    for mode, p in (("real", fin.real_path), ("invert", fin.null_path),
+                    ("scramble", fin.null_path), ("inject", fin.inject_path)):
+        v = p(dict(r, mode=mode), jobs={1: {"tic": 1}}, cfg=_cfg_mask(True))
+        assert v.status == vf.STATUS_OK
+        assert vf.ODD_EVEN_NEEDS_LC not in v.all_failing
+        assert v.passed and v.all_failing == []
+        verdicts.append(v)
+    assert calls == ["real", "invert", "scramble", "inject"]
+    assert verdicts[0] == verdicts[1] == verdicts[2] == verdicts[3]
+
+
+def test_mask_on_rebuilt_lc_is_scored_and_odd_even_rejects_are_real(monkeypatch):
+    """A rebuilt LC with a real odd/even difference gives the genuine odd_even verdict, not needs_lc."""
+    dt = 0.005
+    P, t0, D = 3.0, 1.0, 0.10
+    t = np.arange(0.0, 14.0, dt)
+    f = np.ones_like(t)
+    e = np.full(t.size, 1e-4)
+    ep = np.round((t - t0) / P).astype(int)
+    in_tr = (t >= (t0 + ep * P - 0.5 * D - 1e-9)) & (t < (t0 + ep * P + 0.5 * D - 1e-9))
+    f[in_tr & (ep % 2 == 0)] -= 0.0020
+    f[in_tr & (ep % 2 == 1)] -= 0.0040
+    monkeypatch.setattr(fin, "rebuild_lc", _fake_rebuild(t, f, e))
+
+    r = row(P_grid=P, period=P, t0=t0, duration=D, flags="odd_even")
+    for mode, p in (("real", fin.real_path), ("invert", fin.null_path), ("inject", fin.inject_path)):
+        v = p(dict(r, mode=mode), jobs={1: {"tic": 1}}, cfg=_cfg_mask(True))
+        assert v.status == vf.STATUS_OK
+        assert v.all_failing == ["odd_even"]
+        assert vf.ODD_EVEN_NEEDS_LC not in v.all_failing
+
+
+def test_mask_on_rebuild_impossible_keeps_odd_even_needs_lc(monkeypatch):
+    """When the LC cannot be rebuilt nothing is invented: odd_even_needs_lc / needs_lc still fires."""
+    monkeypatch.setattr(fin, "rebuild_lc", lambda row, job=None, cfg=None: None)
+    cfg = _cfg_mask(True)
+    for mode, p in (("real", fin.real_path), ("invert", fin.null_path),
+                    ("scramble", fin.null_path), ("inject", fin.inject_path)):
+        for flags in ("", "odd_even"):
+            v = p(dict(row(mode=mode), flags=flags), jobs={1: {"tic": 1}}, cfg=cfg)
+            assert v.status == vf.STATUS_NEEDS_LC
+            assert vf.ODD_EVEN_NEEDS_LC in v.all_failing
+            assert "odd_even" not in v.all_failing
+            # secondary_scan bracketing also stays when there was no rebuild to score it
+            r2 = dict(row(mode=mode), deep_flags="secondary_scan", sec_scan_sigma=6.0)
+            v2 = p(r2, jobs={1: {"tic": 1}}, cfg=cfg)
+            assert v2.status == vf.STATUS_NEEDS_LC and "secondary_scan" in v2.all_failing
+
+
+def test_mask_on_passes_rebuilt_dumps_and_gap_edges(monkeypatch):
+    """The rebuilt dumps reach the masked odd-even (the 9 h dump/gap cut sees them), and gap edges too."""
+    dt = 0.005
+    P, t0, D = 3.0, 1.0, 0.10
+    t = np.arange(0.0, 11.0, dt)
+    f = np.ones_like(t)
+    e = np.full(t.size, 1e-4)
+    ep = np.round((t - t0) / P).astype(int)
+    in_tr = (t >= (t0 + ep * P - 0.5 * D - 1e-9)) & (t < (t0 + ep * P + 0.5 * D - 1e-9))
+    f[in_tr] -= 0.002
+    dumps = np.array([4.10])                     # within Y=0.375 d of odd epoch 1 -> only 1 odd transit kept
+    gaps = np.array([8.50])
+    seen = []
+    real_masked = vf.masked_odd_even
+
+    def spy(*args, **kw):
+        seen.append((kw.get("dumps"), kw.get("gap_edges_t")))
+        return real_masked(*args, **kw)
+
+    monkeypatch.setattr(vf, "masked_odd_even", spy)
+    monkeypatch.setattr(fin, "rebuild_lc", _fake_rebuild(t, f, e, dumps=dumps, gaps=gaps))
+
+    r = row(P_grid=P, period=P, t0=t0, duration=D, flags="odd_even")
+    for mode, p in (("real", fin.real_path), ("invert", fin.null_path), ("inject", fin.inject_path)):
+        v = p(dict(r, mode=mode), jobs={1: {"tic": 1}}, cfg=_cfg_mask(True))
+        assert v.status == vf.STATUS_OK
+        assert v.all_failing == ["odd_even_too_few"]        # dumps were applied
+        assert "odd_even" not in v.all_failing
+    for d_got, g_got in seen:
+        assert np.array_equal(d_got, dumps)
+        assert np.array_equal(g_got, gaps)
+
+
+def test_secondary_scan_and_mask_on_share_one_rebuild(monkeypatch):
+    """Mask on + real/null secondary_scan: one mocked rebuild supplies both lc and scan, the scan-sigma
+    consistency check still holds, and the verdict equals final_verdict with scan+lc supplied."""
+    t, f, e, P, t0 = _synth_lc(one_orbit_only=False, sec_dip=0.0008)
+    sig = float(va.scan_depth(t, f, e, P, t0)["sec_scan_sigma"])
+    calls = []
+
+    def fake(row, job=None, cfg=None):
+        calls.append(str(row.get("mode")))
+        return t, f, e, np.array([]), np.array([])
+
+    monkeypatch.setattr(fin, "rebuild_lc", fake)
+    r = row(P_grid=P, period=P, t0=t0, deep_flags="secondary_scan", sec_scan_sigma=sig, rp_rjup=1.0)
+    jobs = {1: {"tic": 1, "rho": 1.0}}
+    v_real = fin.real_path(dict(r, mode="real"), jobs=jobs, cfg=_cfg_mask(True))
+    v_null = fin.null_path(dict(r, mode="invert"), jobs=jobs, cfg=_cfg_mask(True))
+    assert len(calls) == 2                                   # exactly one rebuild per path
+    assert v_real == v_null
+    sc = fin.rebuild_scan(r, jobs[1], {}, flat=(t, f, e))
+    assert sc["sec_scan_sigma"] == pytest.approx(sig)
+    direct = vf.final_verdict(r, scan=sc, lc=(t, f, e), cfg=_cfg_mask(True), rho=1.0)
+    assert v_real == direct
+    assert v_real.status == vf.STATUS_OK
+    # the existing revet_one-style consistency check still raises on a mismatched logged sigma
+    with pytest.raises(RuntimeError, match="rebuilt secondary scan"):
+        fin.real_path(dict(r, sec_scan_sigma=99.9), jobs=jobs, cfg=_cfg_mask(True))
+
+
+def test_rebuild_lc_real_follows_rebuild_flat_and_returns_dumps(monkeypatch):
+    """rebuild_lc returns the prepared flat LC plus dumps/gap edges for a real row (mocked pipeline.load)."""
+    from exosearch.v11 import pipeline
+
+    t = np.linspace(0.0, 10.0, 1001)
+    f = np.ones_like(t)
+    e = np.full(t.size, 1e-4)
+    good = np.ones(t.size, bool)
+    good[500] = False
+    dumps = np.array([2.5])
+    monkeypatch.setattr(pipeline, "load", lambda job, download=True: (t, f, e, good, {}, dumps))
+    monkeypatch.setattr(pipeline, "prepare",
+                        lambda tg, fg, eg, cfg, *a, **k: dict(flat=(tg, fg, eg)))
+    out = fin.rebuild_lc(row(mode="real"), {"tic": 1}, {})
+    assert out is not None
+    tt, ff, ee, dd, gaps = out
+    assert np.array_equal(tt, t[good]) and np.array_equal(dd, dumps)
+    assert np.array_equal(ff, f[good]) and np.array_equal(ee, e[good])
+    assert isinstance(gaps, np.ndarray)
+
+
+def test_inject_rebuild_uses_seed_and_never_runs_the_search(monkeypatch):
+    """Injection rows rebuild the injected+prepared flat LC from the manifest task's seed/run, without
+    calling pipeline.analyse (no BLS / detection products are recomputed)."""
+    from exosearch import density, stellar
+    from exosearch.v11 import pipeline
+
+    t = np.linspace(0.0, 10.0, 1001)
+    f = np.ones_like(t)
+    e = np.full(t.size, 1e-4)
+    good = np.ones(t.size, bool)
+    dumps = np.array([3.0])
+    monkeypatch.setattr(pipeline, "load", lambda job, download=True: (t, f, e, good, {}, dumps))
+    seen = {}
+
+    def prep(tg, fi, eg, cfg, prewhiten_on=True, comb_guard=None, gap_trim=0.3):
+        seen.update(n=len(tg), injected=bool(np.any(fi != 1.0)))
+        return dict(flat=(tg, fi, eg))
+
+    monkeypatch.setattr(pipeline, "prepare", prep)
+    monkeypatch.setattr(pipeline, "draw_density", lambda *a, **k: ("tic", 1.0, 1.0))
+    monkeypatch.setattr(stellar, "quad_ld", lambda *a: np.array([0.3, 0.2]))
+    monkeypatch.setattr(density, "model", lambda t, T0, P, k, aR, b, u: np.full_like(t, 0.999))
+
+    def no_analyse(*a, **k):
+        raise AssertionError("a rescore must not re-run the search")
+
+    monkeypatch.setattr(pipeline, "analyse", no_analyse)
+    job = dict(tic=1, cfg={}, cfg_inj={"wrong_density": None}, rstar=1.0, mstar=1.0, teff=5000.0, logg=4.4,
+               tasks=[dict(tag="inject_run0", mode="inject", run=0, seed=123)])
+    r = row(mode="inject", task="inject_run0", run=0, seed=123)
+    out = fin._rebuild_inject_flat(r, job)
+    assert out is not None
+    tt, ff, ee, dd = out
+    assert seen["n"] == len(t) and seen["injected"]
+    assert np.array_equal(dd, dumps) and np.array_equal(tt, t)
+    # no seed (row and task) -> cannot rebuild, nothing invented
+    assert fin._rebuild_inject_flat(dict(r, seed=None), dict(job, tasks=[])) is None
+    assert fin.rebuild_lc(dict(r, seed=None), dict(job, tasks=[]), {}) is None
+
+
+def test_load_manifest_jobs_attaches_header_cfg_inj(tmp_path):
+    """Production manifests store cfg_inj on the header, not on each job line (run.write_manifests).
+    load_manifest_jobs must attach it, as run.work does, or injection LC rebuilds would always fail."""
+    import gzip, json
+    cfg_inj = {"seed": 1, "wrong_density": None, "runs": {}, "recovery": {}}
+    head = {"header": {"cfg": {"vet": {}}, "cfg_inj": cfg_inj}}
+    job = {"tic": 11, "radius": 1.0, "rstar": 1.0, "mstar": 1.0,
+           "tasks": [{"tag": "inject_run0", "mode": "inject", "run": 0, "seed": 7}]}
+    man = tmp_path / "manifests"
+    man.mkdir()
+    for name in ("known_h1", "rest_h1"):
+        with gzip.open(man / f"{name}.jsonl.gz", "wt") as fh:
+            fh.write(json.dumps(head) + "\n")
+            if name == "known_h1":
+                fh.write(json.dumps(job) + "\n")
+    jobs, cfg = fin.load_manifest_jobs(str(tmp_path) + "/")
+    assert cfg == {"vet": {}}
+    assert "cfg_inj" not in job
+    assert jobs[11]["cfg_inj"] == cfg_inj
+    # without the attach, the inject rebuild would return None at the cfg_inj guard
+    bare = {k: v for k, v in jobs[11].items() if k != "cfg_inj"}
+    assert fin._rebuild_inject_flat(row(mode="inject", task="inject_run0", seed=7), bare) is None
