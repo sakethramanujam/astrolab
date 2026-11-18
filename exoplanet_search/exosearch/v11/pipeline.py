@@ -196,6 +196,7 @@ def run_job(job):
         t0 = time.perf_counter()
         row = dict(base, key=f"{job['key']}:{tk['tag']}", task=tk["tag"], mode=tk["mode"], realization=tk.get("realization"),
                    run=tk.get("run"), seed=tk.get("seed"), load_s=load_s, n_dumps=int(len(dumps)),
+                   e_rad=job.get("e_rad"),         # TIC R* error (R_Sun) from the job, not the FITS header
                    **{k: meta.get(k) for k in KEEP_META})
         try:
             pw_on = tk.get("prewhiten", True)

@@ -56,7 +56,8 @@
     },
     "rp_cap": {
       "enabled": false,
-      "cap_rearth": 30.0
+      "cap_rearth": 30.0,
+      "cap_rearth_candidates": [22, 25, 30]
     }
   },
   "momentum_dump": {

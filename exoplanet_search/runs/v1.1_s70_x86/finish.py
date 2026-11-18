@@ -41,7 +41,7 @@ def row_verdict(row, jobs=None, cfg=None, *, fail_common_period=None, scan=None,
     return vet_final.final_verdict(row, common_period=fail_common_period, checks_logged=row.get('checks_logged'),
                                    rho=j.get('rho'), scan=scan, needs_lc=needs_lc, cfg=cfg,
                                    lc=lc, dumps=dumps, odd_even=odd_even, odd_even_mask=odd_even_mask,
-                                   rstar=j.get('radius'))
+                                   rstar=j.get('radius'), e_rad=j.get('e_rad'))
 
 
 def real_path(row, jobs=None, cfg=None, *, scan=None, **kw):
@@ -114,7 +114,8 @@ def main():
         sc = rebuild_scan(r, j, cfg)
         scans[idx] = sc
         d = {k: x for k, x in vet_final.final_verdict_row(
-                 r, checks_logged=r.get('checks_logged'), rho=j.get('rho'), scan=sc).items()
+                 r, checks_logged=r.get('checks_logged'), rho=j.get('rho'), scan=sc,
+                 cfg=cfg, rstar=j.get('radius'), e_rad=j.get('e_rad')).items()
              if k not in vet_final.VERDICT_KEYS}
         d['_idx'] = idx
         v_recs.append(d)

@@ -387,15 +387,19 @@ def _cfg_cap(enabled=True, cap=None):
     return {"vet": {"rp_cap": rc}}
 
 
-def _rrow(rp, sigma, rstar=1.0, **kw):
-    """Row (R* = rstar R_Sun) whose Rp = rp and sigma_Rp = sigma R_Earth, by the documented formulae."""
+def _rrow(rp, sigma, rstar=1.0, e_rad=0.0, **kw):
+    """Row (R* = rstar R_Sun) whose Rp = rp and depth-only sigma_Rp = sigma R_Earth, by the documented formulae.
+
+    e_rad (R_Sun) defaults to 0 (explicitly present, valid): the R* term contributes nothing, so the
+    pre-step-5a depth-only definitions of Rp - 2 sigma hold.  Pass e_rad=None to leave it missing."""
     depth = (rp / (rstar * vf.vet.R_EARTH_PER_RSUN)) ** 2
     depth_err = 2.0 * depth * sigma / rp
-    return row(radius=rstar, depth=depth, depth_err=depth_err, rp_earth=rp, rp_rjup=rp / va.R_EARTH_PER_RJUP, **kw)
+    return row(radius=rstar, depth=depth, depth_err=depth_err, e_rad=e_rad, rp_earth=rp,
+               rp_rjup=rp / va.R_EARTH_PER_RJUP, **kw)
 
 
 def test_rp_with_error_formulae():
-    r = row(radius=1.2, depth=0.0025, depth_err=0.0005)
+    r = row(radius=1.2, depth=0.0025, depth_err=0.0005, e_rad=0.0)      # e_rad = 0: depth-only formula
     out = vf.rp_with_error(r)
     rp = 1.2 * np.sqrt(0.0025) * 109.1
     assert vf.vet.R_EARTH_PER_RSUN == 109.1
@@ -405,12 +409,13 @@ def test_rp_with_error_formulae():
     # stored Rp is never used: R* and depth give Rp
     out2 = vf.rp_with_error(dict(r, rp_earth=999.0, rp_rjup=999.0))
     assert out2["rp"] == pytest.approx(rp)
-    # missing / non-finite / negative depth_err -> sigma = 0 (nothing invented)
+    # missing / non-finite / negative depth_err -> incomplete (no sigma = 0 fallback; Rp itself is still computed)
     for de in (None, np.nan, np.inf, -1e-4):
         o = vf.rp_with_error(dict(r, depth_err=de))
-        assert o["sigma"] == 0.0 and o["lower2s"] == pytest.approx(rp)
+        assert o["status"] == vf.RP_ERR_INCOMPLETE and o["rp"] == pytest.approx(rp)
+        assert np.isnan(o["sigma"]) and np.isnan(o["lower2s"])
     o = vf.rp_with_error({k: v for k, v in r.items() if k != "depth_err"})
-    assert o["sigma"] == 0.0
+    assert o["status"] == vf.RP_ERR_INCOMPLETE
     # job R* only when the row has none
     o = vf.rp_with_error(dict(r, radius=None), rstar=1.2)
     assert o["rp"] == pytest.approx(rp)
@@ -464,7 +469,7 @@ def test_rp_cap_missing_rstar_is_flagged_not_passed():
     r = {k: v for k, v in row(depth=0.25).items() if k != "radius"}
     assert vf.final_verdict(r, cfg=cfg).all_failing == [vf.MISSING_RSTAR]
     # the job's R* (rstar) rescues a row only when it is itself valid
-    r = row(radius=None, depth=0.0025, depth_err=1e-4)
+    r = row(radius=None, depth=0.0025, depth_err=1e-4, e_rad=0.0)
     assert vf.final_verdict(r, cfg=cfg, rstar=1.0).passed
     assert vf.final_verdict(r, cfg=cfg, rstar=np.nan).all_failing == [vf.MISSING_RSTAR]
     assert fin.row_verdict(r, jobs={1: {"radius": 1.0}}, cfg=cfg).passed
@@ -518,12 +523,14 @@ def json_cfg_vet():
 
 def test_config_defaults_for_rp_cap():
     rc = json_cfg_vet()["vet"]["rp_cap"]
-    assert rc == {"enabled": False, "cap_rearth": 30.0}
-    assert vf.rp_cap_cfg(json_cfg_vet()) == {"enabled": False, "cap_rearth": va.RP_CAP_REARTH}
-    assert vf.rp_cap_cfg(None) == vf.rp_cap_cfg({}) == {"enabled": False, "cap_rearth": 30.0}
+    assert rc == {"enabled": False, "cap_rearth": 30.0, "cap_rearth_candidates": [22, 25, 30]}
+    assert vf.rp_cap_cfg(json_cfg_vet()) == {"enabled": False, "cap_rearth": va.RP_CAP_REARTH,
+                                             "cap_rearth_candidates": [22, 25, 30]}
+    assert vf.rp_cap_cfg(None) == vf.rp_cap_cfg({}) == {"enabled": False, "cap_rearth": 30.0,
+                                                        "cap_rearth_candidates": [22, 25, 30]}
     cfg = json_cfg_vet()
     cfg["vet"]["rp_cap"]["enabled"] = True
-    assert vf.rp_cap_cfg(cfg) == {"enabled": True, "cap_rearth": 30.0}
+    assert vf.rp_cap_cfg(cfg) == {"enabled": True, "cap_rearth": 30.0, "cap_rearth_candidates": [22, 25, 30]}
     assert vf.rp_cap_cfg(None, True)["enabled"] is True
 
 
@@ -563,3 +570,180 @@ def test_rp_cap_real_null_inject_paths_agree_when_on():
     assert not PATHS[2](_rrow(60.0, 10.0), cfg=cfg).passed
     assert PATHS[2](_rrow(40.0, 7.0), cfg=cfg).passed
     assert PATHS[0](row(radius=None, depth=0.25), cfg=cfg).all_failing == [vf.MISSING_RSTAR]
+
+
+# ------------------------------------------------------------------------------------------------
+# v1.2 step 5a: TIC e_rad (R* error, R_Sun) in quadrature in the Rp - 2 sigma cap
+# ------------------------------------------------------------------------------------------------
+BAD_ERR = (None, np.nan, np.inf, -np.inf, -1e-4)
+
+
+def test_rp_error_quadrature_formula():
+    R, dep, de, er = 1.2, 0.0025, 0.0005, 0.06
+    rp = R * np.sqrt(dep) * 109.1
+    r = row(radius=R, depth=dep, depth_err=de, e_rad=er)
+    o = vf.rp_with_error(r)
+    assert o["status"] == "ok" and o["e_rad"] == er
+    # numeric lock: (sigma/Rp)^2 = (0.06/1.2)^2 + (0.0005/(2*0.0025))^2 = 0.0025 + 0.01
+    assert o["rp"] == pytest.approx(6.546, rel=1e-12)
+    assert o["sigma"] == pytest.approx(6.546 * np.sqrt(0.0125), rel=1e-12)
+    assert o["sigma"] == pytest.approx(0.73187, abs=5e-6)
+    assert o["sigma"] == pytest.approx(rp * np.hypot(er / R, de / (2 * dep)))
+    assert o["lower2s"] == pytest.approx(rp - 2 * o["sigma"])
+    # e_rad = 0 -> the depth-only formula
+    o0 = vf.rp_with_error(dict(r, e_rad=0.0))
+    assert o0["status"] == "ok" and o0["sigma"] == pytest.approx(rp * de / (2 * dep))
+    # depth_err = 0 -> sigma = Rp * e_rad / R*
+    od = vf.rp_with_error(dict(r, depth_err=0.0))
+    assert od["status"] == "ok" and od["sigma"] == pytest.approx(rp * er / R)
+    # both zero: valid, sigma = 0 (explicit zeros are not 'missing')
+    oz = vf.rp_with_error(dict(r, depth_err=0.0, e_rad=0.0))
+    assert oz["status"] == "ok" and oz["sigma"] == 0.0 and oz["lower2s"] == pytest.approx(rp)
+
+
+def test_rp_err_incomplete_when_rule_on():
+    cfg = _cfg_cap(True)
+    base = _rrow(60.0, 10.0)                       # point estimate 60 > 30, depth-only lower 2 sigma 40 > 30
+    assert not vf.final_verdict(base, cfg=cfg).passed
+    cases = []
+    for bad in BAD_ERR:
+        cases += [dict(base, depth_err=bad), dict(base, e_rad=bad)]
+    cases += [{k: v for k, v in base.items() if k != "depth_err"}, {k: v for k, v in base.items() if k != "e_rad"}]
+    cases += [_rrow(10.0, 1.0, e_rad=None), _rrow(29.0, 0.0, e_rad=np.nan)]     # small Rp is not rescued either
+    for r in cases:
+        v = vf.final_verdict(r, cfg=cfg)
+        assert not v.passed and v.all_failing == [vf.RP_ERR_INCOMPLETE], r
+        assert vf.RP_CAP_FLAG not in v.all_failing and "rp_gt_30re" not in v.all_failing
+        assert vf.MISSING_RSTAR not in v.all_failing and vf.RP_UNDETERMINED not in v.all_failing
+        d = vf.final_verdict_row(r, cfg=cfg)
+        assert d["passed_lc_checks_v2"] is False and vf.RP_ERR_INCOMPLETE in d["reject_v2"]
+        assert np.isnan(d["rp_cap_sigma_v2"]) and d["rp_cap_rp_v2"] > 0
+    assert vf.RP_ERR_INCOMPLETE not in (vf.RP_CAP_FLAG, vf.MISSING_RSTAR, vf.RP_UNDETERMINED)
+    # R* / depth problems keep their own flags (checked before the error terms)
+    assert vf.final_verdict(row(radius=None, depth=0.25), cfg=cfg).all_failing == [vf.MISSING_RSTAR]
+    assert vf.final_verdict(row(radius=1.0, depth=0.0), cfg=cfg).all_failing == [vf.RP_UNDETERMINED]
+    # job argument that is itself invalid does not complete the error
+    assert vf.final_verdict(_rrow(10.0, 1.0, e_rad=None), cfg=cfg, e_rad=np.nan).all_failing == [vf.RP_ERR_INCOMPLETE]
+    assert vf.final_verdict(_rrow(10.0, 1.0, e_rad=None), cfg=cfg, e_rad=-0.1).all_failing == [vf.RP_ERR_INCOMPLETE]
+
+
+def test_rp_err_incomplete_never_applies_the_cap_to_the_point_estimate():
+    cfg = _cfg_cap(True)
+    r = _rrow(60.0, 10.0, e_rad=None)
+    assert vf.rp_with_error(r)["rp"] > 30.0
+    v = vf.final_verdict(r, cfg=cfg)
+    assert v.all_failing == [vf.RP_ERR_INCOMPLETE]
+    d = vf.final_verdict_row(r, cfg=cfg)
+    assert "rp_gt_30re" not in d["reject_v2"] and vf.RP_CAP_FLAG not in d["reject_v2"]
+
+
+def test_rp_err_rule_off_is_unchanged():
+    """Rule off: v1.1 amended behaviour, no rp_err_incomplete, no quadrature, whatever e_rad / depth_err hold."""
+    for r in (_rrow(60.0, 10.0, e_rad=None), _rrow(60.0, 10.0, e_rad=0.5), _rrow(40.0, 7.0, e_rad=np.nan),
+              dict(_rrow(10.0, 1.0), depth_err=None), _rrow(31.0, 0.0, e_rad=None), _rrow(25.0, 1.0, e_rad=None)):
+        head = va.amended(r)
+        for cfg in (None, {}, _cfg_cap(False), _cfg_cap(False, 22.0), json_cfg_vet()):
+            d = vf.final_verdict_row(r, cfg=cfg, e_rad=0.3)
+            assert d["reject_v2"] == head["reject_v2"]
+            assert vf.RP_ERR_INCOMPLETE not in d["reject_v2"] and vf.RP_CAP_FLAG not in d["reject_v2"]
+            assert not any(k.startswith("rp_cap_") for k in d)
+            assert vf.final_verdict(r, cfg=cfg, e_rad=0.3).passed is bool(head["passed_lc_checks_v2"])
+    assert vf.final_verdict(_rrow(60.0, 10.0, e_rad=None)).all_failing == ["rp_gt_30re"]
+    # a missing-R* row that passes the v1.1 cap still passes with the rule off
+    assert vf.final_verdict(row(radius=None, depth=0.25, rp_earth=np.nan, rp_rjup=np.nan)).passed
+
+
+def test_rp_cap_e_rad_moves_row_across_the_cap():
+    cfg = _cfg_cap(True)
+    # depth-only lower 2 sigma 40 > 30 -> rejected with e_rad = 0 ...
+    r0 = _rrow(60.0, 10.0, e_rad=0.0)
+    assert vf.final_verdict(r0, cfg=cfg).all_failing == [vf.RP_CAP_FLAG]
+    # ... but e_rad = 0.2 R_Sun (sigma_R = 12 R_Earth) gives sigma = hypot(10, 12), lower 2 sigma ~ 28.8 < 30
+    r1 = _rrow(60.0, 10.0, e_rad=0.2)
+    d = vf.final_verdict_row(r1, cfg=cfg)
+    assert d["rp_cap_sigma_v2"] == pytest.approx(np.hypot(10.0, 12.0))
+    assert d["rp_cap_lower2s_v2"] == pytest.approx(60.0 - 2 * np.hypot(10.0, 12.0))
+    assert d["rp_cap_e_rad_v2"] == 0.2
+    assert d["passed_lc_checks_v2"] and vf.final_verdict(r1, cfg=cfg).passed
+    # a smaller e_rad that keeps lower 2 sigma above the cap still rejects
+    assert vf.final_verdict(_rrow(60.0, 10.0, e_rad=0.02), cfg=cfg).all_failing == [vf.RP_CAP_FLAG]
+    # the radius term alone (depth_err = 0): 60 - 2 * 60 * e/R*
+    r2 = _rrow(60.0, 0.0, e_rad=0.25)
+    assert vf.rp_with_error(r2)["sigma"] == pytest.approx(60.0 * 0.25)
+    assert vf.final_verdict(r2, cfg=cfg).passed
+    # exact boundary with a radius term: Rp 60, e_rad such that 2 * 60 * e = 30 -> lower 2 sigma = 30 kept
+    assert vf.final_verdict(_rrow(60.0, 0.0, e_rad=0.25), cfg=cfg).passed
+    assert vf.final_verdict(_rrow(60.0, 0.0, e_rad=0.2499), cfg=cfg).all_failing == [vf.RP_CAP_FLAG]
+
+
+def test_e_rad_row_preferred_over_job_argument():
+    cfg = _cfg_cap(True)
+    base = _rrow(60.0, 10.0)
+    # row e_rad valid (even 0) wins over the job argument
+    r0 = dict(base, e_rad=0.0)
+    assert vf.final_verdict(r0, cfg=cfg, e_rad=0.2).all_failing == [vf.RP_CAP_FLAG]
+    assert vf.rp_with_error(r0, e_rad=0.2)["e_rad"] == 0.0
+    r1 = dict(base, e_rad=0.2)
+    assert vf.final_verdict(r1, cfg=cfg, e_rad=0.0).passed
+    assert vf.rp_with_error(r1, e_rad=0.0)["e_rad"] == 0.2
+    # row e_rad missing / invalid -> the job argument
+    for bad in BAD_ERR:
+        r = dict(base, e_rad=bad)
+        assert vf.rp_with_error(r, e_rad=0.2)["e_rad"] == 0.2
+        assert vf.final_verdict(r, cfg=cfg, e_rad=0.2).passed
+        assert vf.final_verdict(r, cfg=cfg, e_rad=0.0).all_failing == [vf.RP_CAP_FLAG]
+    r = {k: v for k, v in base.items() if k != "e_rad"}
+    assert vf.final_verdict(r, cfg=cfg, e_rad=0.2).passed
+    assert vf.final_verdict_row(r, cfg=cfg, e_rad=0.2)["rp_cap_e_rad_v2"] == 0.2
+    # finish.py plumbing: the job's e_rad (and radius) reach the vetter; old rows have no e_rad column
+    r = {k: v for k, v in base.items() if k not in ("e_rad", "radius")}
+    for path in PATHS:
+        assert path(r, jobs={1: {"radius": 1.0, "e_rad": 0.2}}, cfg=cfg).passed
+        assert path(r, jobs={1: {"radius": 1.0, "e_rad": 0.0}}, cfg=cfg).all_failing == [vf.RP_CAP_FLAG]
+        assert path(r, jobs={1: {"radius": 1.0}}, cfg=cfg).all_failing == [vf.RP_ERR_INCOMPLETE]
+        assert path(r, jobs={1: {"radius": 1.0, "e_rad": None}}, cfg=cfg).all_failing == [vf.RP_ERR_INCOMPLETE]
+
+
+def test_cap_candidates_setting_and_noninfluence():
+    rc = json_cfg_vet()["vet"]["rp_cap"]
+    assert rc["cap_rearth"] == 30.0 and rc["cap_rearth_candidates"] == [22, 25, 30] and rc["enabled"] is False
+    assert vf.DEFAULT_RP_CAP["cap_rearth"] == 30.0 and vf.DEFAULT_RP_CAP["cap_rearth_candidates"] == [22, 25, 30]
+    c = vf.rp_cap_cfg(json_cfg_vet())
+    assert c["cap_rearth"] == 30.0 and c["cap_rearth_candidates"] == [22, 25, 30]
+    c = vf.rp_cap_cfg(None)
+    assert c["cap_rearth"] == 30.0 and c["cap_rearth_candidates"] == [22, 25, 30]
+    c["cap_rearth_candidates"].append(99)                      # callers cannot mutate the defaults
+    assert vf.rp_cap_cfg(None)["cap_rearth_candidates"] == [22, 25, 30]
+    # configs without the key keep the default list; an override replaces it but never changes cap_rearth
+    assert vf.rp_cap_cfg(_cfg_cap(True, 25.0))["cap_rearth_candidates"] == [22, 25, 30]
+    o = vf.rp_cap_cfg(None, {"enabled": True, "cap_rearth_candidates": [20, 30]})
+    assert o["cap_rearth_candidates"] == [20, 30] and o["cap_rearth"] == 30.0
+    # a non-default cap still changes the verdict (Rp 28, depth err 0, e_rad 0): candidates list does not select
+    r = _rrow(28.0, 0.0)
+    for cap, ok in ((22.0, False), (25.0, False), (30.0, True)):
+        v = vf.final_verdict(r, cfg=_cfg_cap(True, cap))
+        assert v.passed is ok and (ok or v.all_failing == [vf.RP_CAP_FLAG])
+    cfg = _cfg_cap(True)
+    cfg["vet"]["rp_cap"]["cap_rearth_candidates"] = [22, 25, 30]
+    assert vf.final_verdict(r, cfg=cfg).passed                  # cap_rearth stays 30
+    assert vf.rp_cap_cfg(cfg)["cap_rearth"] == 30.0
+
+
+def test_star_params_puts_tic_e_rad_on_job(monkeypatch):
+    import pandas as pd
+    from exosearch import stellar
+    from exosearch.v11 import run as v11run
+
+    tp = pd.DataFrame(
+        dict(ID=[1, 2, 3], Tmag=[9.0] * 3, Teff=[5700.0] * 3, logg=[4.4] * 3, rad=[1.1, 0.9, np.nan],
+             e_rad=[0.06, np.nan, 0.05], mass=[1.0, 0.9, 1.0], e_mass=[0.1] * 3, rho=[np.nan] * 3,
+             e_rho=[np.nan] * 3, GAIA=["x", "y", "z"])).set_index("ID", drop=False)
+    monkeypatch.setattr(stellar, "tic_params", lambda tics, log=print: tp[tp.ID.isin(list(tics))])
+    monkeypatch.setattr(stellar, "gaia_dr3", lambda ids, log=print: pd.DataFrame(index=pd.Index([], dtype="int64")))
+    out = v11run.star_params(70, [1, 2, 3, 4], log=lambda *a: None)
+    assert out[1]["e_rad"] == 0.06 and out[1]["rad_tic"] == 1.1
+    assert out[2]["e_rad"] is None and out[2]["rad_tic"] == 0.9         # missing stays missing: no 10% fallback
+    assert out[3]["e_rad"] == 0.05 and out[3]["rad_tic"] is None
+    assert out[4] == {}
+    j = v11run.base_job(70, 1, "f.fits", 1.1, 9.0, out[1])
+    assert j["e_rad"] == 0.06 and j["radius"] == 1.1 and j["rad_tic"] == 1.1

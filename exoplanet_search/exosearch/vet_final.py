@@ -47,6 +47,7 @@ __all__ = [
     "RP_CAP_FLAG",
     "MISSING_RSTAR",
     "RP_UNDETERMINED",
+    "RP_ERR_INCOMPLETE",
     "DEFAULT_RP_CAP",
     "rp_cap_cfg",
     "rp_cap_enabled",
@@ -75,7 +76,13 @@ VERDICT_KEYS = ("passed_final", "first_failing_rule", "all_failing", "status_fin
 RP_CAP_FLAG = "rp_lo2s_gt_cap"          # (Rp - 2 sigma_Rp) > cap; replaces the point-estimate 'rp_gt_30re' when on
 MISSING_RSTAR = "missing_rstar"         # R* missing / non-finite / <= 0: Rp cannot be computed; never a cap pass
 RP_UNDETERMINED = "rp_undetermined"     # R* valid but depth is non-finite or <= 0: cap cannot be evaluated; not a pass
-DEFAULT_RP_CAP = dict(enabled=False, cap_rearth=30.0)   # cap value = vet_amend.RP_CAP_REARTH (v1.1)
+# v1.2 step 5a: R* valid and depth > 0 (Rp computable) but depth_err or e_rad (TIC R* error, R_Sun) is missing,
+# None, non-finite or < 0: sigma_Rp cannot be formed, so the cap is NOT applied to the point estimate (no sigma = 0
+# fallback).  Not a pass; distinct from RP_CAP_FLAG, MISSING_RSTAR and RP_UNDETERMINED.
+RP_ERR_INCOMPLETE = "rp_err_incomplete"
+# cap value = vet_amend.RP_CAP_REARTH (v1.1).  cap_rearth_candidates: values calibration may choose from
+# later (a setting only; nothing here selects among them); cap_rearth stays the value in force.
+DEFAULT_RP_CAP = dict(enabled=False, cap_rearth=30.0, cap_rearth_candidates=[22.0, 25.0, 30.0])
 _RP_CAP_EPS = 1e-9                      # R_Earth; boundary (Rp - 2 sigma == cap) is kept despite float noise
 
 odd_even_mask_cfg = vet11.odd_even_mask_cfg
@@ -144,10 +151,13 @@ def checks_logged_of(row: Dict[str, Any], checks_logged: Optional[Any] = None) -
 def rp_cap_cfg(cfg: Optional[Dict[str, Any]] = None, rp_cap: Optional[Any] = None) -> Dict[str, Any]:
     """Resolve the Rp - 2 sigma radius-cap settings from `cfg["vet"]["rp_cap"]` (and an optional override).
 
-    `rp_cap` may be a bool (enabled) or a dict with `enabled` / `cap_rearth`.  Configs without the keys
-    resolve to `DEFAULT_RP_CAP` (rule off: the v1.1 point-estimate cap `rp_gt_30re` in vet_amend.amended).
+    `rp_cap` may be a bool (enabled) or a dict with `enabled` / `cap_rearth` / `cap_rearth_candidates`.
+    Configs without the keys resolve to `DEFAULT_RP_CAP` (rule off: the v1.1 point-estimate cap
+    `rp_gt_30re` in vet_amend.amended).  `cap_rearth_candidates` (default [22, 25, 30]) is only exposed for
+    calibration; it never changes `cap_rearth`.
     """
     out = dict(DEFAULT_RP_CAP)
+    out["cap_rearth_candidates"] = list(DEFAULT_RP_CAP["cap_rearth_candidates"])
     v = cfg.get("vet") if isinstance(cfg, dict) else None
     for src in (v.get("rp_cap") if isinstance(v, dict) else None, rp_cap):
         if isinstance(src, bool):
@@ -157,6 +167,8 @@ def rp_cap_cfg(cfg: Optional[Dict[str, Any]] = None, rp_cap: Optional[Any] = Non
                 out["enabled"] = bool(src["enabled"])
             if src.get("cap_rearth") is not None:
                 out["cap_rearth"] = float(src["cap_rearth"])
+            if src.get("cap_rearth_candidates") is not None:
+                out["cap_rearth_candidates"] = [float(x) for x in src["cap_rearth_candidates"]]
     return out
 
 
@@ -164,33 +176,45 @@ def rp_cap_enabled(cfg: Optional[Dict[str, Any]] = None, rp_cap: Optional[Any] =
     return bool(rp_cap_cfg(cfg, rp_cap)["enabled"])
 
 
-def rp_with_error(row: Dict[str, Any], rstar: Optional[float] = None) -> Dict[str, Any]:
+def _valid_err(x) -> float:
+    """x as a float when explicitly present, finite and >= 0 (a literal 0 is valid), else NaN."""
+    v = vet_amend._f(x)
+    return v if (np.isfinite(v) and v >= 0) else float("nan")
+
+
+def rp_with_error(row: Dict[str, Any], rstar: Optional[float] = None, e_rad: Optional[float] = None) -> Dict[str, Any]:
     """Rp (R_Earth) and its 1-sigma error for the Rp - 2 sigma radius cap.  The ONE implementation.
 
     Formulae (R_EARTH_PER_RSUN = exosearch.vet.R_EARTH_PER_RSUN = 109.1):
 
-        Rp      = R* * sqrt(max(depth, 0)) * R_EARTH_PER_RSUN              (R* in R_Sun, depth a fraction)
-        sigma_Rp = Rp * depth_err / (2 * depth)       first-order propagation in depth, depth > 0,
-                                                      depth_err finite and >= 0
-        lower2s  = Rp - 2 * sigma_Rp
+        Rp              = R* * sqrt(max(depth, 0)) * R_EARTH_PER_RSUN        (R* in R_Sun, depth a fraction)
+        (sigma_Rp/Rp)^2 = (sigma_R*/R*)^2 + (depth_err / (2 * depth))^2      depth > 0
+        lower2s         = Rp - 2 * sigma_Rp
+
+    sigma_R* is `e_rad` (TIC R* error, R_Sun, the unit of R*).  Both terms must be valid: depth_err and
+    e_rad each explicitly present, finite and >= 0.  A literal 0 is valid (that term contributes nothing,
+    e.g. e_rad=0 gives the depth-only sigma_Rp = Rp * depth_err / (2 * depth)).  Missing / None / NaN / Inf /
+    negative is incomplete: nothing is invented (no 10% R* error, no sigma = 0 fallback).
 
     R* is the row's `radius` (pipeline KEEP_META) and, only when that is missing/invalid, the job's `radius`
-    (`rstar` argument).  A stored `rp_earth` / `rp_rjup` is never used: it must not hide a missing R*, and Rp
-    is always computed from the same `depth` as sigma_Rp.  No R* uncertainty exists on rows or jobs, so
-    depth_err alone is propagated (with one it would add (sigma_R*/R*)^2 in quadrature); a missing or
-    non-finite `depth_err` (or < 0) gives sigma_Rp = 0, i.e. the cap reduces to the point estimate; nothing
-    is invented.
+    (`rstar` argument).  e_rad is the row's `e_rad` when valid, else the job's (`e_rad` argument).  A stored
+    `rp_earth` / `rp_rjup` is never used: it must not hide a missing R*, and Rp is always computed from the
+    same `depth` as sigma_Rp.
 
-    -> dict(status, rp, sigma, lower2s, rstar) with status one of
-       "ok"            Rp, sigma_Rp, lower2s are finite;
-       MISSING_RSTAR   R* missing, non-finite or <= 0 (rp/sigma/lower2s NaN);
-       RP_UNDETERMINED R* valid but depth is non-finite or <= 0 (rp/sigma/lower2s NaN).
+    -> dict(status, rp, sigma, lower2s, rstar, e_rad) with status one of
+       "ok"               Rp, sigma_Rp, lower2s are finite;
+       MISSING_RSTAR      R* missing, non-finite or <= 0 (rp/sigma/lower2s NaN);
+       RP_UNDETERMINED    R* valid but depth is non-finite or <= 0 (rp/sigma/lower2s NaN);
+       RP_ERR_INCOMPLETE  Rp is computed but depth_err or e_rad is not valid (sigma/lower2s NaN).
     """
     nan = float("nan")
     r = vet_amend._f(row.get("radius"))
     if not (np.isfinite(r) and r > 0):
         r = vet_amend._f(rstar)
-    out = dict(status="ok", rp=nan, sigma=nan, lower2s=nan, rstar=r if np.isfinite(r) else nan)
+    er = _valid_err(row.get("e_rad"))
+    if not np.isfinite(er):
+        er = _valid_err(e_rad)
+    out = dict(status="ok", rp=nan, sigma=nan, lower2s=nan, rstar=r if np.isfinite(r) else nan, e_rad=er)
     if not (np.isfinite(r) and r > 0):
         out["status"] = MISSING_RSTAR
         return out
@@ -199,23 +223,28 @@ def rp_with_error(row: Dict[str, Any], rstar: Optional[float] = None) -> Dict[st
         out["status"] = RP_UNDETERMINED
         return out
     rp = float(r * np.sqrt(depth) * vet.R_EARTH_PER_RSUN)
-    derr = vet_amend._f(row.get("depth_err"))
-    sigma = float(rp * derr / (2.0 * depth)) if (np.isfinite(derr) and derr >= 0) else 0.0
-    out.update(rp=rp, sigma=sigma, lower2s=rp - 2.0 * sigma)
+    out["rp"] = rp
+    derr = _valid_err(row.get("depth_err"))
+    if not (np.isfinite(derr) and np.isfinite(er)):
+        out["status"] = RP_ERR_INCOMPLETE
+        return out
+    sigma = float(rp * np.sqrt((er / r) ** 2 + (derr / (2.0 * depth)) ** 2))
+    out.update(sigma=sigma, lower2s=rp - 2.0 * sigma)
     return out
 
 
 def rp_cap_flags(row: Dict[str, Any], cfg: Optional[Dict[str, Any]] = None, rstar: Optional[float] = None,
-                 rp_cap: Optional[Any] = None):
+                 rp_cap: Optional[Any] = None, e_rad: Optional[float] = None):
     """(flags, info) of the Rp - 2 sigma radius cap for one row; ({}, info) when the rule is off.
 
     Rejects only when (Rp - 2 sigma_Rp) > cap (strictly; equality, within 1e-9 R_Earth, is kept).
-    `missing_rstar` / `rp_undetermined` are distinct from the cap flag and never pass.
+    `missing_rstar` / `rp_undetermined` / `rp_err_incomplete` are distinct from the cap flag and never pass;
+    an incomplete error (depth_err or e_rad not valid) never falls back to the point estimate.
     """
     c = rp_cap_cfg(cfg, rp_cap)
     if not c["enabled"]:
         return set(), None
-    info = rp_with_error(row, rstar)
+    info = rp_with_error(row, rstar, e_rad)
     info["cap_rearth"] = c["cap_rearth"]
     if info["status"] != "ok":
         return {info["status"]}, info
@@ -293,6 +322,7 @@ def final_verdict_row(
     odd_even_mask: Optional[Any] = None,
     rstar: Optional[float] = None,
     rp_cap: Optional[Any] = None,
+    e_rad: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Row dict + amended fields + the final verdict fields.
 
@@ -303,6 +333,9 @@ def final_verdict_row(
     for a deep 'secondary_scan' row it must reproduce the row's logged sec_scan_sigma (revet_one's check,
     RuntimeError otherwise).  needs_lc: policy for rows that require a light curve that was not supplied
     ("reject" = lower bound, "exempt" = upper bound, "raise" = raise ValueError).
+
+    rstar / e_rad: the job's R* and TIC R* error (both R_Sun), used by the Rp - 2 sigma cap (rule on) only when
+    the row's own `radius` / `e_rad` is missing or invalid; see `rp_with_error`.
 
     When the odd-even transit mask is enabled (via `cfg` or `odd_even_mask` or explicit `odd_even`),
     odd/even depths are recomputed on the light curve `lc` using only transits that pass the mask, and
@@ -347,14 +380,14 @@ def final_verdict_row(
     if sec_nlc and needs_lc == "raise":
         raise ValueError(f"TIC {row.get('tic')}: secondary_scan requires a rebuilt scan")
     a = vet_amend.amended(row_eff, scan, rho)
-    cap_flags, cap_info = rp_cap_flags(row, cfg, rstar, rp_cap)
+    cap_flags, cap_info = rp_cap_flags(row, cfg, rstar, rp_cap, e_rad)
     if cap_info is not None:
         # rule on: drop the point-estimate cap, apply Rp - 2 sigma (the secondary-exemption 'small' test inside
         # amended() is a separate v1.1 rule and is unchanged)
         a["reject_v2"] = ",".join(sorted((_set(a["reject_v2"]) - {"rp_gt_30re"}) | cap_flags))
         a["passed_lc_checks_v2"] = not _set(a["reject_v2"])
         a.update(rp_cap_rp_v2=cap_info["rp"], rp_cap_sigma_v2=cap_info["sigma"],
-                 rp_cap_lower2s_v2=cap_info["lower2s"], rp_cap_rstar_v2=cap_info["rstar"],
+                 rp_cap_lower2s_v2=cap_info["lower2s"], rp_cap_rstar_v2=cap_info["rstar"], rp_cap_e_rad_v2=cap_info["e_rad"],
                  rp_cap_rearth_v2=cap_info["cap_rearth"])
     rej = _set(a["reject_v2"])
     status = STATUS_NEEDS_LC if (sec_nlc or oe_nlc) else STATUS_OK
@@ -408,6 +441,7 @@ def final_verdict(
     odd_even_mask: Optional[Any] = None,
     rstar: Optional[float] = None,
     rp_cap: Optional[Any] = None,
+    e_rad: Optional[float] = None,
 ) -> Verdict:
     """(passed, first_failing_rule, all_failing, status) for one row of any mode.
 
@@ -429,6 +463,7 @@ def final_verdict(
         odd_even_mask=odd_even_mask,
         rstar=rstar,
         rp_cap=rp_cap,
+        e_rad=e_rad,
     )
     return Verdict((d["passed_final"], d["first_failing_rule"],
                     [x for x in d["all_failing"].split(",") if x], d["status_final"]))
