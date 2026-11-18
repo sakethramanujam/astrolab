@@ -65,6 +65,17 @@
     "reject_max_epochs": 2
   },
   "s_floor_checks": 6.0,
+  "sstar": {
+    "fine_grid_enabled": false,
+    "grid_min": 6.0,
+    "grid_max": 30.0,
+    "grid_step": 0.005,
+    "interpolate": false
+  },
+  "t14_retention": {
+    "bin_edges_h": [3.0, 6.0],
+    "tolerance": 0.5
+  },
   "scramble": {
     "gap_d": 0.5,
     "gap_trim_d": 0.3,
