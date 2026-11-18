@@ -1,7 +1,9 @@
 # Astrolab Exoplanet Search — v1.2 Pre-Registration (DRAFT)
 
-- **Status**: **DRAFT ONLY — Frozen Before Any v1.2 Compute** (pending human sign-off prior to code changes or execution)
-- **Date**: 2026-11-13 (UTC)
+- **Status**: **DRAFT** — 2026-11-13 and 2026-11-18 room decisions are folded in. This is not yet a signed registration. Search, nulls, calibration scoring, injection-rescore counts, and the S69 gate remain blocked until the Section 0B preconditions are met (the S70 detection-column bit-identity check at commit `0977818`, the injection replay check before any injection-rescore counts, and a filled frozen settings-file hash).
+- **Date**: 2026-11-18
+- **Code Reference**: branch `v1.2-vetter-unify` at `0977818` (`097781843d7a5a943fe1749f9e0c112d268b704b`), tags `v1.2-step1-vetter-unify` through `v1.2-step5c-toodeep-setting`. Tag `v1.2-step6-frozen-settings` will pin the frozen v1.2 settings file; its commit and file hash are placeholders in Section 0B.7 until that tag exists.
+- **Search-Path Hash** (computed at commit `0977818` with `exoplanet_search/docs/preregistration/v1.1_early_nulls_2026-11-11/searchpath_hash.py`): `b9e5ebea8f84b05d60491e871f2c19e3facda75bdb146f3ab46eead42dafa4f4`.
 - **Base Commit**: `dde1e6ba` (`exoplanet-search`)
 - **Predecessor**: v1.1 (`fb958a4e` search-path hash; Sector 72 known-planet gate failed at $28/30 = 93.3\%$ on 2026-11-12 due to `HAT-P-43 b` [`odd_even` at $3.17\sigma$ / $17.55\%$] and `TOI-6894 b` [`too_deep` at $5.04\% > 5.0\%$ around an $R_\star = 0.228\,R_\odot$ M dwarf], after which the v1.1 vetter was frozen without further amendment).
 
@@ -37,6 +39,45 @@ These changes were agreed in review after the first draft was written. Where lat
 4. **EB source.** Prša et al. 2022 covers only S1–S26, so EB checks for S59–S64, S69 and S70 use **Kostov et al. 2025 (ApJS 279, 50)** from CDS. Prša-based EB counts in Table 1 are superseded.
 5. **`few_transits` is a detection definition, not a cut to calibrate.** Completeness counts only injections that meet the gate's minimum transit count, and the injection grid is restricted to match.
 6. **S70 diagnostics context.** The largest injection losses came from `variable` (145 first-failing) and `density_mismatch` (128 first-failing; 241 counting every failing rule). The depth cap rejected none. A vetter-version audit is checking whether these were scored with the old vetter, so **the calibration targets depend on the outcome of that audit**.
+
+---
+
+
+## 0B. Room-Agreed Amendments (2026-11-18) — Supersede Any Conflicting Text Below
+
+These changes were agreed on 2026-11-18 (Saketh; Scientist and RF Engineer review). They supersede later sections where the two disagree, and they supersede Section 0A only where the two disagree. Section 0A otherwise stands, including the S59–S64 / S69 sector assignment, the per-cut Clopper-Pearson retention and per-class FP rules, Kostov et al. 2025 as the EB source, `few_transits` as a detection definition, and the vetter-audit dependency.
+
+1. **S69 known-planet gate: zero losses.** Saketh's rule: the S69 gate may lose **zero** known planets after vetting. Search misses on the frozen required set are also zero. Known-planet recovery is the first gate, and nothing else counts until it passes.
+   - **Real run**: every detectable confirmed planet on the frozen S69 eligibility list (`disp == 'confirmed'`, `eligible == True` at $S^*_{\text{gate}}$) must be recovered (period match as in Section 2.2, $S_{\text{found}} \ge S^*_{\text{gate}}$, and `passed_lc_checks_v12 == True`). One miss fails the gate.
+   - **Flipped (`invert`) null**: known planets must vanish (no transit-induced tail leakage on those hosts).
+   - **Scrambled (`scramble`) null**: known hosts remain excluded from the $S^*$ fit, as in v1.1. Any scrambled-null survival on a known host is a diagnostic only and is not part of the $S^*$ sample.
+   - This replaces the Section 2.2 / Section 7.3 alternative that would have allowed a 90% Clopper-Pearson lower bound when $N_{\text{req}} \ge 30$. There is no such alternative. (The Section 0A.2 allowance of 2–3 losses is only for *per-cut calibration retention* on S59–S64, which decides whether a cut stays a hard rejection or is demoted to a flag. It does not apply to the S69 gate.)
+
+2. **`too_deep` is a flag, not a cut.** Registered setting: `vet.too_deep.mode = 'flag'` (with `max_depth` default $0.05$). A 5% depth excess is recorded and is not a rejection. Once the radius cap uses $R_p-2\sigma$ with $R_\star$'s error included, it covers the stellar-companion case; a fixed 5% depth cut would reject giants around M dwarfs (e.g. `TOI-6894 b`). This supersedes any reading of `not_too_deep` / `max_depth` as a v1.2 hard cut.
+
+3. **Radius cap on $R_p - 2\sigma$, with $R_\star$ uncertainty.** Supersedes Section 4.2.
+   - $\sigma_{R_p}$ includes the TIC `e_rad` term in quadrature with the depth error. A missing or invalid `depth_err` or `e_rad` does not fall back to a point estimate or to $\sigma = 0$; the row is flagged `rp_err_incomplete` and does not pass the cap.
+   - A missing, non-finite, or non-positive $R_\star$ is flagged `missing_rstar` and does not pass the cap. There is **no** 20% depth fallback.
+   - The cap value is chosen by calibration from $\{22, 25, 30\}\,R_\oplus$, default $30\,R_\oplus$ (`vet.rp_cap.cap_rearth`, `vet.rp_cap.cap_rearth_candidates`). The $R_p/R_\star \le 0.50$ and default $25\,R_\oplus$ point-estimate rule in Section 4.2 is withdrawn.
+
+4. **Odd-even mask (supersedes the Section 5 LOTO definition).** A transit epoch is used in the odd-even test only if it has at least $X = 75\%$ in-transit coverage (`vet.odd_even_mask.min_coverage = 0.75`), lies at least $Y = 9\,\mathrm{h}$ from gaps and momentum dumps (`min_gap_dump_dist_h = 9.0`, equivalently $0.375\,\mathrm{d}$), and has at least one $T_{14}$ of out-of-transit baseline on one side (`oot_baseline_t14 = 1.0`, `oot_one_side = true`). If $n_{\text{odd}} < 2$ or $n_{\text{even}} < 2$ after masking, the cut does not hard-reject and the row is flagged `odd_even_too_few`. The LOTO statistic and the `flag_odd_even_single_epoch` / `flag_odd_even_loto_rescued` language in Section 5 are withdrawn as the registered procedure.
+
+5. **$S^*$ on a $0.005$ grid via `sstar_grid.select_sstar`.** $S^*$ is selected by `exosearch.sstar_grid.select_sstar` with the fine grid enabled: $S \in [6.000, 30.000]$, $\Delta S = 0.005$ (4,801 points, values rounded to 3 decimals). The discrete rule is the smallest grid point with $n_{\text{null}}(S \ge s) \le \lfloor B \rfloor$. Optional monotone log-tail interpolation, if enabled in the frozen settings file, is guarded so that $S^* = \max(S^*_{\text{interp}}, S^*_{\text{discrete}})$ and cannot admit more empirical null survivors than the discrete rule. T14 retention, binned at $< 3\,\mathrm{h}$, $3$–$6\,\mathrm{h}$, and $> 6\,\mathrm{h}$ (`t14_retention.bin_edges_h = [3.0, 6.0]`), is a detrending diagnostic only: it is not a cut and is not used to set $S^*$.
+
+6. **Sectors, stored rows, and hosts.** Calibration sectors are S59–S64 and the gate sector is S69, frozen before any of their search rows exist (as already in Section 0A.1). Every star gets a stored search row; there is no search-time $S^*$ threshold that would drop a row. Null, calibration, and gate rows are produced only on the bit-identical x86 hosts `h1` and `h3`. They are not produced on the Mac workstation, on `h4`, or on `h2`.
+
+7. **Code pin, frozen settings file, and preconditions.**
+   - **Code**: branch `v1.2-vetter-unify` at `0977818` (`097781843d7a5a943fe1749f9e0c112d268b704b`), tags `v1.2-step1-vetter-unify` through `v1.2-step5c-toodeep-setting`.
+   - **Search-path hash at commit `0977818`**: `b9e5ebea8f84b05d60491e871f2c19e3facda75bdb146f3ab46eead42dafa4f4`. The S70 detection-column bit-identity check below is run at this same commit.
+   - **Precondition to the search** (including S59–S64 and S69): a roughly 200-star S70 detection-column bit-identity check, known hosts included, run at commit `0977818`. Every detection column (at least $S$, period, $t_0$, and duration) must match the stored v1.1 S70 rows exactly. The search does not launch until this check passes.
+   - **Precondition to any injection rescore counts**: light curves for roughly 50 injection rows are rebuilt via the replay path and re-searched; $S$, period, and $t_0$ must match the stored rows exactly. No injection-rescore completeness or retention number is used until this check passes.
+   - **Frozen v1.2 settings file (required for calibration and the S69 gate)**: calibration scoring and the S69 gate must load a frozen v1.2 settings file that turns on the registered modes — odd-even mask on, `vet.too_deep.mode = 'flag'`, $R_p-2\sigma$ cap with `e_rad` in quadrature and cap candidates $\{22, 25, 30\}$, $0.005$ $S^*$ grid via `select_sstar`, and light-curve rebuild for mask-on rescores — and must **refuse to run** if the file is missing or if its hash does not match the registered hash. The file is added under tag `v1.2-step6-frozen-settings`.
+
+     **PLACEHOLDER — fill in when tag `v1.2-step6-frozen-settings` exists. Do not run calibration or the S69 gate against an unfilled placeholder.**
+     - Frozen settings tag: `v1.2-step6-frozen-settings`
+     - Frozen settings commit: `TODO-v1.2-step6-frozen-settings-commit`
+     - Frozen settings file path (repo-relative): `TODO-v1.2-step6-frozen-settings-path`
+     - Frozen settings file SHA-256: `TODO-v1.2-step6-frozen-settings-sha256`
 
 ---
 
@@ -146,8 +187,8 @@ Before a single real-search light curve in $S_{\text{gate}}$ is processed (and i
      1. Period $P_{\text{found}}$ matching $P_{\text{cat}}$ (or a $2\times$ or $0.5\times$ harmonic alias) within $\sqrt{(3\,\Delta P_{\text{halfwidth}})^2 + (3\,m\,\sigma_{P,\text{cat}})^2}$ (where $m \in \{1, 2, 0.5\}$),
      2. Detection statistic $S_{\text{found}} \ge S^*_{\text{gate}}$, and
      3. Passing all hard v1.2 light-curve vetting cuts (`passed_lc_checks_v12 == True`).
-4. **Gate Pass Criterion**:
-   - **100% of required detectable confirmed planets in $S_{\text{gate}}$ must be recovered** (or, if $N_{\text{gate}} \ge 30$, at most 0 unexcused losses in the required set; see Section 7.4). No post-gate vetter edits are permitted on $S_{\text{gate}}$.
+4. **Gate Pass Criterion** (Section 0B.1 governs):
+   - **Zero known-planet losses.** Every required detectable confirmed planet in $S_{\text{gate}}$ must be recovered (100% recovery; search misses also zero). There is no 90% Clopper-Pearson alternative when $N_{\text{req}} \ge 30$. No post-gate vetter edits are permitted on $S_{\text{gate}}$.
 
 ---
 
@@ -192,6 +233,9 @@ Replaced by **Section 0A.2** (injection padding for planets) and **Section 0A.3*
 
 ## 4. Transit Depth / Radius Cap: Scaled by Stellar Radius (Fixed 5% Depth Cap Dropped)
 
+> **Superseded in part by Sections 0B.2 and 0B.3.** The operative v1.2 rules are: `too_deep` is a flag, not a cut (Section 0B.2), and the radius cap is applied to $R_p-2\sigma$ with TIC `e_rad` in quadrature, no 20% depth fallback, cap chosen from $\{22, 25, 30\}\,R_\oplus$ (default $30\,R_\oplus$) (Section 0B.3 and Section 4.3). Section 4.2's point-estimate cap, $R_p/R_\star \le 0.50$ rule, default $25\,R_\oplus$, and 20% depth fallback are withdrawn.
+
+
 ### 4.1 Decision: Drop the Fixed `max_depth = 0.05` (5%) Cap; Scale by Stellar Radius via $R_p / R_\star$ and $R_p \le 25\,R_\oplus$
 
 In v1.1 (`vet.py:THRESH["max_depth"] = 0.05`), any candidate with `depth_exact > 50,000 ppm` ($5\%$) failed `passed_lc_checks` (`not_too_deep`) regardless of host-star radius $R_\star$, even after `vet_amend.py` raised the separate post-search radius cap to $30\,R_\oplus$.
@@ -217,9 +261,19 @@ In v1.1 (`vet.py:THRESH["max_depth"] = 0.05`), any candidate with `depth_exact >
 3. **Diagnostic Flag for Large Companions**:
    - Candidates with $15.0\,R_\oplus < R_p \le R_{p,\max}$ receive `flag_inflated_or_bd = True` (brown-dwarf / inflated-HJ regime) as a non-rejecting diagnostic flag.
 
+### 4.3 Operative v1.2 Radius-Cap and `too_deep` Rule (2026-11-18)
+
+1. **`too_deep`**: `vet.too_deep.mode = 'flag'`. Depth above `max_depth` (default $0.05$) is recorded and does not reject the candidate.
+2. **Radius cap, when $R_\star$ is valid**: compute $R_p$ from the dilution-corrected depth and $R_\star$, and $\sigma_{R_p}$ by propagating the depth error and the TIC `e_rad` term in quadrature. The cap is applied to $R_p - 2\sigma_{R_p}$, not to the point estimate. Calibration chooses the cap from $\{22, 25, 30\}\,R_\oplus$; the default is $30\,R_\oplus$.
+3. **Missing errors**: if `depth_err` or `e_rad` is missing, non-finite, or negative, set `rp_err_incomplete` and do not pass the cap. Do not treat the missing term as $0$ and do not fall back to the point estimate.
+4. **Missing $R_\star$**: if $R_\star$ is missing, non-finite, or $\le 0$, set `missing_rstar` and do not pass the cap. There is no 20% (or any other) depth fallback.
+
 ---
 
 ## 5. Leave-One-Transit-Out (LOTO) Odd-Even Scoring
+
+> **Superseded by Section 0B.4.** The registered odd-even procedure is the transit mask in Section 5.3, not LOTO. Sections 5.1–5.2 are kept as the Sector 72 `HAT-P-43 b` motivation and the withdrawn LOTO definition.
+
 
 ### 5.1 Motivation from the Sector 72 `HAT-P-43 b` Diagnostic
 
@@ -250,6 +304,15 @@ In Sector 72, `HAT-P-43 b` (`TIC 468987719`, $P = 3.3326\text{ d}$, 7 transit ep
      $$\text{n\_odd\_epochs} \ge 2 \quad \text{AND} \quad \text{n\_even\_epochs} \ge 2 \quad \text{AND} \quad \sigma_{\text{oe}}^{\text{LOTO}} > \tau_{\sigma,\text{oe}} \quad \text{AND} \quad \delta_{\text{rel}}^{\text{LOTO}} > \tau_{\text{rel},\text{oe}},$$
      where $(\tau_{\sigma,\text{oe}}, \tau_{\text{rel},\text{oe}})$ are calibrated on $\mathcal{S}_{\text{cal}}$ (baseline defaults: $\tau_{\sigma,\text{oe}} = 3.0$, $\tau_{\text{rel},\text{oe}} = 0.10$). Any candidate that fails baseline `odd_even` ($\sigma_{\text{oe}}(\mathcal{K}) > \tau_{\sigma,\text{oe}}$ and $\delta_{\text{rel}}(\mathcal{K}) > \tau_{\text{rel},\text{oe}}$) but passes LOTO receives `flag_odd_even_loto_rescued = True`.
 
+### 5.3 Operative v1.2 Odd-Even Mask (2026-11-18)
+
+A transit epoch enters the odd-even test only when all of the following hold (`vet.odd_even_mask`):
+1. In-transit coverage of at least $X = 75\%$ (`min_coverage = 0.75`).
+2. Separation of at least $Y = 9\,\mathrm{h}$ from gaps and momentum dumps (`min_gap_dump_dist_h = 9.0`, equivalently `min_gap_dump_dist_d = 0.375`).
+3. At least one $T_{14}$ of out-of-transit baseline on one side (`oot_baseline_t14 = 1.0`, `oot_one_side = true`).
+
+If, after this mask, $n_{\text{odd}} < 2$ or $n_{\text{even}} < 2$, odd-even does not hard-reject the candidate and the row is flagged `odd_even_too_few`.
+
 ---
 
 ## 6. Finer, Interpolated $S^*$ Grid
@@ -260,7 +323,10 @@ In v1.0 and v1.1 (`exosearch/calibrate.py:find_threshold`), the detection thresh
 1. **Grid Step Discretization**: A $0.05$ or $0.10$ step in $S^*$ shifts the threshold by up to $+0.05\text{--}0.10$ above the exact order statistic.
 2. **Integer Order-Statistic Jump**: With $N_{\text{runs}} = 2$ paired null realizations (1 inverted + 1 scrambled), the empirical tail count $k(S) = \sum_{i} \mathbb{I}(S_i \ge S)$ jumps in integer steps of $1 / N_{\text{runs}} = 0.50\text{ sector}^{-1}$, so `find_threshold` simply snaps to the grid step just above the single largest (or $m$-th largest) null survivor $S_{(1)}$.
 
-### 6.2 v1.2 Finer Grid + Monotone Log-Tail / Order-Statistic Interpolation
+### 6.2 v1.2 Finer Grid via `sstar_grid.select_sstar`
+
+The registered selector is `exosearch.sstar_grid.select_sstar` with the fine grid enabled (Section 0B.5). T14 retention ($< 3\,\mathrm{h}$, $3$–$6\,\mathrm{h}$, $> 6\,\mathrm{h}$) is a detrending diagnostic only and does not set $S^*$. The optional interpolation below is used only if the frozen settings file enables it, and is then guarded by the discrete rule.
+
 
 1. **Fine Evaluation Grid**:
    - Replace `step = 0.05` with a **$10\times$ finer evaluation grid**:
@@ -293,7 +359,8 @@ In v1.0 and v1.1 (`exosearch/calibrate.py:find_threshold`), the detection thresh
 - Previous cross-architecture audits in v1.1 established that arm64 hosts (`h2`, `h4`) and x86_64 hosts (`h1`, `h3`) can produce divergent floating-point tie-breaks in `wotan` / `LombScargle` / `numba` when upstream stages are not bit-identical, which forced an x86-only $S^*$ refit in v1.1 (`sstar_v1.1_s70_2026-11-12_amended_vetter`).
 - **Hard v1.2 Compute Rule**:
   - **All fresh v1.2 null runs (`invert` and `scramble`), calibration searches, and gate searches MUST be produced exclusively on `h1` and `h3`**.
-  - Hosts `h2` and `h4` shall **not** generate any v1.2 null, calibration, or gate search rows.
+  - The Mac workstation, `h2`, and `h4` shall **not** generate any v1.2 null, calibration, or gate search rows.
+  - Every star gets a stored search row. There is no search-time $S^*$ threshold that would drop a row before it is written.
   - Every row in `rows.parquet` must pass the single-tree provenance check (`git_tree` identical across all workers on `h1` and `h3`, verified via `run.py compare` on the deterministic 50-star cross-host overlap slice between `h1` and `h3` before full execution).
 
 ### 7.3 Strict End-to-End Stepwise Ordering (Gate Known Hosts First)
@@ -313,9 +380,9 @@ flowchart TD
     S0 --> S1 --> S2 --> S3 --> S4 --> S5 --> S6
 ```
 
-1. **Step 0 — Code Freeze & `h1`/`h3` Equivalence Check**: Implement v1.2 vetter (`not_too_deep_v12` scaled by $R_\star$, `odd_even_loto`, per-cut flag demotion, fine $\Delta S = 0.005$ interpolated $S^*$ grid) and verify `h1` vs `h3` agreement on a 50-star overlap manifest.
+1. **Step 0 — Code Freeze, Bit-Identity Checks, and Frozen Settings File**: Pin the search path at commit `0977818` (search-path hash `b9e5ebea8f84b05d60491e871f2c19e3facda75bdb146f3ab46eead42dafa4f4`). Before any S59–S64 or S69 search launches, complete the roughly 200-star S70 detection-column bit-identity check at `0977818` (known hosts included; $S$, period, $t_0$, and duration must match the stored v1.1 rows exactly) and the `h1` vs `h3` agreement check on a 50-star overlap manifest. Fill in the Section 0B.7 frozen settings placeholders (tag `v1.2-step6-frozen-settings`). Before any injection-rescore counts are used, complete the roughly 50-row injection replay check ($S$, period, $t_0$ must match the stored rows exactly).
 2. **Step 1 — Calibration Runs on `h1` and `h3` ($\mathcal{S}_{\text{cal}}$)**: Run `real`, `invert`, and `scramble` on the untouched calibration sectors $\mathcal{S}_{\text{cal}}$ using `h1` and `h3` only (injection padding per Section 0A.2 if $N_p < 150$).
-3. **Step 2 — Vetter Calibration & Hard-Cut / Flag Lock**: Evaluate every cut on the non-holdout, gate-disjoint calibration sample in $\mathcal{S}_{\text{cal}}$. Any cut failing $\text{LB}_{0.95}^{\text{CP}}(\text{planet retention}) \ge 0.95$ or the Section 0A.3 per-class FP-rejection bound becomes a `flag_<cut>`, not a reject. Commit the locked `configs/v1.2.json` and calibration report.
+3. **Step 2 — Vetter Calibration & Hard-Cut / Flag Lock**: Load the frozen v1.2 settings file (Section 0B.7) and refuse to run if it is missing or its hash does not match. Evaluate every cut on the non-holdout, gate-disjoint calibration sample in $\mathcal{S}_{\text{cal}}$. Any cut failing $\text{LB}_{0.95}^{\text{CP}}(\text{planet retention}) \ge 0.95$ or the Section 0A.3 per-class FP-rejection bound becomes a `flag_<cut>`, not a reject. `too_deep` is already a flag (Section 0B.2) and is not a candidate hard cut. Commit the locked calibration report. The radius-cap value is chosen from $\{22, 25, 30\}\,R_\oplus$.
 4. **Step 3 — Fresh Nulls on Gate Sector ($S_{\text{gate}} = \text{S69}$) on `h1` and `h3` Only**:
    - Produce fresh `invert` (flipped) nulls on **all** Sector 69 SPOC 2-min stars — **explicitly including the gate known-planet hosts** — and fresh `scramble` nulls on all non-excluded Sector 69 stars, running exclusively on `h1` and `h3`.
    - Audit `flipped_known_hosts_s69.csv` to verify that flipped nulls on the gate hosts behave consistently with quiet stars.
@@ -326,7 +393,8 @@ flowchart TD
 7. **Step 6 — Run the Gate (`known` Manifest First)**:
    - Partition the Sector 69 `real` search manifest into `known_s69.jsonl.gz` (all frozen known-planet and active TOI hosts in Sector 69) and `rest_s69.jsonl.gz` (all remaining Sector 69 stars).
    - **Execute `known_s69.jsonl.gz` FIRST on `h1` and `h3` and score the known-planet gate immediately**:
-     - **Gate Pass Condition**: **All detectable known confirmed planets (`disp == 'confirmed'`, `eligible == True` at $S^*_{\text{gate}}$) in `known_s69` must be recovered** (100% recovery; or if the frozen required set has $N_{\text{req}} \ge 30$ planets, $\text{LB}_{0.95}^{\text{CP}} \ge 90\%$ with $0$ losses on any cut that was modified in v1.2).
+     - The gate run, like calibration, must load the frozen v1.2 settings file and must refuse to run if it is missing or its hash does not match (Section 0B.7).
+     - **Gate Pass Condition** (Section 0B.1): **All detectable known confirmed planets (`disp == 'confirmed'`, `eligible == True` at $S^*_{\text{gate}}$) in `known_s69` must be recovered**. Zero losses after vetting; search misses also zero. There is no 90% Clopper-Pearson alternative when $N_{\text{req}} \ge 30$. Known planets must vanish in the flipped null. The scrambled null keeps known hosts excluded from $S^*$; scrambled-null survival on a known host is a diagnostic only.
      - **Hard Stop on Failure**: If the gate fails, `rest_s69.jsonl.gz` and production sector runs **do not launch**, and no post-hoc vetter edits are allowed on Sector 69.
      - **Proceed on Pass**: Only after all detectable known planets in `known_s69` are recovered first does execution proceed to `rest_s69.jsonl.gz` and subsequent production sectors (with fresh `h1`/`h3` nulls and interpolated $S^*$ per sector).
 
