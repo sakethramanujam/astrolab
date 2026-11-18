@@ -375,3 +375,191 @@ def test_real_null_inject_agree_when_mask_on_for_failing_odd_even():
         assert not verdicts[0].passed
         assert verdicts[0].all_failing == ["odd_even"]
         assert verdicts[0].status == vf.STATUS_OK
+
+
+# ------------------------------------------------------------------------------------------------
+# v1.2 step 3: radius cap on Rp - 2 sigma (vet.rp_cap, default off)
+# ------------------------------------------------------------------------------------------------
+def _cfg_cap(enabled=True, cap=None):
+    rc = {"enabled": enabled}
+    if cap is not None:
+        rc["cap_rearth"] = cap
+    return {"vet": {"rp_cap": rc}}
+
+
+def _rrow(rp, sigma, rstar=1.0, **kw):
+    """Row (R* = rstar R_Sun) whose Rp = rp and sigma_Rp = sigma R_Earth, by the documented formulae."""
+    depth = (rp / (rstar * vf.vet.R_EARTH_PER_RSUN)) ** 2
+    depth_err = 2.0 * depth * sigma / rp
+    return row(radius=rstar, depth=depth, depth_err=depth_err, rp_earth=rp, rp_rjup=rp / va.R_EARTH_PER_RJUP, **kw)
+
+
+def test_rp_with_error_formulae():
+    r = row(radius=1.2, depth=0.0025, depth_err=0.0005)
+    out = vf.rp_with_error(r)
+    rp = 1.2 * np.sqrt(0.0025) * 109.1
+    assert vf.vet.R_EARTH_PER_RSUN == 109.1
+    assert out["status"] == "ok" and out["rp"] == pytest.approx(rp)
+    assert out["sigma"] == pytest.approx(rp * 0.0005 / (2 * 0.0025))
+    assert out["lower2s"] == pytest.approx(rp - 2 * out["sigma"])
+    # stored Rp is never used: R* and depth give Rp
+    out2 = vf.rp_with_error(dict(r, rp_earth=999.0, rp_rjup=999.0))
+    assert out2["rp"] == pytest.approx(rp)
+    # missing / non-finite / negative depth_err -> sigma = 0 (nothing invented)
+    for de in (None, np.nan, np.inf, -1e-4):
+        o = vf.rp_with_error(dict(r, depth_err=de))
+        assert o["sigma"] == 0.0 and o["lower2s"] == pytest.approx(rp)
+    o = vf.rp_with_error({k: v for k, v in r.items() if k != "depth_err"})
+    assert o["sigma"] == 0.0
+    # job R* only when the row has none
+    o = vf.rp_with_error(dict(r, radius=None), rstar=1.2)
+    assert o["rp"] == pytest.approx(rp)
+    o = vf.rp_with_error(r, rstar=5.0)
+    assert o["rp"] == pytest.approx(rp)
+
+
+def test_rp_cap_lower_2sigma_vs_cap():
+    cfg = _cfg_cap()
+    over = vf.final_verdict(_rrow(60.0, 10.0), cfg=cfg)               # 60 - 20 = 40 > 30
+    assert not over.passed and over.all_failing == [vf.RP_CAP_FLAG]
+    assert "rp_gt_30re" not in over.all_failing
+    assert vf.final_verdict(_rrow(60.0, 40.0), cfg=cfg).passed       # 60 - 80 < 30
+    assert vf.final_verdict(_rrow(31.0, 0.0), cfg=cfg).all_failing == [vf.RP_CAP_FLAG]
+    assert vf.final_verdict(_rrow(29.0, 0.0), cfg=cfg).passed
+    # exact boundary: Rp - 2 sigma == 30 is kept; strictly greater is rejected
+    assert vf.final_verdict(_rrow(60.0, 15.0), cfg=cfg).passed
+    assert vf.final_verdict(_rrow(60.0, 15.0), cfg=cfg).all_failing == []
+    assert vf.final_verdict(_rrow(60.0, 14.99), cfg=cfg).all_failing == [vf.RP_CAP_FLAG]
+    assert vf.final_verdict(_rrow(60.0, 14.99999), cfg=cfg).all_failing == [vf.RP_CAP_FLAG]
+    d = vf.final_verdict_row(_rrow(60.0, 15.0), cfg=cfg)
+    assert d["rp_cap_lower2s_v2"] == pytest.approx(30.0) and d["rp_cap_rearth_v2"] == 30.0
+
+
+def test_rp_cap_point_estimate_above_cap_but_lower_2sigma_below():
+    r = _rrow(40.0, 7.0)                                              # Rp 40 > 30, Rp - 2 sigma = 26 < 30
+    off = vf.final_verdict(r)
+    assert not off.passed and off.all_failing == ["rp_gt_30re"]
+    assert vf.final_verdict(r, cfg=_cfg_cap(False)).all_failing == ["rp_gt_30re"]
+    on = vf.final_verdict(r, cfg=_cfg_cap(True))
+    assert on.passed and on.all_failing == []
+    d = vf.final_verdict_row(r, cfg=_cfg_cap(True))
+    assert d["passed_lc_checks_v2"] and "rp_gt_30re" not in d["reject_v2"]
+    assert d["rp_earth_v2"] > 30.0                                    # amended()'s own Rp column is unchanged
+
+
+def test_rp_cap_missing_rstar_is_flagged_not_passed():
+    cfg = _cfg_cap()
+    for rs in (None, np.nan, 0.0, -1.0, np.inf):
+        # large depth 0.25 and a small stored Rp: neither a depth fallback nor a stored Rp may pass the row
+        r = row(radius=rs, depth=0.25, depth_err=0.01, rp_earth=10.0, rp_rjup=10.0 / va.R_EARTH_PER_RJUP)
+        v = vf.final_verdict(r, cfg=cfg)
+        assert not v.passed and v.all_failing == [vf.MISSING_RSTAR]
+        assert vf.RP_CAP_FLAG not in v.all_failing and vf.MISSING_RSTAR != vf.RP_CAP_FLAG
+        d = vf.final_verdict_row(r, cfg=cfg)
+        assert d["passed_lc_checks_v2"] is False and vf.MISSING_RSTAR in d["reject_v2"]
+        # small depth, stored Rp NaN (what a missing R* gives in the search rows) also fails
+        v = vf.final_verdict(row(radius=rs, depth=0.001, rp_earth=np.nan, rp_rjup=np.nan), cfg=cfg)
+        assert v.all_failing == [vf.MISSING_RSTAR]
+    # row has no 'radius' key at all
+    r = {k: v for k, v in row(depth=0.25).items() if k != "radius"}
+    assert vf.final_verdict(r, cfg=cfg).all_failing == [vf.MISSING_RSTAR]
+    # the job's R* (rstar) rescues a row only when it is itself valid
+    r = row(radius=None, depth=0.0025, depth_err=1e-4)
+    assert vf.final_verdict(r, cfg=cfg, rstar=1.0).passed
+    assert vf.final_verdict(r, cfg=cfg, rstar=np.nan).all_failing == [vf.MISSING_RSTAR]
+    assert fin.row_verdict(r, jobs={1: {"radius": 1.0}}, cfg=cfg).passed
+    assert fin.row_verdict(r, jobs={1: {}}, cfg=cfg).all_failing == [vf.MISSING_RSTAR]
+
+
+def test_rp_cap_unusable_depth_with_valid_rstar_does_not_pass():
+    cfg = _cfg_cap()
+    for dep in (0.0, -1e-3, np.nan, None):
+        v = vf.final_verdict(row(radius=1.0, depth=dep, depth_err=1e-4), cfg=cfg)
+        assert not v.passed and v.all_failing == [vf.RP_UNDETERMINED]
+    # a row without the missing-R* problem is not given the missing_rstar flag
+    assert vf.MISSING_RSTAR not in vf.final_verdict(row(radius=1.0, depth=0.0), cfg=cfg).all_failing
+
+
+def test_rp_cap_off_reproduces_v11_amended_verdicts():
+    """Rule off (default, absent keys, explicit false): identical to vet_amend.amended + the two row terms."""
+    rows = [
+        row(),
+        _rrow(40.0, 7.0), _rrow(60.0, 15.0), _rrow(25.0, 1.0), _rrow(31.0, 0.0),
+        row(radius=None, depth=0.25, rp_earth=np.nan, rp_rjup=np.nan),            # missing R*: passes the v1.1 cap
+        row(radius=np.nan, depth=0.25, rp_earth=np.nan, rp_rjup=np.nan, flags="v_shape"),
+        row(radius=None, rp_rjup=2.8, rp_earth=31.4),
+        row(radius=0.0, depth=0.25, rp_earth=np.nan, rp_rjup=np.nan),
+        row(rp_rjup=2.8, rp_earth=31.0, deep_flags="rp_gt_2rjup"),
+        row(rp_rjup=2.5, deep_flags="rp_gt_2rjup", flags="rp_too_large"),
+    ]
+    assert vf.rp_cap_enabled(None) is False and vf.rp_cap_enabled({}) is False
+    assert vf.rp_cap_enabled({"vet": {}}) is False
+    assert vf.rp_cap_enabled(json_cfg_vet()) is False
+    for r in rows:
+        head = va.amended(r)                                    # HEAD logic: no cap-rule hook at all
+        want_pass = bool(head["passed_lc_checks_v2"]) and r["checks_logged"]
+        for cfg in (None, {}, {"vet": {}}, _cfg_cap(False), _cfg_cap(False, 25.0), json_cfg_vet()):
+            d = vf.final_verdict_row(r, cfg=cfg)
+            assert d["reject_v2"] == head["reject_v2"]
+            assert d["passed_final"] is want_pass
+            assert not any(k.startswith("rp_cap_") for k in d)
+            assert vf.final_verdict(r, cfg=cfg, rstar=1.0).passed is want_pass
+    # the missing-R* row that can pass the v1.1 cap does so with the rule off, and fails with it on
+    m = row(radius=None, depth=0.25, rp_earth=np.nan, rp_rjup=np.nan)
+    assert vf.final_verdict(m).passed
+    assert vf.final_verdict(m, cfg=_cfg_cap(True)).all_failing == [vf.MISSING_RSTAR]
+
+
+def json_cfg_vet():
+    import json
+    p = Path(__file__).resolve().parents[1] / "configs" / "v1.1.json"
+    return json.loads(p.read_text())
+
+
+def test_config_defaults_for_rp_cap():
+    rc = json_cfg_vet()["vet"]["rp_cap"]
+    assert rc == {"enabled": False, "cap_rearth": 30.0}
+    assert vf.rp_cap_cfg(json_cfg_vet()) == {"enabled": False, "cap_rearth": va.RP_CAP_REARTH}
+    assert vf.rp_cap_cfg(None) == vf.rp_cap_cfg({}) == {"enabled": False, "cap_rearth": 30.0}
+    cfg = json_cfg_vet()
+    cfg["vet"]["rp_cap"]["enabled"] = True
+    assert vf.rp_cap_cfg(cfg) == {"enabled": True, "cap_rearth": 30.0}
+    assert vf.rp_cap_cfg(None, True)["enabled"] is True
+
+
+def test_rp_cap_value_is_read_from_settings():
+    r = _rrow(28.0, 0.0)
+    assert vf.final_verdict(r, cfg=_cfg_cap(True)).passed                     # default 30
+    assert vf.final_verdict(r, cfg=_cfg_cap(True, 30.0)).passed
+    v = vf.final_verdict(r, cfg=_cfg_cap(True, 25.0))
+    assert not v.passed and v.all_failing == [vf.RP_CAP_FLAG]
+    assert vf.final_verdict(r, cfg=_cfg_cap(True, 28.0)).passed               # boundary at a non-default cap
+    assert vf.final_verdict(r, cfg=_cfg_cap(True, 27.9)).all_failing == [vf.RP_CAP_FLAG]
+    assert vf.final_verdict(r, cfg=_cfg_cap(True, 35.0)).passed
+    # cap setting does nothing while the rule is off
+    assert vf.final_verdict(r, cfg=_cfg_cap(False, 25.0)).passed
+    cfg = json_cfg_vet()
+    cfg["vet"]["rp_cap"].update(enabled=True, cap_rearth=25.0)
+    assert vf.final_verdict(r, cfg=cfg).all_failing == [vf.RP_CAP_FLAG]
+
+
+def test_rp_cap_real_null_inject_paths_agree_when_on():
+    cfg = _cfg_cap(True)
+    cases = [
+        _rrow(60.0, 10.0), _rrow(40.0, 7.0), _rrow(60.0, 15.0), _rrow(10.0, 1.0),
+        row(radius=None, depth=0.25), row(radius=float("nan"), depth=0.0025), row(radius=1.0, depth=0.0),
+        _rrow(45.0, 3.0, deep_flags="rp_gt_2rjup"), _rrow(60.0, 10.0, flags="v_shape"),
+        _rrow(45.0, 3.0, deep_flags="secondary_scan", sec_scan_sigma=6.5),
+    ]
+    scan = dict(sec_scan_sigma=6.5, sec_scan_phase=0.6, sec_scan_depth=0.004, duration_fine=0.1,
+                t0_fine=0.5, loo_min_sigma=9.0, loo_min_orbit=0)
+    for r in cases:
+        sc = scan if "secondary_scan" in r["deep_flags"] else None
+        for jobs in (None, {1: {"radius": 1.0}}):
+            verdicts = [p(dict(r, mode=m), jobs=jobs, cfg=cfg, scan=sc)
+                        for p, m in zip(PATHS, ("real", "invert", "inject"))]
+            assert verdicts[0] == verdicts[1] == verdicts[2], r
+            assert verdicts[0] == vf.final_verdict(r, cfg=cfg, scan=sc, rstar=(jobs or {}).get(1, {}).get("radius"))
+    assert not PATHS[2](_rrow(60.0, 10.0), cfg=cfg).passed
+    assert PATHS[2](_rrow(40.0, 7.0), cfg=cfg).passed
+    assert PATHS[0](row(radius=None, depth=0.25), cfg=cfg).all_failing == [vf.MISSING_RSTAR]

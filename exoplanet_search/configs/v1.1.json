@@ -53,6 +53,10 @@
       "gap_d": 0.5,
       "oot_baseline_t14": 1.0,
       "oot_one_side": true
+    },
+    "rp_cap": {
+      "enabled": false,
+      "cap_rearth": 30.0
     }
   },
   "momentum_dump": {

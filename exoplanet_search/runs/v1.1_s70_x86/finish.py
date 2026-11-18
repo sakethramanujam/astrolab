@@ -40,7 +40,8 @@ def row_verdict(row, jobs=None, cfg=None, *, fail_common_period=None, scan=None,
     j = (jobs or {}).get(int(row['tic'])) or {}
     return vet_final.final_verdict(row, common_period=fail_common_period, checks_logged=row.get('checks_logged'),
                                    rho=j.get('rho'), scan=scan, needs_lc=needs_lc, cfg=cfg,
-                                   lc=lc, dumps=dumps, odd_even=odd_even, odd_even_mask=odd_even_mask)
+                                   lc=lc, dumps=dumps, odd_even=odd_even, odd_even_mask=odd_even_mask,
+                                   rstar=j.get('radius'))
 
 
 def real_path(row, jobs=None, cfg=None, *, scan=None, **kw):
