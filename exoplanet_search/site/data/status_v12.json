@@ -1,0 +1,152 @@
+{
+ "schema_version": "astrolab.v12_status.v1",
+ "process_only": true,
+ "generated_at": "2026-11-18T22:20:45-08:00",
+ "generated_at_pt": "2026-11-18 10:20 PM PT",
+ "campaign": "v1.2",
+ "phase": "registered_search",
+ "previous": {
+  "campaign": "v1.1",
+  "outcome": "gate_failed"
+ },
+ "registration": {
+  "tag": "v1.2-registered",
+  "code_pin": "bc05650",
+  "registered_at": "2026-11-18T17:02:23-08:00",
+  "frozen_before_search_rows": true
+ },
+ "search": {
+  "state": "running",
+  "started_at": "2026-11-18T17:18:57-08:00",
+  "contributing_hosts": [
+   "h1"
+  ],
+  "registered_hosts": [
+   "h1",
+   "h3"
+  ],
+  "mode_rows_done": 16489,
+  "mode_rows_total": 235171,
+  "mode_rows_ok": 16489,
+  "mode_rows_error": 0,
+  "star_jobs_done": 6456,
+  "star_jobs_total": 83130,
+  "by_mode": {
+   "real": 6436,
+   "invert": 6456,
+   "scramble": 3597
+  },
+  "by_sector": {
+   "59": {
+    "rows_done": 11026,
+    "by_mode": {
+     "real": 3826,
+     "invert": 3826,
+     "scramble": 3374
+    },
+    "rows_total": 38485
+   },
+   "60": {
+    "rows_done": 1014,
+    "by_mode": {
+     "real": 486,
+     "invert": 486,
+     "scramble": 42
+    },
+    "rows_total": 38483
+   },
+   "61": {
+    "rows_done": 1089,
+    "by_mode": {
+     "real": 525,
+     "invert": 525,
+     "scramble": 39
+    },
+    "rows_total": 36072
+   },
+   "62": {
+    "rows_done": 1034,
+    "by_mode": {
+     "real": 499,
+     "invert": 499,
+     "scramble": 36
+    },
+    "rows_total": 33154
+   },
+   "63": {
+    "rows_done": 1136,
+    "by_mode": {
+     "real": 546,
+     "invert": 546,
+     "scramble": 44
+    },
+    "rows_total": 32587
+   },
+   "64": {
+    "rows_done": 1153,
+    "by_mode": {
+     "real": 554,
+     "invert": 554,
+     "scramble": 45
+    },
+    "rows_total": 35728
+   },
+   "69": {
+    "rows_done": 37,
+    "by_mode": {
+     "invert": 20,
+     "scramble": 17
+    },
+    "rows_total": 20662
+   }
+  },
+  "rate_mode_rows_per_hour": 3278.0,
+  "eta_at": "2026-11-21T17:03:28-08:00",
+  "eta_pt": "2026-11-21 5:03 PM PT",
+  "scope": "S59–64 real, flipped, and scrambled nulls; S69 nulls only. S69 real waits for the frozen eligibility list.",
+  "n_parts": 83,
+  "n_parts_unreadable": 0
+ },
+ "thermal": {
+  "paused": false,
+  "pause_events": 100,
+  "resume_events": 97,
+  "paused_hours": 1.673
+ },
+ "checks": [
+  {
+   "id": "registration",
+   "result": "passed",
+   "detail": "tag v1.2-registered, code pin bc05650, frozen before any S59–64 or S69 search rows existed"
+  },
+  {
+   "id": "pre_run_pin",
+   "result": "passed",
+   "detail": "search is pinned to the registered commit"
+  },
+  {
+   "id": "smoke_s69_20_star",
+   "result": "passed",
+   "detail": "20-star S69 smoke (nulls only) recorded in the run log"
+  },
+  {
+   "id": "mac_rosetta_bit_identity",
+   "result": "failed",
+   "detail": "did not match bit-for-bit; does not produce registered rows"
+  }
+ ],
+ "next_steps": [
+  "Finish the registered search",
+  "Calibration on S59–64",
+  "Padding (0A.2.1)",
+  "Lock S* (0.005 grid)",
+  "Freeze the eligibility list",
+  "S69 real search",
+  "S69 gate (zero known-planet losses)",
+  "Only then: candidates"
+ ],
+ "notes": [
+  "Until the S69 gate passes, this feed is process only: stars and rows searched, null rows done, checks, rate, ETA, and next steps. It does not include candidate counts, score statistics, or target identities.",
+  "Only h1 and h3 produce registered rows. A Mac check under translation did not match bit-for-bit."
+ ]
+}
