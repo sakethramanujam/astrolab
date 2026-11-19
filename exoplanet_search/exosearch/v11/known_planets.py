@@ -802,6 +802,25 @@ def run_known_planet_recovery(
 
 
 # ---------------------------------------------------------------- v1.2 frozen-settings entry points
+def _v12_run_cfg(settings_path=None, cfg=None, cap_rearth=None):
+    """Resolve the v1.2 config for a wrapper and return ``(cfg, loaded_hash, applied_cap, v12_mod)``.
+
+    The caller ``cfg`` keeps the compatibility gate (``validate_v12_values``, so its own cap must be
+    30); a calibrated 22 / 25 cap is supplied with ``cap_rearth`` and applied afterwards.  The stamped
+    hash is always the loaded frozen file, never the post-override object.
+    """
+    from .. import v12_settings
+    frozen = v12_settings.require_v12_settings(settings_path)
+    resolved = frozen
+    if cfg is not None:
+        v12_settings.validate_v12_values(cfg)
+        resolved = cfg
+    digest, cap = v12_settings.stamp_values(frozen, cap_rearth)
+    if cap_rearth is not None:
+        resolved = v12_settings.with_cap_rearth(resolved, cap_rearth)
+    return resolved, digest, cap, v12_settings
+
+
 def evaluate_known_planets_v12(
     targets_df: pd.DataFrame,
     search_results_df: Optional[pd.DataFrame],
@@ -811,20 +830,22 @@ def evaluate_known_planets_v12(
     diagnostics_df: Optional[pd.DataFrame] = None,
     sector: int = 70,
     settings_path: Optional[Union[str, Path]] = None,
+    cap_rearth: Optional[float] = None,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """v1.2 known-planet gate: require the frozen v1.2 settings, then evaluate as v1.1.
 
     A caller-supplied ``cfg`` is accepted only after ``validate_v12_values``; otherwise the frozen
-    config returned by ``require_v12_settings`` is used.  The v1.1 ``evaluate_known_planets`` is
-    unchanged and never requires the v1.2 file.
+    config returned by ``require_v12_settings`` is used.  A calibrated cap of 22 / 25 is passed with
+    ``cap_rearth`` (not by pre-mutating ``cfg``).  Non-empty targets must carry the v1.2 stamps; the
+    v1.1 ``evaluate_known_planets`` and search-stage rows never require them.  Output rows and the
+    summary are stamped.
     """
-    from .. import v12_settings
-    frozen = v12_settings.require_v12_settings(settings_path)
-    if cfg is not None:
-        v12_settings.validate_v12_values(cfg)
-        frozen = cfg
-    return evaluate_known_planets(targets_df, search_results_df, s_star=s_star, durations=durations, cfg=frozen,
-                                  diagnostics_df=diagnostics_df, sector=sector)
+    resolved, digest, cap, v12_settings = _v12_run_cfg(settings_path, cfg, cap_rearth)
+    if targets_df is not None and len(targets_df):
+        v12_settings.require_v12_stamps(targets_df, expected_hash=digest, cap_rearth=cap)
+    out_df, summary = evaluate_known_planets(targets_df, search_results_df, s_star=s_star, durations=durations,
+                                             cfg=resolved, diagnostics_df=diagnostics_df, sector=sector)
+    return v12_settings.stamp_v12(out_df, digest, cap), v12_settings.stamp_v12(summary, digest, cap)
 
 
 def freeze_eligibility_v12(
@@ -839,16 +860,24 @@ def freeze_eligibility_v12(
     cfg: Optional[Dict[str, Any]] = None,
     searched_tics: Optional[set] = None,
     settings_path: Optional[Union[str, Path]] = None,
+    cap_rearth: Optional[float] = None,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    """v1.2 frozen eligibility: require the frozen v1.2 settings, then delegate to ``freeze_eligibility``."""
-    from .. import v12_settings
-    frozen = v12_settings.require_v12_settings(settings_path)
-    if cfg is not None:
-        v12_settings.validate_v12_values(cfg)
-        frozen = cfg
-    return freeze_eligibility(s_star=s_star, out_file=out_file, sector=sector, commit=commit,
-                              config_hash=config_hash, targets_df=targets_df, lc_lookup=lc_lookup,
-                              contratio_map=contratio_map, cfg=frozen, searched_tics=searched_tics)
+    """v1.2 frozen eligibility: require the frozen v1.2 settings, then delegate to ``freeze_eligibility``.
+
+    The returned frame, the CSV on disk and its sidecar all carry the two stamp fields; the sidecar
+    ``sha256`` is recomputed after the stamped CSV is rewritten.
+    """
+    resolved, digest, cap, v12_settings = _v12_run_cfg(settings_path, cfg, cap_rearth)
+    df, sidecar = freeze_eligibility(s_star=s_star, out_file=out_file, sector=sector, commit=commit,
+                                     config_hash=config_hash, targets_df=targets_df, lc_lookup=lc_lookup,
+                                     contratio_map=contratio_map, cfg=resolved, searched_tics=searched_tics)
+    out_p = Path(out_file)
+    stamped = v12_settings.stamp_v12(df, digest, cap)
+    stamped.to_csv(out_p, index=False)
+    sidecar = v12_settings.stamp_v12(sidecar, digest, cap)
+    sidecar["sha256"] = _sha256(out_p)
+    Path(str(out_p) + ".meta.json").write_text(json.dumps(sidecar, indent=2))
+    return stamped, sidecar
 
 
 def run_known_planet_recovery_v12(
@@ -860,20 +889,31 @@ def run_known_planet_recovery_v12(
     cfg: Optional[Dict[str, Any]] = None,
     diagnostics_path: Optional[Union[str, Path]] = None,
     settings_path: Optional[Union[str, Path]] = None,
+    cap_rearth: Optional[float] = None,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """v1.2 / S69 known-planet report: require the frozen v1.2 settings, then run the v1.1 report.
 
     The settings gate is checked before the frozen eligibility file or search results, so a missing
-    or unregistered v1.2 file fails with ``V12SettingsError`` rather than a later data error.
+    or unregistered v1.2 file fails with ``V12SettingsError`` rather than a later data error.  The
+    frozen eligibility input must carry the v1.2 stamps (search-stage rows are not required to); the
+    output frame, summary and the files written under ``out_dir`` are stamped.
     """
-    from .. import v12_settings
-    frozen = v12_settings.require_v12_settings(settings_path)
-    if cfg is not None:
-        v12_settings.validate_v12_values(cfg)
-        frozen = cfg
-    return run_known_planet_recovery(s_star=s_star, search_results_path=search_results_path, out_dir=out_dir,
-                                     sector=sector, frozen_eligibility_file=frozen_eligibility_file, cfg=frozen,
-                                     diagnostics_path=diagnostics_path)
+    resolved, digest, cap, v12_settings = _v12_run_cfg(settings_path, cfg, cap_rearth)
+    frozen_file = frozen_eligibility_file
+    if not frozen_file:
+        frozen_file = resolved.get("known_planets", {}).get("frozen_eligibility_file")
+    if frozen_file and Path(frozen_file).exists():
+        v12_settings.require_v12_stamps(read_frozen(frozen_file), expected_hash=digest, cap_rearth=cap)
+    out_df, summary = run_known_planet_recovery(s_star=s_star, search_results_path=search_results_path, out_dir=out_dir,
+                                                sector=sector, frozen_eligibility_file=frozen_eligibility_file,
+                                                cfg=resolved, diagnostics_path=diagnostics_path)
+    stamped_df = v12_settings.stamp_v12(out_df, digest, cap)
+    stamped_summary = v12_settings.stamp_v12(summary, digest, cap)
+    out_p = Path(out_dir)
+    out_p.mkdir(parents=True, exist_ok=True)
+    stamped_df.to_csv(out_p / "known_planets_recovery.csv", index=False)
+    (out_p / "known_planets_summary.json").write_text(json.dumps(stamped_summary, indent=2, default=float))
+    return stamped_df, stamped_summary
 
 
 def main():
@@ -892,6 +932,8 @@ def main():
     fe12.add_argument("--sector", type=int, default=70, help="TESS Sector")
     fe12.add_argument("--searched-tics", help="JSON list of searched TICs (default: the results store for the sector)")
     fe12.add_argument("--settings", help="Frozen v1.2 settings file (default: configs/v1.2.json)")
+    fe12.add_argument("--cap-rearth", type=float,
+                      help="Run-time radius cap in Earth radii (22, 25 or 30; default: the frozen file's 30.0)")
     r = sp.add_parser("report")
     r.add_argument("--s-star", type=float, required=True, help="Detection threshold S*")
     r.add_argument("--results", required=True, help="Real-search rows (CSV, parquet or run output dir)")
@@ -907,6 +949,8 @@ def main():
     r12.add_argument("--out", required=True, help="Output directory")
     r12.add_argument("--sector", type=int, default=70, help="TESS Sector")
     r12.add_argument("--settings", help="Frozen v1.2 settings file (default: configs/v1.2.json)")
+    r12.add_argument("--cap-rearth", type=float,
+                     help="Run-time radius cap in Earth radii (22, 25 or 30; default: the frozen file's 30.0)")
     a = ap.parse_args()
     if a.cmd == "fetch-pscomppars":
         print(fetch_pscomppars(date_tag=a.date_tag))
@@ -916,11 +960,12 @@ def main():
     elif a.cmd == "freeze-eligibility-v12":
         st = set(int(x) for x in json.loads(Path(a.searched_tics).read_text())) if a.searched_tics else None
         freeze_eligibility_v12(s_star=a.s_star, out_file=a.out, sector=a.sector, searched_tics=st,
-                               settings_path=a.settings)
+                               settings_path=a.settings, cap_rearth=a.cap_rearth)
     elif a.cmd == "report-v12":
         _, s = run_known_planet_recovery_v12(s_star=a.s_star, search_results_path=a.results, out_dir=a.out,
                                              sector=a.sector, frozen_eligibility_file=a.frozen_eligibility,
-                                             diagnostics_path=a.diagnostics, settings_path=a.settings)
+                                             diagnostics_path=a.diagnostics, settings_path=a.settings,
+                                             cap_rearth=a.cap_rearth)
         print(json.dumps(s, indent=1, default=float))
     else:
         _, s = run_known_planet_recovery(s_star=a.s_star, search_results_path=a.results, out_dir=a.out,

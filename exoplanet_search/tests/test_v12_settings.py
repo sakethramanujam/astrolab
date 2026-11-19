@@ -1,10 +1,11 @@
-"""v1.2 step 6: frozen settings file, content hash, and the three refusing entry points."""
+"""v1.2 steps 6–7: frozen settings file, content hash, refusing entry points, and output stamps."""
 import copy
 import importlib.util
 import inspect
 import json
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -225,3 +226,231 @@ def test_finish_main_is_not_changed_to_require_v12():
     assert "rescore_v12_cfg" not in src
     # the v1.2 entry point exists on the side and is gated
     assert callable(fin.rescore_v12_cfg) and callable(fin.rescore_rows_v12)
+
+
+# ---------------------------------------------------------------- 6. v1.2 output stamps (step 7)
+def _loaded_hash():
+    return v12.content_hash(v12.require_v12_settings())
+
+
+def _toy_targets():
+    rows = []
+    for tic, name in ((1, "TOI 1.01"), (2, "TOI 2.01")):
+        rows.append(dict(tic=tic, name=name, type="toi", period=3.0 + tic, period_err=0.001,
+                         t0=3000.5, dur_h=2.0, depth_ppm=2000.0, depth_src="exofop_toi",
+                         dur_src="exofop_toi", t0_src="exofop_toi"))
+    return pd.DataFrame(rows)
+
+
+def _freeze(tmp_path, cap_rearth=None, name="frozen.csv"):
+    kw = {} if cap_rearth is None else {"cap_rearth": cap_rearth}
+    return kp.freeze_eligibility_v12(10.0, tmp_path / name, targets_df=_toy_targets(),
+                                     lc_lookup=lambda tic: None, contratio_map={}, commit="test",
+                                     config_hash="test", **kw)
+
+
+def _search_stub(tmp_path):
+    p = tmp_path / "search.csv"
+    pd.DataFrame([dict(tic=999, mode="real", period=1.5, S=2.0, status="ok")]).to_csv(p, index=False)
+    return p
+
+
+def test_require_v12_stamps_accepts_consistent_rows_and_refuses_bad_ones():
+    h = _loaded_hash()
+    good = pd.DataFrame([{v12.STAMP_HASH_KEY: h, v12.STAMP_CAP_KEY: 30.0},
+                         {v12.STAMP_HASH_KEY: h, v12.STAMP_CAP_KEY: 30.0}])
+    assert v12.require_v12_stamps(good) is good
+    assert v12.require_v12_stamps(good, cap_rearth=30) is good
+    # empty input is vacuously accepted
+    assert v12.require_v12_stamps(pd.DataFrame()) is not None
+    assert v12.require_v12_stamps([]) == []
+
+    with pytest.raises(v12.V12SettingsError, match="lacks stamp"):
+        v12.require_v12_stamps(pd.DataFrame([{v12.STAMP_HASH_KEY: h}]))
+    with pytest.raises(v12.V12SettingsError, match="lacks stamp"):
+        v12.require_v12_stamps({v12.STAMP_CAP_KEY: 30.0})
+
+    flipped = h[:-1] + ("0" if h[-1] != "0" else "1")
+    with pytest.raises(v12.V12SettingsError, match="hash"):
+        v12.require_v12_stamps(pd.DataFrame([{v12.STAMP_HASH_KEY: flipped, v12.STAMP_CAP_KEY: 30.0}]))
+    with pytest.raises(v12.V12SettingsError, match="mix settings hashes"):
+        v12.require_v12_stamps(pd.DataFrame([{v12.STAMP_HASH_KEY: h, v12.STAMP_CAP_KEY: 30.0},
+                                             {v12.STAMP_HASH_KEY: flipped, v12.STAMP_CAP_KEY: 30.0}]))
+    with pytest.raises(v12.V12SettingsError, match="mix cap_rearth"):
+        v12.require_v12_stamps(pd.DataFrame([{v12.STAMP_HASH_KEY: h, v12.STAMP_CAP_KEY: 22.0},
+                                             {v12.STAMP_HASH_KEY: h, v12.STAMP_CAP_KEY: 30.0}]))
+    with pytest.raises(v12.V12SettingsError, match="cap_rearth"):
+        v12.require_v12_stamps(good, cap_rearth=22)
+
+
+def test_stamp_v12_does_not_mutate_the_caller():
+    h = _loaded_hash()
+    row = {"tic": 1}
+    out = v12.stamp_v12(row, h, 30)
+    assert v12.STAMP_HASH_KEY not in row and out[v12.STAMP_HASH_KEY] == h
+    df = pd.DataFrame([{"tic": 1}])
+    stamped = v12.stamp_v12(df, h, 22.0)
+    assert v12.STAMP_HASH_KEY not in df.columns
+    assert stamped[v12.STAMP_CAP_KEY].tolist() == [22.0]
+
+
+def test_calibrate_sstar_v12_result_is_stamped():
+    S = _sample()
+    h = _loaded_hash()
+    r = v12.calibrate_sstar_v12(S, 600, 5.0 / 600, 6.0)
+    assert r["v12_settings_hash"] == h
+    assert r["v12_cap_rearth"] == 30.0
+    r22 = v12.calibrate_sstar_v12(S, 600, 5.0 / 600, 6.0, cap_rearth=22)
+    assert r22["v12_settings_hash"] == h and r22["v12_cap_rearth"] == 22.0
+    assert r22["s_star"] == r["s_star"]
+
+
+def test_calibrate_sstar_v12_refuses_bad_rows():
+    S = _sample()
+    h = _loaded_hash()
+    good = pd.DataFrame([{v12.STAMP_HASH_KEY: h, v12.STAMP_CAP_KEY: 30.0}])
+    assert v12.calibrate_sstar_v12(S, 600, 5.0 / 600, 6.0, rows=good)["s_star"] > 0
+    with pytest.raises(v12.V12SettingsError, match="lacks stamp"):
+        v12.calibrate_sstar_v12(S, 600, 5.0 / 600, 6.0, rows=pd.DataFrame([{"tic": 1}]))
+    cap22 = pd.DataFrame([{v12.STAMP_HASH_KEY: h, v12.STAMP_CAP_KEY: 22.0}])
+    with pytest.raises(v12.V12SettingsError, match="cap_rearth"):
+        v12.calibrate_sstar_v12(S, 600, 5.0 / 600, 6.0, cap_rearth=30, rows=cap22)
+    # default applied cap is 30; rows stamped 22 must be refused even without cap_rearth=
+    with pytest.raises(v12.V12SettingsError, match="cap_rearth"):
+        v12.calibrate_sstar_v12(S, 600, 5.0 / 600, 6.0, rows=cap22)
+
+
+def test_lock_sstar_v12_stamps_and_refuses_bad_rows():
+    h = _loaded_hash()
+    rows = pd.DataFrame([{v12.STAMP_HASH_KEY: h, v12.STAMP_CAP_KEY: 30.0}])
+    r = v12.lock_sstar_v12(rows, 13.71)
+    assert r["s_star"] == 13.71
+    assert r["v12_settings_hash"] == h and r["v12_cap_rearth"] == 30.0
+    with pytest.raises(v12.V12SettingsError, match="lacks stamp"):
+        v12.lock_sstar_v12(pd.DataFrame([{"tic": 1}]), 13.71)
+    with pytest.raises(v12.V12SettingsError, match="cap_rearth"):
+        v12.lock_sstar_v12(rows, 13.71, cap_rearth=22)
+    cap22 = pd.DataFrame([{v12.STAMP_HASH_KEY: h, v12.STAMP_CAP_KEY: 22.0}])
+    with pytest.raises(v12.V12SettingsError, match="cap_rearth"):
+        v12.lock_sstar_v12(cap22, 13.71)
+
+
+def test_rescore_rows_v12_stamps_output(monkeypatch):
+    monkeypatch.setattr(fin, "rebuild_for_row", lambda row, jobs, cfg: (None, None, None))
+    monkeypatch.setattr(fin, "row_verdict", lambda row, **kw: SimpleNamespace(
+        passed=True, first_failing_rule="", all_failing=[], status="ok"))
+    h = _loaded_hash()
+    out = fin.rescore_rows_v12([dict(tic=1, mode="real")])
+    assert out[v12.STAMP_HASH_KEY].tolist() == [h]
+    assert out[v12.STAMP_CAP_KEY].tolist() == [30.0]
+    out22 = fin.rescore_rows_v12([dict(tic=1, mode="real")], cap_rearth=22)
+    assert out22[v12.STAMP_HASH_KEY].tolist() == [h]
+    assert out22[v12.STAMP_CAP_KEY].tolist() == [22.0]
+    assert fin.rescore_v12_cfg(cap_rearth=22)["vet"]["rp_cap"]["cap_rearth"] == 22.0
+
+
+def test_freeze_eligibility_v12_stamps_frame_csv_and_sidecar(tmp_path):
+    h = _loaded_hash()
+    df, side = _freeze(tmp_path)
+    assert df[v12.STAMP_HASH_KEY].tolist() == [h, h]
+    assert df[v12.STAMP_CAP_KEY].tolist() == [30.0, 30.0]
+    assert side[v12.STAMP_HASH_KEY] == h and side[v12.STAMP_CAP_KEY] == 30.0
+    csv = tmp_path / "frozen.csv"
+    assert side["sha256"] == kp._sha256(csv)
+    on_disk = pd.read_csv(csv)
+    assert on_disk[v12.STAMP_HASH_KEY].tolist() == [h, h]
+    assert on_disk[v12.STAMP_CAP_KEY].tolist() == [30.0, 30.0]
+    back = kp.read_frozen(csv)
+    assert len(back) == 2 and set(back["error"]) == {"missing light curve"}
+
+
+def test_freeze_eligibility_v12_cap_override_is_stamped(tmp_path):
+    h = _loaded_hash()
+    df, side = _freeze(tmp_path, cap_rearth=22)
+    assert df[v12.STAMP_CAP_KEY].tolist() == [22.0, 22.0]
+    assert df[v12.STAMP_HASH_KEY].tolist() == [h, h]
+    assert side[v12.STAMP_CAP_KEY] == 22.0 and side[v12.STAMP_HASH_KEY] == h
+    with pytest.raises(v12.V12SettingsError, match="cap_rearth"):
+        _freeze(tmp_path, cap_rearth=23, name="bad.csv")
+
+
+def test_evaluate_known_planets_v12_stamps_and_refuses_targets(tmp_path):
+    h = _loaded_hash()
+    frozen, _ = _freeze(tmp_path)
+    out, summ = kp.evaluate_known_planets_v12(frozen, pd.DataFrame(), 10.0)
+    assert out[v12.STAMP_HASH_KEY].tolist() == [h, h]
+    assert out[v12.STAMP_CAP_KEY].tolist() == [30.0, 30.0]
+    assert summ[v12.STAMP_HASH_KEY] == h and summ[v12.STAMP_CAP_KEY] == 30.0
+
+    with pytest.raises(v12.V12SettingsError, match="lacks stamp"):
+        kp.evaluate_known_planets_v12(_toy_targets(), pd.DataFrame(), 10.0)
+    # default applied cap is 30; a cap-22 eligibility table is refused without cap_rearth=
+    frozen22, _ = _freeze(tmp_path, cap_rearth=22, name="frozen22.csv")
+    with pytest.raises(v12.V12SettingsError, match="cap_rearth"):
+        kp.evaluate_known_planets_v12(frozen22, pd.DataFrame(), 10.0)
+    # empty targets are vacuous (existing step-6 missing-settings tests keep their shape)
+    assert kp.evaluate_known_planets_v12(pd.DataFrame(), pd.DataFrame(), 10.0)[0].empty
+
+
+def test_run_known_planet_recovery_v12_stamps_and_refuses_v11_freeze(tmp_path):
+    h = _loaded_hash()
+    frozen, _ = _freeze(tmp_path)
+    res = _search_stub(tmp_path)
+    out, summ = kp.run_known_planet_recovery_v12(10.0, search_results_path=res, out_dir=tmp_path / "out",
+                                                 frozen_eligibility_file=tmp_path / "frozen.csv")
+    assert out[v12.STAMP_HASH_KEY].tolist() == [h, h]
+    assert out[v12.STAMP_CAP_KEY].tolist() == [30.0, 30.0]
+    disk = pd.read_csv(tmp_path / "out" / "known_planets_recovery.csv")
+    assert disk[v12.STAMP_HASH_KEY].tolist() == [h, h]
+    js = json.loads((tmp_path / "out" / "known_planets_summary.json").read_text())
+    assert js[v12.STAMP_HASH_KEY] == h and js[v12.STAMP_CAP_KEY] == 30.0
+    assert summ[v12.STAMP_HASH_KEY] == h and summ[v12.STAMP_CAP_KEY] == 30.0
+
+    # a v1.1 (unstamped) frozen eligibility file is refused
+    v11_file = tmp_path / "v11_frozen.csv"
+    kp.freeze_eligibility(10.0, v11_file, targets_df=_toy_targets(), lc_lookup=lambda tic: None,
+                          contratio_map={}, commit="test", config_hash="test")
+    with pytest.raises(v12.V12SettingsError, match="lacks stamp"):
+        kp.run_known_planet_recovery_v12(10.0, search_results_path=res, out_dir=tmp_path / "out11",
+                                         frozen_eligibility_file=v11_file)
+
+
+def test_v12_wrappers_accept_cap_rearth_but_refuse_pre_mutated_cfg(tmp_path):
+    h = _loaded_hash()
+    frozen, _ = _freeze(tmp_path, cap_rearth=22)
+    res = _search_stub(tmp_path)
+    out, summ = kp.run_known_planet_recovery_v12(10.0, search_results_path=res, out_dir=tmp_path / "out22",
+                                                 frozen_eligibility_file=tmp_path / "frozen.csv",
+                                                 cap_rearth=22)
+    assert out[v12.STAMP_CAP_KEY].tolist() == [22.0, 22.0]
+    assert out[v12.STAMP_HASH_KEY].tolist() == [h, h]
+    assert summ[v12.STAMP_CAP_KEY] == 22.0 and summ[v12.STAMP_HASH_KEY] == h
+
+    # mismatch between the stamped input cap and the requested aggregator cap
+    frozen30, _ = _freeze(tmp_path, name="frozen30.csv")
+    with pytest.raises(v12.V12SettingsError, match="cap_rearth"):
+        kp.run_known_planet_recovery_v12(10.0, search_results_path=res, out_dir=tmp_path / "badcap",
+                                         frozen_eligibility_file=tmp_path / "frozen30.csv", cap_rearth=22)
+    # default applied cap is 30; a cap-22 eligibility file is refused without cap_rearth=
+    with pytest.raises(v12.V12SettingsError, match="cap_rearth"):
+        kp.run_known_planet_recovery_v12(10.0, search_results_path=res, out_dir=tmp_path / "badcap22",
+                                         frozen_eligibility_file=tmp_path / "frozen.csv")
+
+    # a cfg that already carries 22 fails validate_v12_values; cap_rearth= is the supported path
+    cfg22 = v12.with_cap_rearth(v12.require_v12_settings(), 22)
+    with pytest.raises(v12.V12SettingsError, match="cap_rearth"):
+        kp.freeze_eligibility_v12(10.0, tmp_path / "x.csv", targets_df=_toy_targets(),
+                                  lc_lookup=lambda tic: None, contratio_map={}, cfg=cfg22)
+    with pytest.raises(v12.V12SettingsError, match="cap_rearth"):
+        kp.evaluate_known_planets_v12(pd.DataFrame(), pd.DataFrame(), 10.0, cfg=cfg22)
+    with pytest.raises(v12.V12SettingsError, match="cap_rearth"):
+        kp.run_known_planet_recovery_v12(10.0, search_results_path=res, out_dir=tmp_path / "x",
+                                         frozen_eligibility_file=tmp_path / "frozen.csv", cfg=cfg22)
+
+
+def test_v11_freeze_output_is_not_stamped(tmp_path):
+    df, side = kp.freeze_eligibility(10.0, tmp_path / "v11.csv", targets_df=_toy_targets(),
+                                     lc_lookup=lambda tic: None, contratio_map={}, commit="t", config_hash="t")
+    assert v12.STAMP_HASH_KEY not in df.columns
+    assert v12.STAMP_CAP_KEY not in df.columns
+    assert v12.STAMP_HASH_KEY not in side

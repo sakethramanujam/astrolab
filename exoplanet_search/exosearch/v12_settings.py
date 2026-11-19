@@ -41,6 +41,15 @@ Entry points (all call ``require_v12_settings`` first)
 * ``runs/v1.1_s70_x86/finish.py``: ``rescore_v12_cfg`` / ``rescore_rows_v12`` -- v1.2 rescoring with
   the step-5b light-curve rebuild path.
 
+Output stamps (step 7)
+----------------------
+Every v1.2 output row / result dict carries ``v12_settings_hash`` (the canonical content hash of the
+frozen file *as loaded*, before any cap override) and ``v12_cap_rearth`` (the cap actually applied:
+30.0 by default, 22.0 / 25.0 with a registered override).  ``stamp_v12`` writes them without
+mutating the caller, and ``require_v12_stamps`` is the guard every v1.2 aggregator / scorer calls;
+it raises :class:`V12SettingsError` for missing, mismatched or mixed stamps.  Search-stage rows are
+never stamped or required to be.
+
 The v1.1 functions keep their existing defaults and never import this module.
 """
 from __future__ import annotations
@@ -60,6 +69,10 @@ DEFAULT_PATH = CONFIG_FILE
 REGISTERED_HASH = "7afb7fc178138d59c84fc509a5b47e09ebc8d855d5d1d8ef69e446ee939f8756"
 
 CAP_REARTH_CANDIDATES = (22.0, 25.0, 30.0)
+
+# Stamps written on every v1.2 *output* row / result (never inside the search-stage rows).
+STAMP_HASH_KEY = "v12_settings_hash"
+STAMP_CAP_KEY = "v12_cap_rearth"
 
 
 class V12SettingsError(RuntimeError, ValueError):
@@ -201,16 +214,169 @@ def with_cap_rearth(cfg: Mapping[str, Any], cap: float) -> Dict[str, Any]:
     return out
 
 
+def stamp_values(cfg: Mapping[str, Any], cap_rearth: Optional[float] = None):
+    """``(loaded-file content hash, applied cap)`` for a row / result stamp.
+
+    ``cfg`` must be the object loaded by :func:`require_v12_settings` *before* any cap override, so
+    the hash always describes the frozen file rather than the run-time cap choice.
+    """
+    digest = content_hash(cfg)
+    if cap_rearth is not None:
+        with_cap_rearth(cfg, cap_rearth)        # validates the candidate list
+        cap = float(cap_rearth)
+    else:
+        cap = float(_get(cfg, "vet", "rp_cap", "cap_rearth", default=CAP_REARTH_CANDIDATES[-1]))
+    return digest, cap
+
+
+def _is_dataframe(obj: Any) -> bool:
+    return hasattr(obj, "columns") and hasattr(obj, "to_dict") and hasattr(obj, "copy")
+
+
+def _as_rows(obj: Any):
+    if obj is None:
+        return []
+    if isinstance(obj, Mapping):
+        return [dict(obj)] if obj else []
+    if isinstance(obj, (list, tuple)):
+        return list(obj)
+    if _is_dataframe(obj):
+        if len(obj) == 0:
+            return []
+        return obj.to_dict(orient="records")
+    raise TypeError(f"v1.2 stamps need a dict, a list of dicts or a DataFrame, got {type(obj).__name__}")
+
+
+def _blank(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, float) and math.isnan(value):
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    try:
+        import pandas as pd
+        return bool(pd.isna(value))
+    except (TypeError, ValueError, ImportError):
+        return False
+
+
+def _cap_value(value: Any) -> Optional[float]:
+    if _blank(value):
+        return None
+    try:
+        cap = float(value)
+    except (TypeError, ValueError):
+        return None
+    return cap if math.isfinite(cap) else None
+
+
+def stamp_v12(obj: Any, settings_hash: str, cap_rearth: float):
+    """Return a copy of ``obj`` with the two v1.2 stamp fields on every row (never mutates the caller)."""
+    vals = {STAMP_HASH_KEY: str(settings_hash), STAMP_CAP_KEY: float(cap_rearth)}
+    if _is_dataframe(obj):
+        out = obj.copy()
+        for key, value in vals.items():
+            out[key] = value
+        return out
+    if isinstance(obj, Mapping):
+        out = dict(obj)
+        out.update(vals)
+        return out
+    if isinstance(obj, (list, tuple)):
+        out = []
+        for row in obj:
+            if not isinstance(row, Mapping):
+                raise TypeError(f"v1.2 stamp rows must be dicts, got {type(row).__name__}")
+            rec = dict(row)
+            rec.update(vals)
+            out.append(rec)
+        return out
+    raise TypeError(f"cannot stamp {type(obj).__name__}; expected dict, list of dicts or DataFrame")
+
+
+def require_v12_stamps(rows: Any, expected_hash: Optional[str] = None,
+                       expected_cap: Optional[float] = None,
+                       path: Optional[Union[str, Path]] = None,
+                       cap_rearth: Optional[float] = None) -> Any:
+    """Refuse v1.2 inputs whose rows lack the stamps, disagree with the loaded file, or mix caps.
+
+    ``rows`` is a DataFrame, a list of dicts or a single dict.  ``expected_hash`` defaults to the
+    canonical content hash of the config loaded by :func:`require_v12_settings` (the file as loaded,
+    not the ``REGISTERED_HASH`` constant).  Empty input is accepted (vacuously).
+    """
+    if expected_hash is None:
+        expected_hash = content_hash(require_v12_settings(path))
+    wanted_caps = []
+    if expected_cap is not None:
+        wanted_caps.append(float(expected_cap))
+    if cap_rearth is not None:
+        wanted_caps.append(float(cap_rearth))
+
+    recs = _as_rows(rows)
+    if not recs:
+        return rows
+
+    hashes, caps = [], []
+    for i, row in enumerate(recs):
+        if not isinstance(row, Mapping):
+            raise V12SettingsError(f"v1.2 output row {i} is not a mapping: {type(row).__name__}")
+        h = row.get(STAMP_HASH_KEY)
+        c = row.get(STAMP_CAP_KEY)
+        missing = [k for k, v in ((STAMP_HASH_KEY, h), (STAMP_CAP_KEY, c)) if _blank(v)]
+        if missing:
+            raise V12SettingsError(
+                f"v1.2 output row {i} lacks stamp field(s) {missing}; refusing to aggregate unstamped rows")
+        cval = _cap_value(c)
+        if cval is None:
+            raise V12SettingsError(f"v1.2 output row {i} has invalid {STAMP_CAP_KEY}={c!r}")
+        hashes.append(str(h))
+        caps.append(cval)
+
+    unique_hashes = set(hashes)
+    if len(unique_hashes) != 1:
+        raise V12SettingsError(f"v1.2 output rows mix settings hashes: {sorted(unique_hashes)}")
+    if hashes[0] != expected_hash:
+        raise V12SettingsError(
+            f"v1.2 output rows have settings hash {hashes[0]} != expected loaded-file hash {expected_hash}")
+
+    unique_caps = set(caps)
+    if len(unique_caps) != 1:
+        raise V12SettingsError(f"v1.2 output rows mix cap_rearth values: {sorted(unique_caps)}")
+    for wanted in wanted_caps:
+        if not _approx(caps[0], wanted):
+            raise V12SettingsError(
+                f"v1.2 output rows have cap_rearth={caps[0]} but the aggregator expects {wanted}")
+    return rows
+
+
 def calibrate_sstar_v12(S_vetted, n_null, p, u, cap_rearth: Optional[float] = None,
-                        path: Optional[Union[str, Path]] = None):
+                        path: Optional[Union[str, Path]] = None, rows=None):
     """v1.2 S* calibration: require the frozen settings, then use its fine-grid ``select_sstar``.
 
     S* itself does not use the radius cap; a ``cap_rearth`` override is nevertheless checked against
     the registered candidate list here so a later calibration driver cannot select an unregistered cap.
-    The v1.1 ``sstar_grid.select_sstar`` default path is untouched.
+    When ``rows`` (vetted / rescore output) is supplied, its stamps are checked before computing S*.
+    The result carries the loaded-file hash and the applied cap.
     """
     cfg = require_v12_settings(path)
+    digest, cap = stamp_values(cfg, cap_rearth)
     if cap_rearth is not None:
         cfg = with_cap_rearth(cfg, cap_rearth)
+    if rows is not None:
+        require_v12_stamps(rows, expected_hash=digest, cap_rearth=cap)
     from .sstar_grid import select_sstar
-    return select_sstar(S_vetted, n_null, p, u, cfg=cfg)
+    return stamp_v12(select_sstar(S_vetted, n_null, p, u, cfg=cfg), digest, cap)
+
+
+def lock_sstar_v12(rows, s_star, path: Optional[Union[str, Path]] = None,
+                   cap_rearth: Optional[float] = None) -> Dict[str, Any]:
+    """Lock an S* value only when the v1.2 input rows carry consistent stamps.
+
+    This is the hook a later S* lock driver calls: it requires the frozen settings, refuses rows that
+    lack / mismatch / mix stamps, and returns the locked value with both stamp fields.
+    """
+    cfg = require_v12_settings(path)
+    digest, cap = stamp_values(cfg, cap_rearth)
+    require_v12_stamps(rows, expected_hash=digest, cap_rearth=cap)
+    return stamp_v12({"s_star": float(s_star)}, digest, cap)

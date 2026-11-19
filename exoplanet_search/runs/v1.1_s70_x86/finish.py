@@ -153,25 +153,31 @@ def rebuild_for_row(row, jobs=None, cfg=None, *, scan=None, lc=None, dumps=None,
 
 
 # ------------------------------------------------- v1.2 frozen-settings rescore (step 6)
-def rescore_v12_cfg(path=None):
+def rescore_v12_cfg(path=None, cap_rearth=None):
     """Return the frozen v1.2 config, or raise ``V12SettingsError`` when it is missing / unregistered.
 
     This is the gate for v1.2 rescoring.  It never changes ``main``: the historical S70 v1.1 scoring
-    (``python finish.py`` with no arguments) keeps its existing config and behaviour.
+    (``python finish.py`` with no arguments) keeps its existing config and behaviour.  ``cap_rearth``
+    applies a registered run-time cap on top of the loaded file (the file hash is unchanged).
     """
     from exosearch import v12_settings
-    return v12_settings.require_v12_settings(path)
+    cfg = v12_settings.require_v12_settings(path)
+    return v12_settings.with_cap_rearth(cfg, cap_rearth) if cap_rearth is not None else cfg
 
 
-def rescore_rows_v12(rows, jobs=None, path=None, fail_common_period=None):
+def rescore_rows_v12(rows, jobs=None, path=None, fail_common_period=None, cap_rearth=None):
     """Rescore rows under the frozen v1.2 settings, including the step-5b light-curve rebuild path.
 
     Requires the frozen v1.2 file first (so a forgotten v1.2 flag cannot silently score under v1.1
     rules), then applies the same unified verdict path as ``main`` with that cfg.  Because the frozen
     file has the odd-even mask on and ``needs_lc.rebuild`` true, ``rebuild_for_row`` rebuilds each
-    row's light curve once and passes it (with dumps and gap edges) to the verdict.
+    row's light curve once and passes it (with dumps and gap edges) to the verdict.  Every output row
+    is stamped with the loaded-file settings hash and the applied ``cap_rearth``.
     """
-    cfg = rescore_v12_cfg(path)
+    from exosearch import v12_settings
+    frozen = v12_settings.require_v12_settings(path)
+    digest, cap = v12_settings.stamp_values(frozen, cap_rearth)
+    cfg = v12_settings.with_cap_rearth(frozen, cap_rearth) if cap_rearth is not None else frozen
     recs = rows.to_dict('records') if hasattr(rows, 'to_dict') else list(rows)
     out = []
     for r in recs:
@@ -181,7 +187,7 @@ def rescore_rows_v12(rows, jobs=None, path=None, fail_common_period=None):
                         lc=lc_, dumps=dumps_)
         out.append(dict(tic=int(r['tic']), passed=v.passed, first_failing_rule=v.first_failing_rule,
                         all_failing=','.join(v.all_failing), status=v.status))
-    return pd.DataFrame(out)
+    return v12_settings.stamp_v12(pd.DataFrame(out), digest, cap)
 
 
 # ------------------------------------------------- the one verdict path (all modes)
