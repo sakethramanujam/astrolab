@@ -1,8 +1,8 @@
 {
  "schema_version": "astrolab.v12_status.v1",
  "process_only": true,
- "generated_at": "2026-11-18T22:20:45-08:00",
- "generated_at_pt": "2026-11-18 10:20 PM PT",
+ "generated_at": "2026-11-18T22:22:16-08:00",
+ "generated_at_pt": "2026-11-18 10:22 PM PT",
  "campaign": "v1.2",
  "phase": "registered_search",
  "previous": {
@@ -100,18 +100,18 @@
     "rows_total": 20662
    }
   },
-  "rate_mode_rows_per_hour": 3278.0,
-  "eta_at": "2026-11-21T17:03:28-08:00",
-  "eta_pt": "2026-11-21 5:03 PM PT",
+  "rate_mode_rows_per_hour": 3261.6,
+  "eta_at": "2026-11-21T17:25:07-08:00",
+  "eta_pt": "2026-11-21 5:25 PM PT",
   "scope": "S59–64 real, flipped, and scrambled nulls; S69 nulls only. S69 real waits for the frozen eligibility list.",
   "n_parts": 83,
   "n_parts_unreadable": 0
  },
  "thermal": {
   "paused": false,
-  "pause_events": 100,
-  "resume_events": 97,
-  "paused_hours": 1.673
+  "pause_events": 101,
+  "resume_events": 98,
+  "paused_hours": 1.69
  },
  "checks": [
   {
