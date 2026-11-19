@@ -1,8 +1,8 @@
 {
  "schema_version": "astrolab.v12_status.v1",
  "process_only": true,
- "generated_at": "2026-11-19T07:17:15-08:00",
- "generated_at_pt": "2026-11-19 7:17 AM PT",
+ "generated_at": "2026-11-19T13:20:07-08:00",
+ "generated_at_pt": "2026-11-19 1:20 PM PT",
  "campaign": "v1.2",
  "phase": "registered_search",
  "previous": {
@@ -25,16 +25,16 @@
    "h1",
    "h3"
   ],
-  "mode_rows_done": 49829,
+  "mode_rows_done": 77733,
   "mode_rows_total": 235171,
-  "mode_rows_ok": 49826,
+  "mode_rows_ok": 77730,
   "mode_rows_error": 3,
-  "star_jobs_done": 17587,
+  "star_jobs_done": 26911,
   "star_jobs_total": 83130,
   "by_mode": {
-   "real": 17567,
-   "invert": 17587,
-   "scramble": 14675
+   "real": 26891,
+   "invert": 26911,
+   "scramble": 23931
   },
   "by_sector": {
    "59": {
@@ -47,11 +47,11 @@
     "rows_total": 38485
    },
    "60": {
-    "rows_done": 6895,
+    "rows_done": 34799,
     "by_mode": {
-     "real": 2447,
-     "invert": 2447,
-     "scramble": 2001
+     "real": 11771,
+     "invert": 11771,
+     "scramble": 11257
     },
     "rows_total": 38483
    },
@@ -100,18 +100,18 @@
     "rows_total": 20662
    }
   },
-  "rate_mode_rows_per_hour": 3566.4,
-  "eta_at": "2026-11-21T11:15:24-08:00",
-  "eta_pt": "2026-11-21 11:15 AM PT",
+  "rate_mode_rows_per_hour": 3882.8,
+  "eta_at": "2026-11-21T05:52:59-08:00",
+  "eta_pt": "2026-11-21 5:52 AM PT",
   "scope": "S59–64 real, flipped, and scrambled nulls; S69 nulls only. S69 real waits for the frozen eligibility list.",
-  "n_parts": 249,
+  "n_parts": 388,
   "n_parts_unreadable": 0
  },
  "thermal": {
-  "paused": true,
-  "pause_events": 276,
-  "resume_events": 267,
-  "paused_hours": 4.651
+  "paused": false,
+  "pause_events": 348,
+  "resume_events": 338,
+  "paused_hours": 5.857
  },
  "checks": [
   {
