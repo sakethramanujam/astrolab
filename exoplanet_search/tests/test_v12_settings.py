@@ -415,7 +415,7 @@ def test_run_known_planet_recovery_v12_stamps_and_refuses_v11_freeze(tmp_path):
                                          frozen_eligibility_file=v11_file)
 
 
-def test_v12_wrappers_accept_cap_rearth_but_refuse_pre_mutated_cfg(tmp_path):
+def test_v12_wrappers_accept_cap_rearth_but_have_no_cfg_argument(tmp_path):
     h = _loaded_hash()
     frozen, _ = _freeze(tmp_path, cap_rearth=22)
     res = _search_stub(tmp_path)
@@ -436,16 +436,34 @@ def test_v12_wrappers_accept_cap_rearth_but_refuse_pre_mutated_cfg(tmp_path):
         kp.run_known_planet_recovery_v12(10.0, search_results_path=res, out_dir=tmp_path / "badcap22",
                                          frozen_eligibility_file=tmp_path / "frozen.csv")
 
-    # a cfg that already carries 22 fails validate_v12_values; cap_rearth= is the supported path
-    cfg22 = v12.with_cap_rearth(v12.require_v12_settings(), 22)
+    # the supported override is cap_rearth= only: the wrappers expose no cfg= argument
+    for fn in (kp._v12_run_cfg, kp.evaluate_known_planets_v12, kp.freeze_eligibility_v12,
+               kp.run_known_planet_recovery_v12):
+        assert "cfg" not in inspect.signature(fn).parameters
+
+
+def test_v12_wrappers_accept_every_registered_cap_and_stamp_the_loaded_hash(tmp_path):
+    h = _loaded_hash()
+    for cap in (22, 25, 30):
+        df, side = _freeze(tmp_path, cap_rearth=cap, name=f"frozen{cap}.csv")
+        assert df[v12.STAMP_HASH_KEY].tolist() == [h, h]
+        assert df[v12.STAMP_CAP_KEY].tolist() == [float(cap), float(cap)]
+        assert side[v12.STAMP_HASH_KEY] == h and side[v12.STAMP_CAP_KEY] == float(cap)
+
     with pytest.raises(v12.V12SettingsError, match="cap_rearth"):
+        _freeze(tmp_path, cap_rearth=23, name="bad.csv")
+
+    # an otherwise-frozen cfg mutated in a non-frozen key cannot be passed in at all
+    cfg = v12.require_v12_settings()
+    cfg["innocuous_extra"] = 1
+    with pytest.raises(TypeError):
+        kp.evaluate_known_planets_v12(pd.DataFrame(), pd.DataFrame(), 10.0, cfg=cfg)
+    with pytest.raises(TypeError):
         kp.freeze_eligibility_v12(10.0, tmp_path / "x.csv", targets_df=_toy_targets(),
-                                  lc_lookup=lambda tic: None, contratio_map={}, cfg=cfg22)
-    with pytest.raises(v12.V12SettingsError, match="cap_rearth"):
-        kp.evaluate_known_planets_v12(pd.DataFrame(), pd.DataFrame(), 10.0, cfg=cfg22)
-    with pytest.raises(v12.V12SettingsError, match="cap_rearth"):
-        kp.run_known_planet_recovery_v12(10.0, search_results_path=res, out_dir=tmp_path / "x",
-                                         frozen_eligibility_file=tmp_path / "frozen.csv", cfg=cfg22)
+                                  lc_lookup=lambda tic: None, contratio_map={}, cfg=cfg)
+    with pytest.raises(TypeError):
+        kp.run_known_planet_recovery_v12(10.0, search_results_path=_search_stub(tmp_path),
+                                         out_dir=tmp_path / "x", cfg=cfg)
 
 
 def test_v11_freeze_output_is_not_stamped(tmp_path):
