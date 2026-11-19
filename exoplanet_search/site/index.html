@@ -34,6 +34,7 @@
   <div id="v12-body"></div>
 </section>
 <p class="kbd v11-legacy">The figures below are the last v1.1 Sector 70 publication (search ended gate_failed, 12 Nov). They are not v1.2 results.</p>
+<div class="note note-correction" role="note"><span>⚠️</span><div><b>Correction, 19 Nov 2026:</b> these are v1.1 outputs. The v1.1 vetter failed its known-planet gate, so these are unvalidated signals, not candidate claims. They will be re-vetted under the registered v1.2 method after the S69 gate.</div></div>
 <section>
   <div class="grid stats" id="stats"></div>
 </section>
@@ -77,11 +78,13 @@
 </section>
 
 <section class="card" id="candidates" aria-labelledby="h-cands">
+  <div class="note note-correction" role="note"><span>⚠️</span><div><b>Correction, 19 Nov 2026:</b> these are v1.1 outputs. The v1.1 vetter failed its known-planet gate, so these are unvalidated signals, not candidate claims. They will be re-vetted under the registered v1.2 method after the S69 gate.</div></div>
   <div class="cap"><h2 id="h-cands" style="margin:0">Candidates</h2><span class="kbd" id="ccount" role="status" aria-live="polite"></span></div>
   <div class="filters" id="filters"></div>
   <div class="chips" id="chips" role="group" aria-label="Filter by status"></div>
   <div><table id="cands"><caption class="sr">Candidate signals. Column headers sort; the plus button shows more fields; the TIC opens the detail view.</caption></table></div>
   <div class="legend">
+    <span><span class="badge b-unvalidated">v1.1 unvalidated</span> all v1.1 rows: the v1.1 vetter failed its known-planet gate; not a candidate claim</span>
     <span><span class="badge b-known">known</span> period matches a TOI, CTOI or confirmed planet</span>
     <span><span class="badge b-needs_review">needs review</span> passed every check with S at or above the interim S*, no catalogue match (not a detection)</span>
     <span><span class="badge b-uncalibrated">not calibrated</span> passed the v1.0.0 screens only: no calibrated S yet (v0 rows), S below the interim S*, or dropped by the star-quality cut</span>

@@ -8,6 +8,7 @@ const rel = (iso) => {
   if (s < 172800) return Math.round(s / 3600) + ' h ago'; return Math.round(s / 86400) + ' days ago';
 };
 const LABEL = { all: 'All', needs_review: 'Needs review', uncalibrated: 'Not calibrated', known: 'Known', submitted: 'Submitted', rejected: 'Rejected' };
+const unvalBadge = (c) => (c.validation_status === 'v1.1_unvalidated' ? '<span class="badge b-unvalidated">v1.1 unvalidated</span> ' : '');
 const FLAG_TXT = {
   centroid_offset: 'dip centroid off target', dip_off_target: 'darkest pixel off target', unresolved_neighbour: 'unresolved bright neighbour',
   neighbour_could_mimic: 'neighbour could mimic', centroid_inconclusive: 'centroid inconclusive', centroid_shift_minor: 'small centroid shift (warning)',
@@ -322,7 +323,7 @@ function candidates(d) {
       btn.addEventListener('click', () => { isOpen ? open.delete(id) : open.add(id); draw(); });
       const cells = {
         tic: `<a href="candidate.html#s${c.sector}/${c.tic}">${c.tic}</a><small>S${c.sector}${c.known ? ' · ' + c.known : ''}</small>`,
-        status: `<span class="badge b-${c.status}">${LABEL[c.status] || c.status}</span>`,
+        status: `${unvalBadge(c)}<span class="badge b-${c.status}">${LABEL[c.status] || c.status}</span>`,
         period: c.period_ambiguous ? `≈${per(c.period)}<small>ambiguous</small>` : per(c.period), depth_ppm: pct(c.depth_ppm), rp_earth: c.rp_earth == null ? '–' : c.rp_earth >= 10 ? fmt(c.rp_earth, 0) : fmt(c.rp_earth, 1),
         sde: fmt(c.sde, 1), allflags: flagChips(c),
       };
