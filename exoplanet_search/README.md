@@ -13,6 +13,37 @@ MAST manifest -> seeded target subset -> resumable download (FITS on the shared 
    -> SQLite + Parquet + diagnostic PNGs for the top hits
 ```
 
+## Current version: v1.2 (status 2026-11-20)
+
+The sections further down describe earlier versions (v1.0 and v1.1) and are kept as history.
+
+### Registration
+
+The v1.2 registration is in [docs/registration_v1.2.md](docs/registration_v1.2.md) (tag `v1.2-registered`, code pinned at `bc05650`). The 2026-11-19 single-host h2 amendment is in [docs/registration_v1.2_amendment_2026-11-19_h2.md](docs/registration_v1.2_amendment_2026-11-19_h2.md), including Addendum A (order of remaining steps; 18 workers at normal priority, speed only).
+
+### Run status
+
+The h2 run over S59-S64 (real, invert, scramble) and S69 (invert and scramble only; S69 real waits for the frozen eligibility list) has finished. It ran 83,130 star jobs and produced 235,168 OK rows out of 235,171 total rows. The 3 error rows come from one S59 star whose duration cap leaves no searchable duration (outside the duration cap); they stay error rows.
+
+### Catalogue cross-check
+
+This cross-check is a read-only diagnostic of the search against published ephemerides; it is not a gate. The original specification in [docs/xcheck_catalogue_v1.2_2026-11-19.md](docs/xcheck_catalogue_v1.2_2026-11-19.md) gave 103 of 376 scored planets passing all criteria. The amendment in [docs/xcheck_catalogue_v1.2_amendment_2026-11-20.md](docs/xcheck_catalogue_v1.2_amendment_2026-11-20.md) (commit `e4f0f45`, made after the first result was seen; both results stay on record) gives 192 of 297. Tracing the 9 period misses with S >= 10 under the original specification showed: 5 returned a sibling planet on the same star instead, 2 showed eclipsing-binary signs on the reported peak, 1 was a momentum-dump artefact, and 1 was a detrending weakness on a fast variable star. No code bug was found.
+
+### `S*_cal` rulings
+
+[docs/sstar_cal_rulings_v1.2_2026-11-20.md](docs/sstar_cal_rulings_v1.2_2026-11-20.md) (tag `v1.2-sstar-rulings-2026-11-20`) fills registration gaps (budget, pooling, null vetting, population, eligibility, record) before `S*_cal` is computed. The driver [exosearch/v12_sstar_cal.py](exosearch/v12_sstar_cal.py) is written but has not been run. Its dry-run stops because the rebuilt S59-S64 scramble exclusion (TOI hosts only) does not include the 29 Kostov et al. 2025 eclipsing-binary star-sectors named by the registered rule. This needs a ruling before `S*_cal`.
+
+### Open steps
+
+In order:
+
+1. `S*_cal` and `n_real_eligible`.
+2. Injection padding (seed `20261118`, hard cap 2000 draws).
+3. Vetter cut lock on S59-S64.
+4. S69 gate (`S*_gate`, frozen eligibility list, zero known-planet losses).
+
+Nothing after step 1 has started.
+
 ## Layout
 
 | path | what |
