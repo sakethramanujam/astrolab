@@ -2,6 +2,7 @@ import { el, fmt, slider, toggle, readout, surface, axes, palette, alpha, notice
 
 starfield();
 const LABEL = { needs_review: 'Needs review', uncalibrated: 'Not calibrated', known: 'Known', submitted: 'Submitted', rejected: 'Rejected' };
+const unvalBadge = (c) => (c.validation_status === 'v1.1_unvalidated' ? '<span class="badge b-unvalidated">v1.1 unvalidated</span> ' : '');
 const ppmFmt = (v) => (Math.abs(v) >= 10000 ? `${(v / 1e4).toFixed(Math.abs(v) >= 1e5 ? 0 : 1)}%` : `${Math.round(v)}`);
 
 function parseHash() {
@@ -28,7 +29,7 @@ function render(c, prev, next) {
   document.title = `${name} · S${c.sector} · Transit Hunt`;
   document.getElementById('crumb').textContent = `${name} · sector ${c.sector}`;
   document.getElementById('title').textContent = `${name}`;
-  document.getElementById('lede').innerHTML = `<span class="badge b-${c.status}">${LABEL[c.status] || c.status}</span> ` +
+  document.getElementById('lede').innerHTML = `${unvalBadge(c)}<span class="badge b-${c.status}">${LABEL[c.status] || c.status}</span> ` +
     (c.known ? `Our blind search re-found <b>${c.known}</b>. ` : c.toi_host ? `This star hosts TOI ${c.toi_host}, but this signal is at a different period. ` : 'No catalogue match at this period. ') +
     `A ${fmt(c.depth_ppm)} ppm dip lasting ${fmt(c.duration_h, 1)} h, ${c.period_ambiguous ? `with a period of roughly ${fmt(c.period, 2)} days (ambiguous: only ${c.n_transits} transit${c.n_transits === 1 ? '' : 's'}, so P/2, P/3 … are possible)` : `every ${fmt(c.period, 4)} days`}, seen ${c.n_transits} times in sector ${c.sector}.` +
     (c.P_grid_halfwidth_d != null ? ` Grid-degeneracy half-width ${fmt(c.P_grid_halfwidth_d, 5)} d (the range of trial periods that fit exactly as well; not a period error).` : '') +

@@ -1,0 +1,141 @@
+{
+ "schema_version": "astrolab.v12_status.v1",
+ "process_only": true,
+ "generated_at": "2026-11-19T20:13:06-08:00",
+ "generated_at_pt": "2026-11-19 8:13 PM PT",
+ "campaign": "v1.2",
+ "phase": "registered_search",
+ "previous": {
+  "campaign": "v1.1",
+  "outcome": "gate_failed"
+ },
+ "registration": {
+  "tag": "v1.2-registered",
+  "code_pin": "bc05650",
+  "registered_at": "2026-11-18T17:02:23-08:00",
+  "frozen_before_search_rows": true
+ },
+ "search": {
+  "state": "done",
+  "started_at": "2026-11-19T14:41:49-08:00",
+  "contributing_hosts": [
+   "h2"
+  ],
+  "registered_hosts": [
+   "h2"
+  ],
+  "mode_rows_done": 235171,
+  "mode_rows_total": 235171,
+  "mode_rows_ok": 235168,
+  "mode_rows_error": 3,
+  "star_jobs_done": 83130,
+  "star_jobs_total": 83130,
+  "by_mode": {
+   "real": 72589,
+   "invert": 83130,
+   "scramble": 79452
+  },
+  "by_sector": {
+   "59": {
+    "rows_done": 38485,
+    "by_mode": {
+     "real": 12996,
+     "invert": 12996,
+     "scramble": 12493
+    },
+    "rows_total": 38485
+   },
+   "60": {
+    "rows_done": 38483,
+    "by_mode": {
+     "real": 12999,
+     "invert": 12999,
+     "scramble": 12485
+    },
+    "rows_total": 38483
+   },
+   "61": {
+    "rows_done": 36072,
+    "by_mode": {
+     "real": 12211,
+     "invert": 12211,
+     "scramble": 11650
+    },
+    "rows_total": 36072
+   },
+   "62": {
+    "rows_done": 33154,
+    "by_mode": {
+     "real": 11229,
+     "invert": 11229,
+     "scramble": 10696
+    },
+    "rows_total": 33154
+   },
+   "63": {
+    "rows_done": 32587,
+    "by_mode": {
+     "real": 11053,
+     "invert": 11053,
+     "scramble": 10481
+    },
+    "rows_total": 32587
+   },
+   "64": {
+    "rows_done": 35728,
+    "by_mode": {
+     "real": 12101,
+     "invert": 12101,
+     "scramble": 11526
+    },
+    "rows_total": 35728
+   },
+   "69": {
+    "rows_done": 20662,
+    "by_mode": {
+     "invert": 10541,
+     "scramble": 10121
+    },
+    "rows_total": 20662
+   }
+  },
+  "rate_mode_rows_per_hour": 42591.4,
+  "eta_at": "2026-11-19T20:13:06-08:00",
+  "eta_pt": "2026-11-19 8:13 PM PT",
+  "scope": "S59–64 real, flipped, and scrambled nulls; S69 nulls only. S69 real waits for the frozen eligibility list.",
+  "n_parts": 1172,
+  "n_parts_unreadable": 0
+ },
+ "checks": [
+  {
+   "id": "registration",
+   "result": "passed",
+   "detail": "tag v1.2-registered, code pin bc05650, frozen before any S59–64 or S69 search rows existed; amended v1.2-amend-h2-2026-11-19 and v1.2-amend-h2-2026-11-19-A to make h2 the only host"
+  },
+  {
+   "id": "pre_run_pin",
+   "result": "passed",
+   "detail": "search is pinned to the registered commit"
+  },
+  {
+   "id": "amendment_h2",
+   "result": "passed",
+   "detail": "h2 native arm64 is the only registered host; h1 was stopped at 2:42 PM PT on 2026-11-19 and its partial rows were archived unread"
+  }
+ ],
+ "next_steps": [
+  "Finish the registered search",
+  "Calibration on S59–64",
+  "Padding (0A.2.1)",
+  "Lock S* (0.005 grid)",
+  "Freeze the eligibility list",
+  "S69 real search",
+  "S69 gate (zero known-planet losses)",
+  "Only then: candidates"
+ ],
+ "notes": [
+  "Until the S69 gate passes, this feed is process only: stars and rows searched, null rows done, checks, rate, ETA, and next steps. It does not include candidate counts, score statistics, or target identities.",
+  "Registered rows come from h2 only under the 2026-11-19 amendment (tags v1.2-amend-h2-2026-11-19 and v1.2-amend-h2-2026-11-19-A). h1 was stopped at 2:42 PM PT on 2026-11-19 and its partial rows were archived unread. This feed reports the h2 run only.",
+  "Temperature monitoring is not available on h2 (no admin temperature access)."
+ ]
+}

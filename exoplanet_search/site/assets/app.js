@@ -8,6 +8,7 @@ const rel = (iso) => {
   if (s < 172800) return Math.round(s / 3600) + ' h ago'; return Math.round(s / 86400) + ' days ago';
 };
 const LABEL = { all: 'All', needs_review: 'Needs review', uncalibrated: 'Not calibrated', known: 'Known', submitted: 'Submitted', rejected: 'Rejected' };
+const unvalBadge = (c) => (c.validation_status === 'v1.1_unvalidated' ? '<span class="badge b-unvalidated">v1.1 unvalidated</span> ' : '');
 const FLAG_TXT = {
   centroid_offset: 'dip centroid off target', dip_off_target: 'darkest pixel off target', unresolved_neighbour: 'unresolved bright neighbour',
   neighbour_could_mimic: 'neighbour could mimic', centroid_inconclusive: 'centroid inconclusive', centroid_shift_minor: 'small centroid shift (warning)',
@@ -24,6 +25,79 @@ if (window.Chart) {
 fetch('data/progress.json', { cache: 'no-store' }).then((r) => r.json()).then(render).catch((e) => {
   document.getElementById('updated').textContent = 'Could not load data/progress.json: ' + e;
 });
+
+fetch('data/status_v12.json', { cache: 'no-store' }).then((r) => {
+  if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+  return r.json();
+}).then(renderV12).catch((e) => {
+  const n = document.getElementById('v12-updated');
+  if (n) n.textContent = 'Could not load v1.2 status: ' + e;
+});
+
+function renderV12(d) {
+  const body = document.getElementById('v12-body');
+  const updated = document.getElementById('v12-updated');
+  if (!body) return;
+  const s = d.search || {};
+  const th = d.thermal || {};
+  const reg = d.registration || {};
+  const prev = d.previous || {};
+  const state = s.state || 'unknown';
+  const paused = !!th.paused;
+  const stateClass = paused ? 'paused' : (state === 'running' ? 'running' : (state === 'done' ? 'done' : 'unknown'));
+  const stateLabel = paused ? 'paused (heat guard)' : state;
+  if (updated) {
+    const when = d.generated_at_pt || d.generated_at || '';
+    updated.textContent = when ? `updated ${when}${d.generated_at ? ' · ' + rel(d.generated_at) : ''}` : '';
+  }
+  const pct = (s.mode_rows_total ? (100 * (s.mode_rows_done || 0) / s.mode_rows_total) : 0);
+  const pctLabel = (Math.round(pct * 10) / 10).toFixed(1) + '%';
+  const modes = s.by_mode || {};
+  const hosts = (s.registered_hosts || []).join(' and ') || 'h1 and h3';
+  const checks = (d.checks || []).map((c) => `${c.id}: ${c.result}`).join(' · ');
+  const sectors = Object.keys(s.by_sector || {}).sort((a, b) => Number(a) - Number(b));
+  const sectorRows = sectors.map((sec) => {
+    const x = s.by_sector[sec];
+    const done = fmt(x.rows_done || 0);
+    const total = x.rows_total != null ? fmt(x.rows_total) : '–';
+    const bm = x.by_mode || {};
+    const bits = ['real', 'invert', 'scramble'].filter((k) => bm[k] != null).map((k) => `${k} ${fmt(bm[k])}`).join(', ');
+    return `<tr><td>S${sec}</td><td class="num">${done} / ${total}</td><td>${bits || '–'}</td></tr>`;
+  }).join('');
+  const steps = (d.next_steps || []).map((t) => `<li>${t}</li>`).join('');
+  const lede = `${prev.campaign || 'v1.1'} ended ${prev.outcome || 'gate_failed'}. `
+    + `v1.2 was registered ${reg.registered_at ? new Date(reg.registered_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' PT' : ''} `
+    + `(tag ${reg.tag || 'v1.2-registered'}, code pin ${reg.code_pin || 'bc05650'})`
+    + `${reg.frozen_before_search_rows ? ', before any S59–64 or S69 search rows existed' : ''}. `
+    + `${s.scope || ''}`;
+  const eta = s.eta_pt ? `ETA ${s.eta_pt}` : 'ETA –';
+  const rate = s.rate_mode_rows_per_hour != null ? `${fmt(s.rate_mode_rows_per_hour, 0)} mode-rows/h` : 'rate –';
+  const thermal = th.pause_events
+    ? `${fmt(th.pause_events)} heat-guard pauses (${th.paused_hours != null ? th.paused_hours + ' h paused' : 'duration unknown'}). Pauses can push the ETA later.`
+    : '';
+  const hostNotes = (d.notes || []).slice(1).join(' ');
+  const jobs = (s.star_jobs_done != null && s.star_jobs_total)
+    ? `${fmt(s.star_jobs_done)} / ${fmt(s.star_jobs_total)} star-jobs`
+    : '';
+  const err = s.mode_rows_error ? `${fmt(s.mode_rows_error)} errors` : '0 errors';
+  body.innerHTML = `
+    <div class="v12-head"><span class="v12-state ${stateClass}">${stateLabel}</span><span class="kbd">v1.2 registered search · process only</span></div>
+    <p class="v12-lede">${lede}</p>
+    <div class="grid stats">
+      <div class="card stat"><div class="k">Mode-rows</div><div class="v acc">${fmt(s.mode_rows_done || 0)}<span style="font-size:18px;color:var(--muted)"> / ${fmt(s.mode_rows_total || 0)}</span></div><div class="s">${pctLabel} · ${err}</div></div>
+      <div class="card stat"><div class="k">Star-jobs</div><div class="v">${jobs ? jobs.split(' / ')[0] : '–'}<span style="font-size:18px;color:var(--muted)">${jobs ? ' / ' + jobs.split(' / ')[1] : ''}</span></div><div class="s">one job can write several mode-rows</div></div>
+      <div class="card stat"><div class="k">Null rows</div><div class="v acc2">${fmt((modes.invert || 0) + (modes.scramble || 0))}</div><div class="s">flipped ${fmt(modes.invert || 0)} · scrambled ${fmt(modes.scramble || 0)}</div></div>
+      <div class="card stat"><div class="k">Rate / ETA</div><div class="v ok" style="font-size:22px;line-height:1.2">${s.eta_pt || '–'}</div><div class="s">${rate} · wall clock, pauses included</div></div>
+    </div>
+    <div class="v12-barwrap"><div class="v12-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.max(0, Math.min(100, pct)).toFixed(1)}" aria-label="Mode-rows complete"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i><span>${fmt(s.mode_rows_done || 0)} / ${fmt(s.mode_rows_total || 0)} mode-rows (${pctLabel})</span></div></div>
+    <p class="kbd" style="margin-top:0">${thermal ? thermal + ' ' : ''}Registered rows come from ${hosts} only.${hostNotes ? ' ' + hostNotes : ''}</p>
+    <div class="vscroll" style="max-height:220px"><table class="mini"><caption class="sr">Mode-rows by sector</caption><thead><tr><th>Sector</th><th>Rows</th><th>Modes</th></tr></thead><tbody>${sectorRows}</tbody></table></div>
+    <h3 style="margin-top:16px">Next steps</h3>
+    <ol class="v12-steps">${steps}</ol>
+    ${checks ? `<p class="kbd">Checks: ${checks}</p>` : ''}
+    <p class="v12-quiet">${(d.notes && d.notes[0]) || 'Process only until the S69 gate passes.'}</p>
+  `;
+}
 
 function render(d) {
   const t = d.totals;
@@ -250,7 +324,7 @@ function candidates(d) {
       btn.addEventListener('click', () => { isOpen ? open.delete(id) : open.add(id); draw(); });
       const cells = {
         tic: `<a href="candidate.html#s${c.sector}/${c.tic}">${c.tic}</a><small>S${c.sector}${c.known ? ' · ' + c.known : ''}</small>`,
-        status: `<span class="badge b-${c.status}">${LABEL[c.status] || c.status}</span>`,
+        status: `${unvalBadge(c)}<span class="badge b-${c.status}">${LABEL[c.status] || c.status}</span>`,
         period: c.period_ambiguous ? `≈${per(c.period)}<small>ambiguous</small>` : per(c.period), depth_ppm: pct(c.depth_ppm), rp_earth: c.rp_earth == null ? '–' : c.rp_earth >= 10 ? fmt(c.rp_earth, 0) : fmt(c.rp_earth, 1),
         sde: fmt(c.sde, 1), allflags: flagChips(c),
       };
