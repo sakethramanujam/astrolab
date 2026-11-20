@@ -603,3 +603,19 @@ Status: AMENDMENT to `xcheck_catalogue_v1.2_2026-11-19.md` (tag `v1.2-xcheck-spe
 - **Source:** Addendum A item 1.
 
 **Not changed:** No registered rule, threshold, cut, seed, or gate is changed by this note.
+
+---
+
+## Deviation 2026-11-20: Kostov EB star-sectors excluded
+
+**What:** The 29 Kostov et al. 2025 eclipsing-binary star-sectors in S59-S64 (S59 7, S60 5, S61 6, S62 6, S63 3, S64 2) are dropped from every null mode (invert and scramble) and from the real rows before `S*_cal` and `n_real_eligible`. No rerun is performed.
+
+**Why:** The registered scrambled-null exclusion (Section 7.1; `S*_cal` rulings Section 4) is TOI hosts plus Kostov EBs. The h2 run's S59-S64 scramble exclusion was built from TOI hosts only. Rebuilt from the manifest (invert minus scramble targets per sector), it equals the TOI hosts exactly (503, 514, 561, 533, 572, 575 for S59-S64) and misses the 29 EB star-sectors. The `S*_cal` rulings require stopping on a mismatch. This deviation resolves it by removing those star-sectors from all modes so the populations match the registered rule without rerunning the search.
+
+**Headline form:** `S*_cal` is computed per null mode. Invert is pooled over S59-S64 with the per-sector budgets `p_s = 1/N_s` summed, and scramble is pooled the same way. The headline `S*_cal` is the larger (max) of the two. This replaces the single pooled invert+scramble value in the `S*_cal` rulings Section 2-3 (where the max was a diagnostic). Per-sector values with bootstrap 68% intervals stay report-only, and `too_deep` stays a flag.
+
+**Reproduction gate:** Before `S*_cal`, a reproduction gate re-prepares light curves and must reproduce stored `S` to `1e-6` on all known-planet rows, the top-ranked null rows, and a seeded random 200 rows. Any mismatch stops the calibration.
+
+**Decision:** Ruled by the room and approved by the project owner on 2026-11-20, before any `S*_cal` compute. Recorded by tag `v1.2-sstar-deviation-2026-11-20`.
+
+**Not changed:** the search, all thresholds other than the S*_cal headline form, seeds, cuts and the S69 gate.
