@@ -1,8 +1,8 @@
 {
  "schema_version": "astrolab.v12_status.v1",
  "process_only": true,
- "generated_at": "2026-11-19T13:20:07-08:00",
- "generated_at_pt": "2026-11-19 1:20 PM PT",
+ "generated_at": "2026-11-19T17:16:45-08:00",
+ "generated_at_pt": "2026-11-19 5:16 PM PT",
  "campaign": "v1.2",
  "phase": "registered_search",
  "previous": {
@@ -17,24 +17,23 @@
  },
  "search": {
   "state": "running",
-  "started_at": "2026-11-18T17:18:57-08:00",
+  "started_at": "2026-11-19T14:41:49-08:00",
   "contributing_hosts": [
-   "h1"
+   "h2"
   ],
   "registered_hosts": [
-   "h1",
-   "h3"
+   "h2"
   ],
-  "mode_rows_done": 77733,
+  "mode_rows_done": 132528,
   "mode_rows_total": 235171,
-  "mode_rows_ok": 77730,
+  "mode_rows_ok": 132525,
   "mode_rows_error": 3,
-  "star_jobs_done": 26911,
+  "star_jobs_done": 45205,
   "star_jobs_total": 83130,
   "by_mode": {
-   "real": 26891,
-   "invert": 26911,
-   "scramble": 23931
+   "real": 45205,
+   "invert": 45205,
+   "scramble": 42118
   },
   "by_sector": {
    "59": {
@@ -47,29 +46,29 @@
     "rows_total": 38485
    },
    "60": {
-    "rows_done": 34799,
+    "rows_done": 38483,
     "by_mode": {
-     "real": 11771,
-     "invert": 11771,
-     "scramble": 11257
+     "real": 12999,
+     "invert": 12999,
+     "scramble": 12485
     },
     "rows_total": 38483
    },
    "61": {
-    "rows_done": 1089,
+    "rows_done": 36072,
     "by_mode": {
-     "real": 525,
-     "invert": 525,
-     "scramble": 39
+     "real": 12211,
+     "invert": 12211,
+     "scramble": 11650
     },
     "rows_total": 36072
    },
    "62": {
-    "rows_done": 1034,
+    "rows_done": 17199,
     "by_mode": {
-     "real": 499,
-     "invert": 499,
-     "scramble": 36
+     "real": 5899,
+     "invert": 5899,
+     "scramble": 5401
     },
     "rows_total": 33154
    },
@@ -92,32 +91,23 @@
     "rows_total": 35728
    },
    "69": {
-    "rows_done": 37,
-    "by_mode": {
-     "invert": 20,
-     "scramble": 17
-    },
+    "rows_done": 0,
+    "by_mode": {},
     "rows_total": 20662
    }
   },
-  "rate_mode_rows_per_hour": 3882.8,
-  "eta_at": "2026-11-21T05:52:59-08:00",
-  "eta_pt": "2026-11-21 5:52 AM PT",
+  "rate_mode_rows_per_hour": 51321.2,
+  "eta_at": "2026-11-19T19:16:45-08:00",
+  "eta_pt": "2026-11-19 7:16 PM PT",
   "scope": "S59–64 real, flipped, and scrambled nulls; S69 nulls only. S69 real waits for the frozen eligibility list.",
-  "n_parts": 388,
+  "n_parts": 660,
   "n_parts_unreadable": 0
- },
- "thermal": {
-  "paused": false,
-  "pause_events": 348,
-  "resume_events": 338,
-  "paused_hours": 5.857
  },
  "checks": [
   {
    "id": "registration",
    "result": "passed",
-   "detail": "tag v1.2-registered, code pin bc05650, frozen before any S59–64 or S69 search rows existed"
+   "detail": "tag v1.2-registered, code pin bc05650, frozen before any S59–64 or S69 search rows existed; amended v1.2-amend-h2-2026-11-19 and v1.2-amend-h2-2026-11-19-A to make h2 the only host"
   },
   {
    "id": "pre_run_pin",
@@ -125,14 +115,9 @@
    "detail": "search is pinned to the registered commit"
   },
   {
-   "id": "smoke_s69_20_star",
+   "id": "amendment_h2",
    "result": "passed",
-   "detail": "20-star S69 smoke (nulls only) recorded in the run log"
-  },
-  {
-   "id": "mac_rosetta_bit_identity",
-   "result": "failed",
-   "detail": "did not match bit-for-bit; does not produce registered rows"
+   "detail": "h2 native arm64 is the only registered host; h1 was stopped at 2:42 PM PT on 2026-11-19 and its partial rows were archived unread"
   }
  ],
  "next_steps": [
@@ -147,6 +132,7 @@
  ],
  "notes": [
   "Until the S69 gate passes, this feed is process only: stars and rows searched, null rows done, checks, rate, ETA, and next steps. It does not include candidate counts, score statistics, or target identities.",
-  "Only h1 and h3 produce registered rows. A Mac check under translation did not match bit-for-bit."
+  "Registered rows come from h2 only under the 2026-11-19 amendment (tags v1.2-amend-h2-2026-11-19 and v1.2-amend-h2-2026-11-19-A). h1 was stopped at 2:42 PM PT on 2026-11-19 and its partial rows were archived unread. This feed reports the h2 run only.",
+  "Temperature monitoring is not available on h2 (no admin temperature access)."
  ]
 }
