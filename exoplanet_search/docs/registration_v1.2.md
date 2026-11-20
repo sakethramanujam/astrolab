@@ -619,3 +619,31 @@ Status: AMENDMENT to `xcheck_catalogue_v1.2_2026-11-19.md` (tag `v1.2-xcheck-spe
 **Decision:** Ruled by the room and approved by the project owner on 2026-11-20, before any `S*_cal` compute. Recorded by tag `v1.2-sstar-deviation-2026-11-20`.
 
 **Not changed:** the search, all thresholds other than the S*_cal headline form, seeds, cuts and the S69 gate.
+
+**Clarification 2026-11-20 (budget wording):** The Deviation's phrase "with the per-sector budgets `p_s = 1/N_s` summed" is imprecise, and the tagged text above is kept unchanged. For each null mode `m`, the budget `B_m` is the sum over S59–S64 of `n_{m,s} * p_s` with `p_s = 1/N_s`, where `N_s` is the number of quality-passing invert rows in sector `s` (holdout included, after the EB drop) and `n_{m,s}` is the number of mode-`m` rows in the paired null sample of sector `s`, giving `p_m = B_m / n_null_m`. The threshold `S*_m` is selected with that `p_m`, and `floor(B_m) + 1` vetted passes are needed in mode `m`. Nothing else in the Deviation changes.
+
+## Deviation 2026-11-20: TOI catalogue
+
+**What:** The registered ExoFOP TOI cache (SHA-256 `4e68b3f1c816d2ce0f11564d3728c63e237cf5edc3f7a397910429fd4e04133a`, dated 2026-11-10, 8,175 rows with the registered disposition tally 1,303 `FP`, 98 `FA`, 740 `CP`, 613 `KP`) was overwritten on 2026-11-18 and is unrecoverable. The v1.2 h2 run used the 2026-11-18 file (SHA-256 `3df0eccdf26fba9a3d4bc6bf4d0a3f53c0662e6b3dc1ef7827a74a519ea34ce0`, also 8,175 rows). That file has been accepted as a dated deviation, frozen as a read-only hashed copy, and is the TOI pin for `S*_cal`.
+
+**Why:** A seven-day auto-refresh of the catalogue cache ran during an h1 prefetch on 2026-11-18 at 10:54 PST, after the registered cache had gone stale. A data-root checksum list taken before the h2 run (2026-11-19 14:37 PST) already recorded SHA-256 `3df0ecc…` for this file. After the run the file still has that SHA-256 and its modification time is unchanged (2026-11-18 10:54:15 PST), so the catalogue was not rewritten during the run.
+
+**Decision:** Ruled and approved by the project owner on 2026-11-20, before any `S*_cal` compute. The frozen file is required for this calibration. The driver blocks Python-level socket creation at import (no `exosearch` code at the pinned checkout `bc05650` reads `EXO_OFFLINE`). CTOI (`exofop_ctoi.csv`) and Prša et al. 2022 (`tess_ebs_prsa2022.csv`) are not read on this driver path and are left unpinned.
+
+**Agreement among surviving post-registration copies (counts only):** Among searched S59–S64 stars, the TOI-host set, TFOPWG dispositions, and known-planet gate rows computed from this file together with the registered pscomppars table (`6dc56f25…`) are identical to both surviving earlier copies: the 2026-11-11 h2 copy (`2831535a…`) and the 2026-11-14 pull (`3fd99443…`). Union of TOI hosts: 2,012, with 0 hosts unique to one file and 0 disposition changes. Per-sector host counts: 503, 514, 561, 533, 572, 575. Known-planet gate rows: 1,774 unique hosts and 1,937 keys, identical in all three files (per-sector row counts 482, 499, 545, 513, 562, 576). No surviving copy of `4e68b3f1…` remains, so no surviving evidence bounds the S59–S64 host, disposition, or known-planet gate-row differences against the registered file.
+
+Applying the registration Section 1.2 filter (all 8,175 TOI rows, counted by TFOPWG Disposition) to `3df0ecc…` — and to both surviving earlier copies, which agree with it — gives 822 `CP`, 609 `KP`, 1,322 `FP`, 98 `FA`. That does not match the registered `4e68b3f1…` tally. The all-sky change is 740→822 `CP`, 613→609 `KP`, 1,303→1,322 `FP`; `FA` is unchanged at 98. Alternative counts do not recover the registered tally; the cause (catalogue drift or the registered tally's derivation) cannot be established.
+
+A limited proxy against registration-time artefacts: the frozen S70, S71 and S72 eligibility lists record `toi_sha256 = 4e68b3f1…`. Matching their TOI-type rows to `3df0ecc…` by TIC and period (within 1%) gives 0 missing rows and 0 period changes; 1 disposition change on the S71 list (`PC` to `FP`, on a row already ineligible), and 0 on the S70 and S72 lists. This does not recompute expected $S$ or transit counts, and cannot count TOIs that `3df0ecc…` would newly add on those searched stars.
+
+A few non-disposition columns differ among the surviving copies, including ephemeris or depth on 3 rows versus `2831535a…` and 1 row versus `3fd99443…`; none of those rows are among S59–S64 searched hosts.
+
+**Not changed:** the search, thresholds, seeds, cuts, and the S69 gate. The pscomppars table remains the registered `6dc56f25…` file.
+
+## Ruling 2026-11-20: common-period population
+
+**Ruling:** Common-period flagging for `S*_cal` uses v1.1's `flag_common_periods_by_task` over all `status == ok` null-mode rows (invert and scramble) per (sector, task) in S59–S64, after the EB drop, including the stored periods of holdout null rows, used only for neighbour counts. Holdout rows are never vetted or scored. Summaries do not aggregate holdout or real rows. The driver mode is `v11_task_with_holdout`. `--gate` and `--compute` require both `--common-period-mode` and `--ruled` to equal that value. The alternatives `v11_task_no_holdout` and `null_sample` must be passed explicitly; they are not defaults.
+
+**Decision:** Ruled by the room and approved by the project owner on 2026-11-20, before any `S*_cal` compute.
+
+**Not changed:** the search, thresholds, seeds, cuts, and the S69 gate.
