@@ -1,8 +1,8 @@
 {
  "schema_version": "astrolab.v12_status.v1",
  "process_only": true,
- "generated_at": "2026-11-19T17:16:45-08:00",
- "generated_at_pt": "2026-11-19 5:16 PM PT",
+ "generated_at": "2026-11-19T20:13:06-08:00",
+ "generated_at_pt": "2026-11-19 8:13 PM PT",
  "campaign": "v1.2",
  "phase": "registered_search",
  "previous": {
@@ -16,7 +16,7 @@
   "frozen_before_search_rows": true
  },
  "search": {
-  "state": "running",
+  "state": "done",
   "started_at": "2026-11-19T14:41:49-08:00",
   "contributing_hosts": [
    "h2"
@@ -24,16 +24,16 @@
   "registered_hosts": [
    "h2"
   ],
-  "mode_rows_done": 132528,
+  "mode_rows_done": 235171,
   "mode_rows_total": 235171,
-  "mode_rows_ok": 132525,
+  "mode_rows_ok": 235168,
   "mode_rows_error": 3,
-  "star_jobs_done": 45205,
+  "star_jobs_done": 83130,
   "star_jobs_total": 83130,
   "by_mode": {
-   "real": 45205,
-   "invert": 45205,
-   "scramble": 42118
+   "real": 72589,
+   "invert": 83130,
+   "scramble": 79452
   },
   "by_sector": {
    "59": {
@@ -64,43 +64,46 @@
     "rows_total": 36072
    },
    "62": {
-    "rows_done": 17199,
+    "rows_done": 33154,
     "by_mode": {
-     "real": 5899,
-     "invert": 5899,
-     "scramble": 5401
+     "real": 11229,
+     "invert": 11229,
+     "scramble": 10696
     },
     "rows_total": 33154
    },
    "63": {
-    "rows_done": 1136,
+    "rows_done": 32587,
     "by_mode": {
-     "real": 546,
-     "invert": 546,
-     "scramble": 44
+     "real": 11053,
+     "invert": 11053,
+     "scramble": 10481
     },
     "rows_total": 32587
    },
    "64": {
-    "rows_done": 1153,
+    "rows_done": 35728,
     "by_mode": {
-     "real": 554,
-     "invert": 554,
-     "scramble": 45
+     "real": 12101,
+     "invert": 12101,
+     "scramble": 11526
     },
     "rows_total": 35728
    },
    "69": {
-    "rows_done": 0,
-    "by_mode": {},
+    "rows_done": 20662,
+    "by_mode": {
+     "invert": 10541,
+     "scramble": 10121
+    },
     "rows_total": 20662
    }
   },
-  "rate_mode_rows_per_hour": 51321.2,
-  "eta_at": "2026-11-19T19:16:45-08:00",
-  "eta_pt": "2026-11-19 7:16 PM PT",
+  "rate_mode_rows_per_hour": 42591.4,
+  "eta_at": "2026-11-19T20:13:06-08:00",
+  "eta_pt": "2026-11-19 8:13 PM PT",
   "scope": "S59–64 real, flipped, and scrambled nulls; S69 nulls only. S69 real waits for the frozen eligibility list.",
-  "n_parts": 660,
+  "n_parts": 1172,
   "n_parts_unreadable": 0
  },
  "checks": [
