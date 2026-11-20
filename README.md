@@ -33,3 +33,6 @@ bash setup.sh
 source venv/bin/activate
 jupyter lab
 ```
+
+## 📄 License
+This project is licensed under the [MIT License](LICENSE).
