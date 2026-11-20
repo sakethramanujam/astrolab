@@ -20,3 +20,7 @@ Status: AMENDMENT to `registration_v1.2.md` (tag `v1.2-registered`, ad555e1). Da
 - period, P_grid, duration and every flag and vet column: identical.
 - S, SDE and other floats: differences at about 1e-11 only. S>=6: 78 stars on both. |rho_z|>=4: 5 stars on both.
 - **Known host difference: rho_z** differs by up to 0.34 on 109 of 201 stars, with 2 sign flips. rho_z is therefore not bit-reproducible across hosts. Because every registered row comes from h2, this does not affect within-run comparisons. It is logged as a v1.3 issue.
+
+## Addendum A, 2026-11-19 (written while the h2 run is in progress, before any cut is scored)
+1. **Order of the remaining registered steps** (restating Sections 0A.2.1 item 1 and the run order, nothing new): (a) finish this h2 run; (b) compute $S^*_{\text{cal}}$ and $n_{\text{real,eligible}}$; (c) generate the injection padding per Section 0A.2.1 (seed `20261118`, hard cap 2000 draws) on h2; (d) only then score and lock the cuts (Step 2); (e) only after the lock, compute and freeze $S^*_{\text{gate}}$ on S69 (Step 4). No cut retention is scored and no S* is locked before the padding exists.
+2. **Worker count and priority.** The h2 run started at 9 workers with nice 19 and was restarted at 2:46pm PT with 18 workers at normal priority (no nice, no taskpolicy). The 963 jobs already written were kept and skipped. Math libraries stay single-threaded and every job is seeded, so this changes only speed, not results. The manifest hash is unchanged (`9c5a394e…`).
