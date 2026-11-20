@@ -74,7 +74,8 @@ function renderV12(d) {
   const rate = s.rate_mode_rows_per_hour != null ? `${fmt(s.rate_mode_rows_per_hour, 0)} mode-rows/h` : 'rate –';
   const thermal = th.pause_events
     ? `${fmt(th.pause_events)} heat-guard pauses (${th.paused_hours != null ? th.paused_hours + ' h paused' : 'duration unknown'}). Pauses can push the ETA later.`
-    : 'No heat-guard pauses recorded yet.';
+    : '';
+  const hostNotes = (d.notes || []).slice(1).join(' ');
   const jobs = (s.star_jobs_done != null && s.star_jobs_total)
     ? `${fmt(s.star_jobs_done)} / ${fmt(s.star_jobs_total)} star-jobs`
     : '';
@@ -89,7 +90,7 @@ function renderV12(d) {
       <div class="card stat"><div class="k">Rate / ETA</div><div class="v ok" style="font-size:22px;line-height:1.2">${s.eta_pt || '–'}</div><div class="s">${rate} · wall clock, pauses included</div></div>
     </div>
     <div class="v12-barwrap"><div class="v12-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.max(0, Math.min(100, pct)).toFixed(1)}" aria-label="Mode-rows complete"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i><span>${fmt(s.mode_rows_done || 0)} / ${fmt(s.mode_rows_total || 0)} mode-rows (${pctLabel})</span></div></div>
-    <p class="kbd" style="margin-top:0">${thermal} Registered rows come from ${hosts} only. A Mac check did not match bit-for-bit, so it is not in this run.</p>
+    <p class="kbd" style="margin-top:0">${thermal ? thermal + ' ' : ''}Registered rows come from ${hosts} only.${hostNotes ? ' ' + hostNotes : ''}</p>
     <div class="vscroll" style="max-height:220px"><table class="mini"><caption class="sr">Mode-rows by sector</caption><thead><tr><th>Sector</th><th>Rows</th><th>Modes</th></tr></thead><tbody>${sectorRows}</tbody></table></div>
     <h3 style="margin-top:16px">Next steps</h3>
     <ol class="v12-steps">${steps}</ol>
