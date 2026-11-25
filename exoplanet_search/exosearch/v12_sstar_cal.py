@@ -866,6 +866,7 @@ def brightness_cut(
     jobs: Sequence[Mapping[str, Any]],
     median_pdcsap_path: Union[str, Path],
     sectors: Sequence[int] = CALIBRATION_SECTORS,
+    identity: Optional[pd.DataFrame] = None,
 ) -> Tuple[Set[int], Dict[str, Any]]:
     """Amendment 2026-11-24, star-level brightness cut (registration_v1.2.md; ea3fa7c).
 
@@ -876,7 +877,10 @@ def brightness_cut(
 
     Medians come from the pinned table ``results/sstar_cal_v1.2/median_pdcsap_s59-64.csv`` (built by
     ``results/sstar_cal_v1.2/make_median_pdcsap.py``: median of PDCSAP_FLUX over QUALITY==0, finite cadences
-    of each job's SPOC 2-min file). Returns (removed TICs, counts-only report).
+    of each job's SPOC 2-min file). Undefined medians are split by the table's recorded cause
+    (``lc_not_found``, ``no_good_cadences``, ``read_error``; ``non_finite_median`` if a row has no cause but no
+    finite median). If ``identity`` is given, ``lc_not_found`` star-sectors that have search rows are counted.
+    Returns (removed TICs, counts-only report).
     """
     path = Path(median_pdcsap_path)
     if not path.is_file():
@@ -886,14 +890,20 @@ def brightness_cut(
         raise SystemExit(f"median PDCSAP table sha256 mismatch: expected {PINNED_MEDIAN_PDCSAP_SHA256}, got {got}")
     med = pd.read_csv(path, dtype={"error": str, "fname": str})
     med_map: Dict[Tuple[int, int], float] = {}
+    cause_map: Dict[Tuple[int, int], str] = {}
     for s_val, t_val, m_val, e_val in zip(med["sector"], med["tic"], med["median_pdcsap"], med["error"]):
-        ok = (not isinstance(e_val, str) or not e_val) and _finite(m_val)
-        med_map[(int(s_val), int(t_val))] = float(m_val) if ok else float("nan")
+        pair = (int(s_val), int(t_val))
+        err = e_val.split(":", 1)[0] if isinstance(e_val, str) and e_val else ""
+        ok = not err and _finite(m_val)
+        med_map[pair] = float(m_val) if ok else float("nan")
+        if not ok:
+            cause_map[pair] = err or "non_finite_median"
 
     sec_set = {int(s) for s in sectors}
     reasons: Dict[int, Set[str]] = {}
     star_secs: Dict[int, Set[int]] = {}
     n_missing = 0
+    undef_pairs: Dict[str, Set[Tuple[int, int]]] = {}
     for j in jobs:
         s = int(j["sector"])
         if s not in sec_set:
@@ -914,6 +924,7 @@ def brightness_cut(
         m = med_map[(s, tic)]
         if not math.isfinite(m):
             r.add("flux_undefined")
+            undef_pairs.setdefault(cause_map[(s, tic)], set()).add((s, tic))
         elif m <= 0:
             r.add("flux_le0")
     if n_missing:
@@ -927,6 +938,17 @@ def brightness_cut(
             by_any[x] = by_any.get(x, 0) + 1
         c = "+".join(sorted(reasons[t]))
         by_combo[c] = by_combo.get(c, 0) + 1
+    undefined_by_cause: Dict[str, Dict[str, int]] = {}
+    for cause in sorted(set(undef_pairs) | {"lc_not_found", "no_good_cadences", "read_error"}):
+        pairs = undef_pairs.get(cause, set())
+        undefined_by_cause[cause] = {"stars": len({t for _, t in pairs}), "star_sectors": len(pairs)}
+    if identity is not None:
+        searched = set(zip(identity["sector"].astype(int), identity["tic"].astype(int)))
+        lnf = undef_pairs.get("lc_not_found", set()) & searched
+        undefined_by_cause["lc_not_found_with_search_rows"] = {
+            "stars": len({t for _, t in lnf}),
+            "star_sectors": len(lnf),
+        }
     report = {
         "rule": "amendment 2026-11-24: tmag <= 16.0, radius finite > 0, median PDCSAP > 0 in every S59-S64 sector",
         "median_pdcsap_sha256": got,
@@ -935,6 +957,7 @@ def brightness_cut(
         "n_kept": len(reasons) - len(removed),
         "by_reason_any": dict(sorted(by_any.items())),
         "by_reason_exact": dict(sorted(by_combo.items())),
+        "flux_undefined_by_cause": undefined_by_cause,
         "per_sector_stars": {
             str(s): {
                 "stars": sum(1 for v in star_secs.values() if s in v),
@@ -2466,7 +2489,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     base_report["status_errors"] = status_err_report
 
     # Amendment 2026-11-24: star-level cut before ranking; N_s, null sample and gate keys use the cut population.
-    removed_tics, bc_report = brightness_cut(jobs, args.median_pdcsap, CALIBRATION_SECTORS)
+    removed_tics, bc_report = brightness_cut(jobs, args.median_pdcsap, CALIBRATION_SECTORS, identity=identity)
     identity, bc_rows = apply_brightness_cut(identity, removed_tics)
     base_report["brightness_cut"] = {**bc_report, **bc_rows}
 
