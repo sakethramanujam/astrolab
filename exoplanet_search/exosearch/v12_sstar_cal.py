@@ -149,6 +149,10 @@ PINNED_QUALITY_SHA256: Dict[int, str] = {  # review: S5
     63: "1250055fad23b47f93d6112d5cdf41be6cdb67551321e9e88672c1ff0ae708e1",
     64: "92ef33f2204b03199c5b856c9278695efa8538487dcf1615f7c1d4745dfe4673",
 }
+# Amendment 2026-11-24 (star-level brightness cut, registration_v1.2.md; committed as ea3fa7c).
+BRIGHTNESS_TMAG_MAX = 16.0
+MEDIAN_PDCSAP_RELPATH = Path("results") / "sstar_cal_v1.2" / "median_pdcsap_s59-64.csv"
+PINNED_MEDIAN_PDCSAP_SHA256 = "a0729922b2e48364eccc41d40755af30a99f96089d3a8ed0da949d143dbc3561"
 VETTED_CSV_COLS: Tuple[str, ...] = (
     "key",
     "sector",
@@ -849,6 +853,112 @@ def check_three_way_match(
     if total_violations > 0:
         raise ThreeWayMismatch({"three_way_match": tw_report, "status_errors": err_report})
     return tw_report, err_report
+
+
+def _finite(val: Any) -> bool:
+    try:
+        return val is not None and math.isfinite(float(val))
+    except (TypeError, ValueError):
+        return False
+
+
+def brightness_cut(
+    jobs: Sequence[Mapping[str, Any]],
+    median_pdcsap_path: Union[str, Path],
+    sectors: Sequence[int] = CALIBRATION_SECTORS,
+) -> Tuple[Set[int], Dict[str, Any]]:
+    """Amendment 2026-11-24, star-level brightness cut (registration_v1.2.md; ea3fa7c).
+
+    A star (TIC) stays only if all hold, using its S59-S64 manifest jobs: manifest ``tmag`` finite and
+    <= 16.0; manifest ``radius`` finite and > 0; and median PDCSAP_FLUX > 0 in every S59-S64 sector it has
+    a job in. A sector whose median is undefined (no QUALITY==0 finite cadence, missing or unreadable light
+    curve) is not above zero, so the star is dropped. The cut never looks at S, a transit signal or vetting.
+
+    Medians come from the pinned table ``results/sstar_cal_v1.2/median_pdcsap_s59-64.csv`` (built by
+    ``results/sstar_cal_v1.2/make_median_pdcsap.py``: median of PDCSAP_FLUX over QUALITY==0, finite cadences
+    of each job's SPOC 2-min file). Returns (removed TICs, counts-only report).
+    """
+    path = Path(median_pdcsap_path)
+    if not path.is_file():
+        raise MissingInput(f"missing median PDCSAP table: {path.name}")
+    got = _sha256_bytes(path.read_bytes())
+    if got != PINNED_MEDIAN_PDCSAP_SHA256:
+        raise SystemExit(f"median PDCSAP table sha256 mismatch: expected {PINNED_MEDIAN_PDCSAP_SHA256}, got {got}")
+    med = pd.read_csv(path, dtype={"error": str, "fname": str})
+    med_map: Dict[Tuple[int, int], float] = {}
+    for s_val, t_val, m_val, e_val in zip(med["sector"], med["tic"], med["median_pdcsap"], med["error"]):
+        ok = (not isinstance(e_val, str) or not e_val) and _finite(m_val)
+        med_map[(int(s_val), int(t_val))] = float(m_val) if ok else float("nan")
+
+    sec_set = {int(s) for s in sectors}
+    reasons: Dict[int, Set[str]] = {}
+    star_secs: Dict[int, Set[int]] = {}
+    n_missing = 0
+    for j in jobs:
+        s = int(j["sector"])
+        if s not in sec_set:
+            continue
+        tic = int(j["tic"])
+        star_secs.setdefault(tic, set()).add(s)
+        r = reasons.setdefault(tic, set())
+        tmag, radius = j.get("tmag"), j.get("radius")
+        if not _finite(tmag):
+            r.add("no_tmag")
+        elif float(tmag) > BRIGHTNESS_TMAG_MAX:
+            r.add("tmag_gt_16")
+        if not (_finite(radius) and float(radius) > 0):
+            r.add("no_valid_radius")
+        if (s, tic) not in med_map:
+            n_missing += 1
+            continue
+        m = med_map[(s, tic)]
+        if not math.isfinite(m):
+            r.add("flux_undefined")
+        elif m <= 0:
+            r.add("flux_le0")
+    if n_missing:
+        raise MissingInput(f"median PDCSAP table lacks {n_missing} S59-S64 manifest job(s)")
+
+    removed = {t for t, r in reasons.items() if r}
+    by_any: Dict[str, int] = {}
+    by_combo: Dict[str, int] = {}
+    for t in removed:
+        for x in reasons[t]:
+            by_any[x] = by_any.get(x, 0) + 1
+        c = "+".join(sorted(reasons[t]))
+        by_combo[c] = by_combo.get(c, 0) + 1
+    report = {
+        "rule": "amendment 2026-11-24: tmag <= 16.0, radius finite > 0, median PDCSAP > 0 in every S59-S64 sector",
+        "median_pdcsap_sha256": got,
+        "n_stars": len(reasons),
+        "n_removed": len(removed),
+        "n_kept": len(reasons) - len(removed),
+        "by_reason_any": dict(sorted(by_any.items())),
+        "by_reason_exact": dict(sorted(by_combo.items())),
+        "per_sector_stars": {
+            str(s): {
+                "stars": sum(1 for v in star_secs.values() if s in v),
+                "removed": sum(1 for t in removed if s in star_secs[t]),
+            }
+            for s in sorted(sec_set)
+        },
+    }
+    return removed, report
+
+
+def apply_brightness_cut(identity: pd.DataFrame, removed: Set[int]) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """Drop every row (real, invert, scramble; holdout included) of removed stars; counts per mode and sector."""
+    keep = ~identity["tic"].astype(int).isin(removed)
+    cut = identity.loc[keep].reset_index(drop=True)
+    gone = identity.loc[~keep]
+    rows: Dict[str, Dict[str, int]] = {}
+    for mode in ALL_SEARCH_MODES:
+        sub = gone[gone["mode"].astype(str) == mode]
+        per = {str(int(s)): int((sub["sector"].astype(int) == int(s)).sum()) for s in CALIBRATION_SECTORS}
+        per["total"] = int(len(sub))
+        rows[mode] = per
+    return cut, {"identity_rows_before": int(len(identity)), "identity_rows_removed": int(len(gone)),
+                 "rows_removed_by_mode_sector": rows}
 
 
 def quality_drop(
@@ -2217,6 +2327,12 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         type=Path,
         help="Pinned sha256 manifest file for star-quality tables and frozen inputs",
     )
+    ap.add_argument(
+        "--median-pdcsap",
+        required=True,
+        type=Path,
+        help=f"Pinned per-job median PDCSAP table for the 2026-11-24 brightness cut ({MEDIAN_PDCSAP_RELPATH})",
+    )
     ap.add_argument("--workers", type=int, default=16, help="Worker processes for --gate (default: 16)")
     ap.add_argument("--gate-top", type=int, default=300, help="Top-K null rows per mode in --gate (default: 300)")
     ap.add_argument(
@@ -2349,6 +2465,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     base_report["three_way_match"] = tw_report
     base_report["status_errors"] = status_err_report
 
+    # Amendment 2026-11-24: star-level cut before ranking; N_s, null sample and gate keys use the cut population.
+    removed_tics, bc_report = brightness_cut(jobs, args.median_pdcsap, CALIBRATION_SECTORS)
+    identity, bc_rows = apply_brightness_cut(identity, removed_tics)
+    base_report["brightness_cut"] = {**bc_report, **bc_rows}
+
     q = quality_drop(args.quality_dir, verified_quality_shas, CALIBRATION_SECTORS)
     alpha = alpha_n(identity, q)
     keys_by_mode, _, null_rep = null_sample(identity, q, ex_res["effective"], alpha)
@@ -2371,8 +2492,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "top_invert": min(int(args.gate_top), n_inv),
             "top_scramble": min(int(args.gate_top), n_scr),
             "random_null": min(GATE_RANDOM_N, n_union),
-            "known_planet_real": None,
-            "note": "known_planet_real is computed only in --gate",
+            "known_planet_real": len(select_known_planet_real_keys(identity, sectors=CALIBRATION_SECTORS)),
+            "note": "known_planet_real: identity and catalogue only (no vetting); same selection as --gate",
         }
         payload = _write_json(out_p / "report_dry_run.json", base_report)
         print(payload, end="")
