@@ -647,3 +647,19 @@ A few non-disposition columns differ among the surviving copies, including ephem
 **Decision:** Ruled by the room and approved by the project owner on 2026-11-20, before any `S*_cal` compute.
 
 **Not changed:** the search, thresholds, seeds, cuts, and the S69 gate.
+
+## Amendment 2026-11-24: star-level brightness cut
+
+*Rule as ruled by Scientist in the room on 2026-11-24 (two messages, the second adding the radius clause), under the project owner's approval of the same day. Committed before any rescoring.*
+
+1. A star stays in the search only if its TIC magnitude is 16.0 or brighter (Tmag ≤ 16.0) and its median PDCSAP flux is above zero in every sector used. A star with no Tmag, or with no valid stellar radius (run-manifest `radius` missing, non-finite or not positive), is dropped.
+2. The cut is made on the star, before ranking. It applies to real, invert and scramble rows alike, so the nulls lose exactly the stars the real search loses. It never looks at a transit signal, S*, or any vetting result.
+3. Why 16.0: TESS collects about 15,000 e/s at Tmag 10, so Tmag 16 is about 60 e/s. Below that, the 6 e/s median rows here are dominated by background and systematics, and dividing by that flux makes fake dips. The threshold was picked from that physics, not from S*. For transparency: the flux percentiles below were already posted before it was set.
+4. Before anyone computes S*, report how many stars, real and null rows, and detectable known planets the cut removes. If it drops any gate known planet, list it and keep the threshold anyway. It does not get retuned.
+5. Then rerun the S*_cal gate and compute on the committed code. If the gate still fails, that result goes on record as failed_5.
+
+**Evidence that prompted it (read-only, 2026-11-24):** The 2026-11-20 compute stopped with `gate_depth_exceeded` (0 of the top 300 invert rows passed). Of those 300, 273 had no manifest `radius` (none had a `rad_tic` fallback; 268 also had no Teff). Their median PDCSAP flux was 6 e/s (p10 0.4, p90 25; 12 at or below zero) with robust scatter 2.2 times the median. The other 27 had median flux about 9,900 e/s and scatter about 1% of flux; 6 of them were below 10 e/s. Across the manifest, 17,276 of 83,130 jobs (21%) have no valid radius. The frozen vetter already fails `missing_rstar` rows unconditionally (`vet_final.MISSING_RSTAR`).
+
+**Consequences:** The budget `N_s` (S*_cal rulings Section 1) and the null sample (Section 4) are recomputed on the cut population; old and new `N_s` are reported with the removal counts. The reproduction gate is rerun on the cut population.
+
+**Not changed:** the search itself, vetter rules and thresholds, seeds, the budget formula, and the S69 gate.
