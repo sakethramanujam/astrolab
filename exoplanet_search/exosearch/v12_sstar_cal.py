@@ -2285,6 +2285,8 @@ def run_compute(
         "tie": s_inv == s_scr,
         "s_star_invert": s_inv,
         "s_star_scramble": s_scr,
+        "s_star_final": headline_s_star,
+        "s_star_set_by": headline_mode,
     }
     lock_res = v12_settings.lock_sstar_v12(  # review: B5
         rows=vetted_dfs_by_mode[headline_mode],
