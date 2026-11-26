@@ -13,7 +13,7 @@ Exit codes:  # review: S7
   0: ok
   2: population / three-way mismatch
   3: gate fail
-  4: gate depth exceeded
+  4: gate depth exceeded or sstar_grid_overflow
   5: needs light curve
   6: light-curve rebuild error
   7: secondary-scan consistency failure
@@ -153,6 +153,10 @@ PINNED_QUALITY_SHA256: Dict[int, str] = {  # review: S5
 BRIGHTNESS_TMAG_MAX = 16.0
 MEDIAN_PDCSAP_RELPATH = Path("results") / "sstar_cal_v1.2" / "median_pdcsap_s59-64.csv"
 PINNED_MEDIAN_PDCSAP_SHA256 = "a0729922b2e48364eccc41d40755af30a99f96089d3a8ed0da949d143dbc3561"
+SSTAR_GRID_MIN = 6.0
+SSTAR_GRID_STEP = 0.005
+SSTAR_GRID_DECIMALS = 3
+SSTAR_GRID_MAX_SOURCE = "max_null_S_pre_vet_both_modes"
 VETTED_CSV_COLS: Tuple[str, ...] = (
     "key",
     "sector",
@@ -2006,11 +2010,103 @@ def _vet_mode_top_down(
     }
 
 
+
+def _ceil_to_grid_step(s: float, step: float = SSTAR_GRID_STEP, decimals: int = SSTAR_GRID_DECIMALS) -> float:
+    """Round *s* up onto the registered 0.005 grid; a value already on a step is unchanged."""
+    if not math.isfinite(s):
+        raise ValueError(f"non-finite S {s!r} for grid ceiling")
+    n = math.ceil(s / step - 1e-12)
+    return round(n * step, decimals)
+
+
+def _grid_max_from_null_s(s_values: Any) -> Dict[str, Any]:
+    """Amendment 2026-11-26: grid_max from all invert+scramble null-sample S, before vetting."""
+    s_arr = np.asarray(s_values, dtype=float).ravel()
+    s_arr = s_arr[np.isfinite(s_arr)]
+    if s_arr.size == 0:
+        raise MissingInput("no finite null-sample S values to set grid_max")
+    max_s = float(np.max(s_arr))
+    grid_max = max(_ceil_to_grid_step(max_s), SSTAR_GRID_MIN)
+    grid = sstar_grid.s_grid(SSTAR_GRID_MIN, grid_max, SSTAR_GRID_STEP)
+    return {
+        "grid_min": SSTAR_GRID_MIN,
+        "grid_step": SSTAR_GRID_STEP,
+        "grid_max": float(grid_max),
+        "grid_max_source": SSTAR_GRID_MAX_SOURCE,
+        "max_null_S_pre_vet": max_s,
+        "n_grid_points": int(len(grid)),
+        "n_null_S_finite": int(s_arr.size),
+    }
+
+
+def _calibrate_sstar_with_grid(
+    S_vetted: Any,
+    n_null: int,
+    p: float,
+    u: Any,
+    grid_max: float,
+    rows: Any = None,
+    cfg: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Same stamps as calibrate_sstar_v12, but pass grid_max into select_sstar (vetter untouched)."""
+    cfg_use: Mapping[str, Any] = cfg if cfg is not None else v12_settings.require_v12_settings()
+    digest, cap = v12_settings.stamp_values(cfg_use)
+    if rows is not None:
+        v12_settings.require_v12_stamps(rows, expected_hash=digest, cap_rearth=cap)
+    selected = sstar_grid.select_sstar(
+        S_vetted, n_null, p, u, cfg=cfg_use, sstar={"grid_max": float(grid_max)}
+    )
+    return v12_settings.stamp_v12(selected, digest, cap)
+
+
+def _merge_run_provenance(out_dir: Path, fields: Mapping[str, Any]) -> None:
+    """Merge fields into out_dir/run_provenance.json, creating the file if needed."""
+    path = Path(out_dir) / "run_provenance.json"
+    cur: Dict[str, Any]
+    if path.is_file():
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            cur = loaded if isinstance(loaded, dict) else {}
+        except json.JSONDecodeError:
+            cur = {}
+    else:
+        cur = {}
+    cur.update(dict(fields))
+    _write_json(path, cur)
+
+
+def _sstar_grid_overflow_report(
+    mode: str,
+    s_pass: Sequence[float],
+    vet_res: Mapping[str, Any],
+    grid_info: Mapping[str, Any],
+    exc: BaseException,
+) -> Dict[str, Any]:
+    return {
+        "error": "sstar_grid_overflow",
+        "mode": mode,
+        "s_vetted": [float(x) for x in s_pass],
+        "n_vetted_pass": int(len(s_pass)),
+        "last_vetted_S": vet_res.get("last_vetted_S"),
+        "last_vetted_rank": vet_res.get("last_vetted_rank"),
+        "need": None,
+        "grid_min": grid_info["grid_min"],
+        "grid_step": grid_info["grid_step"],
+        "grid_max": grid_info["grid_max"],
+        "grid_max_source": grid_info["grid_max_source"],
+        "max_null_S_pre_vet": grid_info["max_null_S_pre_vet"],
+        "n_grid_points": grid_info["n_grid_points"],
+        "exception_type": type(exc).__name__,
+        "exception": str(exc),
+    }
+
+
 def _per_sector_sstar_report(
     mode_df: pd.DataFrame,
     vet_res: Mapping[str, Any],
     alpha: Mapping[int, Mapping[str, Any]],
     cfg: Mapping[str, Any],
+    grid_max: float,
     sectors: Sequence[int] = CALIBRATION_SECTORS,
 ) -> Dict[str, Any]:
     """Per-sector report-only S* (with determined rule) and 2000-resample 68% bootstrap interval."""
@@ -2040,7 +2136,7 @@ def _per_sector_sstar_report(
         pt_error: Optional[str] = None
         if determined:
             try:
-                pt = v12_settings.calibrate_sstar_v12(s_pass, n_null=n_ms, p=p_s, u=None)
+                pt = _calibrate_sstar_with_grid(s_pass, n_null=n_ms, p=p_s, u=None, grid_max=grid_max, cfg=cfg)
             except sstar_grid.SStarGridError as exc:
                 pt_error = str(exc)
 
@@ -2056,7 +2152,7 @@ def _per_sector_sstar_report(
                     n_undeterminable += 1
                     continue
                 try:
-                    res = sstar_grid.select_sstar(s_arr[idx][bm], n_ms, p_s, None, cfg=cfg)
+                    res = sstar_grid.select_sstar(s_arr[idx][bm], n_ms, p_s, None, cfg=cfg, sstar={"grid_max": float(grid_max)})
                     boots.append(float(res["s_star"]))
                 except sstar_grid.SStarGridError:
                     n_grid_fail += 1
@@ -2178,6 +2274,8 @@ def run_compute(
         sectors=CALIBRATION_SECTORS,
     )
 
+    grid_info = _grid_max_from_null_s(sci["S"].to_numpy(dtype=float))  # amendment 2026-11-26, before vetting
+
     per_mode_report: Dict[str, Any] = {}
     per_sector_table: Dict[str, Any] = {}
     sstar_by_mode: Dict[str, Dict[str, Any]] = {}
@@ -2241,26 +2339,57 @@ def run_compute(
         vetted_df = vet_res["vetted_df"]
         vetted_dfs_by_mode[mode] = vetted_df
         s_pass = [float(r["S"]) for r in vet_res["records"] if r["passed"]]
-        sstar_m = v12_settings.calibrate_sstar_v12(  # review: B5
-            S_vetted=s_pass,
-            n_null=int(m_info["n_null"]),
-            p=float(m_info["p"]),
-            u=None,
-            rows=vetted_df,
-        )
+        try:
+            sstar_m = _calibrate_sstar_with_grid(  # review: B5; amendment 2026-11-26 grid_max
+                S_vetted=s_pass,
+                n_null=int(m_info["n_null"]),
+                p=float(m_info["p"]),
+                u=None,
+                grid_max=float(grid_info["grid_max"]),
+                rows=vetted_df,
+                cfg=cfg,
+            )
+        except sstar_grid.SStarGridError as exc:
+            fail = _sstar_grid_overflow_report(mode, s_pass, vet_res, grid_info, exc)
+            fail["need"] = int(m_info["need"])
+            err_rep = {
+                **base_report,
+                "common_period": common_period_report,
+                "sstar_grid": grid_info,
+                "status": "sstar_grid_overflow",
+                "failure": fail,
+            }
+            payload = _write_json(out_p / "report_compute.json", err_rep)
+            _merge_run_provenance(
+                out_p,
+                {
+                    "status": "sstar_grid_overflow",
+                    "grid_max": grid_info["grid_max"],
+                    "grid_max_source": grid_info["grid_max_source"],
+                    "max_null_S_pre_vet": grid_info["max_null_S_pre_vet"],
+                    "n_grid_points": grid_info["n_grid_points"],
+                    "sstar_grid_overflow": fail,
+                },
+            )
+            print(payload, end="")
+            return 4
         sstar_by_mode[mode] = sstar_m
 
         try:
-            unvetted_m: Dict[str, Any] = v12_settings.calibrate_sstar_v12(
+            unvetted_m: Dict[str, Any] = _calibrate_sstar_with_grid(
                 S_vetted=mode_df["S"].to_numpy(dtype=float),
                 n_null=int(m_info["n_null"]),
                 p=float(m_info["p"]),
                 u=None,
+                grid_max=float(grid_info["grid_max"]),
+                cfg=cfg,
             )
         except sstar_grid.SStarGridError as exc:
             unvetted_m = {"error": str(exc)}
 
-        per_sector_table[mode] = _per_sector_sstar_report(mode_df, vet_res, alpha, cfg, CALIBRATION_SECTORS)
+        per_sector_table[mode] = _per_sector_sstar_report(
+            mode_df, vet_res, alpha, cfg, float(grid_info["grid_max"]), CALIBRATION_SECTORS
+        )
         per_mode_report[mode] = {
             "n_null": int(m_info["n_null"]),
             "B": float(m_info["B"]),
@@ -2329,6 +2458,10 @@ def run_compute(
         "common_period_mode": str(args.common_period_mode),
         "ruled_common_period_mode": args.ruled,
         "created_utc": datetime.now(timezone.utc).isoformat(),
+        "grid_max": grid_info["grid_max"],
+        "grid_max_source": grid_info["grid_max_source"],
+        "max_null_S_pre_vet": grid_info["max_null_S_pre_vet"],
+        "n_grid_points": grid_info["n_grid_points"],
     }
 
     result = {
@@ -2338,6 +2471,7 @@ def run_compute(
         "common_period": common_period_report,
         "by_mode": per_mode_report,
         "headline": headline,
+        "sstar_grid": grid_info,
         "lock": lock_res,
         "per_sector_report_only": per_sector_table,
         "provenance": provenance,
@@ -2350,6 +2484,15 @@ def run_compute(
     digest = _sha256_bytes(out_json.read_bytes())
     (out_p / "sstar_cal.json.sha256").write_text(f"{digest}  {out_json.name}\n", encoding="utf-8")
     _write_json(out_p / "report_compute.json", result)
+    _merge_run_provenance(
+        out_p,
+        {
+            "grid_max": grid_info["grid_max"],
+            "grid_max_source": grid_info["grid_max_source"],
+            "max_null_S_pre_vet": grid_info["max_null_S_pre_vet"],
+            "n_grid_points": grid_info["n_grid_points"],
+        },
+    )
     print(payload, end="")
     return 0
 
