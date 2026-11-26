@@ -162,6 +162,7 @@ VETTED_CSV_COLS: Tuple[str, ...] = (
     "all_failing",
     "status",
     "too_deep_v2",
+    "odd_even_too_few_flag",
 )
 _WORKER_FINISH: Optional[Any] = None
 
@@ -1816,6 +1817,21 @@ def _stamp_and_write_vetted_csv(
     return stamped
 
 
+def _odd_even_too_few_flag_only(verdict: Any) -> Tuple[bool, str, List[str], bool]:
+    """Amendment 2026-11-25 (implementation deviation correction, odd_even_too_few; registration_v1.2.md).
+
+    Registration lines 84 and 341 (Section 5.3) say that when fewer than 2 odd or 2 even transits survive the
+    odd-even mask, the cut does not hard-reject and the row is only flagged ``odd_even_too_few``. The pinned
+    vetter at bc05650 (vet11.masked_odd_even, vet_final.final_verdict_row, vet_amend.amended) puts that flag
+    in the rejection set. The registered text governs: the flag is removed from the rejection list here, at
+    the walk's single verdict site, and recorded separately. Every other rule, and the pinned vetter code,
+    is unchanged. Returns (passed, first_failing_rule, all_failing, odd_even_too_few_flag).
+    """
+    failing = [r for r in verdict.all_failing if r != vet_final.ODD_EVEN_TOO_FEW]
+    flagged = len(failing) != len(verdict.all_failing)
+    return (not failing), (failing[0] if failing else ""), failing, flagged
+
+
 def _vet_mode_top_down(
     mode: str,
     mode_df: pd.DataFrame,
@@ -1958,17 +1974,18 @@ def _vet_mode_top_down(
 
         td_flag = bool(vet.too_deep(row.get("depth"), cfg)["flagged"])
         s_val = float(row["S"])
-        passed = bool(verdict.passed)
+        passed, first_rule, failing, oe_too_few_flag = _odd_even_too_few_flag_only(verdict)  # amendment 2026-11-25
         records.append(
             {
                 "key": key,
                 "sector": sec,
                 "S": s_val,
                 "passed": passed,
-                "first_failing_rule": verdict.first_failing_rule or "",
-                "all_failing": ",".join(verdict.all_failing),
+                "first_failing_rule": first_rule,
+                "all_failing": ",".join(failing),
                 "status": str(verdict.status),
                 "too_deep_v2": td_flag,
+                "odd_even_too_few_flag": oe_too_few_flag,
             }
         )
         n_vetted += 1

@@ -663,3 +663,16 @@ A few non-disposition columns differ among the surviving copies, including ephem
 **Consequences:** The budget `N_s` (S*_cal rulings Section 1) and the null sample (Section 4) are recomputed on the cut population; old and new `N_s` are reported with the removal counts. The reproduction gate is rerun on the cut population.
 
 **Not changed:** the search itself, vetter rules and thresholds, seeds, the budget formula, and the S69 gate.
+
+---
+## Amendment 2026-11-25: implementation deviation correction, odd_even_too_few
+
+*Approved by the project owner in the room on 2026-11-25 ("go for it"), with Scientist's ordering that this correction is committed before the scramble seam check is run. Committed before either null is rerun.*
+
+1. **The deviation.** Item 4 of the v1.2 changes (line 84 above) and Section 5.3 (line 341 above) say that when fewer than 2 odd or fewer than 2 even transits survive the odd-even mask, odd-even does not hard-reject the candidate and the row is only flagged `odd_even_too_few`. The pinned vetter at `bc05650` does not do that. `exosearch/v11/vet11.py` lines 484–488 set `passed = False` for this case, and the final-verdict path (`exosearch/vet_final.py` `final_verdict_row`, which adds the recomputed flag to the row's flags, then `exosearch/v11/vet_amend.py` `amended`, line 135, which turns every flag except `rp_too_large` into a rejection) counts `odd_even_too_few` as a failing rule.
+2. **The correction.** The registered text governs. `odd_even_too_few` is a flag only: it never sets `passed = False` and is never counted as a rejection or as the first failing rule. It is recorded in its own column, `odd_even_too_few_flag`, in the vetted CSVs. Nothing else changes: every other rule, threshold and mask parameter, the pinned vetter code (`bc05650`), seeds, the budget, the null sample and the S69 gate are untouched.
+3. **Where it is applied.** In the S*_cal driver (`exosearch/v12_sstar_cal.py`, `_odd_even_too_few_flag_only`), at the walk's single verdict site, by removing `odd_even_too_few` from the final verdict's failing-rule list and passing the row if nothing else fails. The pinned vetter files are not edited, so the code-commit checks and the reproduction gate still run on `bc05650`.
+4. **Disclosure.** The effect of the flag-only reading was computed before this decision was made, in the read-only failed_5 diagnosis of 2026-11-25: on the rows already walked, the scramble null's 5th pass would fall at rank 253 (S = 198.35) and the invert null's at rank 62 (S = 28.86), and 13 of the 2,067 known-planet gate rows have S ≥ 198. The decision rests on the registered text, not on those numbers.
+5. **Consequences.** Both nulls (invert and scramble) are rerun through the S*_cal gate and compute on the committed code. If that run fails, the result goes on record as failed_6. It is not retuned.
+
+**Not changed:** the search itself, every other vetter rule and threshold, the odd-even mask definition, seeds, the budget formula, the brightness cut (Amendment 2026-11-24), and the S69 gate.
