@@ -7,6 +7,11 @@
   - Catalogue cross-check spec 2026-11-19 (tag `v1.2-xcheck-spec-2026-11-19`): read-only diagnostic against published ephemerides (103 of 376 scored planets passing all criteria).
   - Catalogue cross-check amendment 2026-11-20 (tag `v1.2-xcheck-amend-2026-11-20`, commit `e4f0f45`): 192 of 297 scored planets passing all criteria.
   - S*_cal rulings 2026-11-20 (tag `v1.2-sstar-rulings-2026-11-20`): fills registration gaps before `S*_cal` is computed.
+- [registration_v1.2_amendment_2026-11-19_h2.md](registration_v1.2_amendment_2026-11-19_h2.md) — original 2026-11-19 single-host h2 amendment file, kept alongside the dated section above.
+- [xcheck_catalogue_v1.2_2026-11-19.md](xcheck_catalogue_v1.2_2026-11-19.md) — original catalogue cross-check specification file.
+- [xcheck_catalogue_v1.2_amendment_2026-11-20.md](xcheck_catalogue_v1.2_amendment_2026-11-20.md) — original 2026-11-20 cross-check amendment file (commit `e4f0f45`).
+- [sstar_cal_rulings_v1.2_2026-11-20.md](sstar_cal_rulings_v1.2_2026-11-20.md) — original pre-`S*_cal` rulings file (tag `v1.2-sstar-rulings-2026-11-20`).
+- [registration_v1.2_DRAFT.md](registration_v1.2_DRAFT.md) — superseded draft of the v1.2 registration.
 
 ## Open steps
 
@@ -26,11 +31,14 @@ Nothing after step 1 has started.
 - [interim_headlines.md](interim_headlines.md) — Interim headlines notes (see file).
 - [interim_lane_cap.md](interim_lane_cap.md) — Interim lane cap notes (see file).
 - [v1.0_disclosure_ties_and_numba_cache.md](v1.0_disclosure_ties_and_numba_cache.md) — v1.0 disclosure on ties and numba cache.
+- [v1.1_ai_use.md](v1.1_ai_use.md) — AI-use disclosure for the v1.1 and v1.2 vetter-unify commits.
 - [v1.1_implementation.md](v1.1_implementation.md) — v1.1 implementation notes.
 - [v1.1_odd_even_secondary.md](v1.1_odd_even_secondary.md) — v1.1 odd/even and secondary check notes.
 - [v1.1_plan.md](v1.1_plan.md) — v1.1 plan, followed by the 2026-11-11 v1.1 amendment and the 2026-11-11 scrambled-null amendment as dated sections.
 - [v1.1_prewhitening_amendment.md](v1.1_prewhitening_amendment.md) — v1.1 prewhitening amendment.
 - [v1.1_remaining.md](v1.1_remaining.md) — v1.1 remaining items.
+- [v1.1_scramble_amendment.md](v1.1_scramble_amendment.md) — original 2026-11-11 scrambled-null amendment file.
+- [preregistration/v1.1_amendment_2026-11-11.md](preregistration/v1.1_amendment_2026-11-11.md) — original 2026-11-11 v1.1 amendment file.
 - [v1.1_validation.md](v1.1_validation.md) — v1.1 validation notes.
 
 ### Folders

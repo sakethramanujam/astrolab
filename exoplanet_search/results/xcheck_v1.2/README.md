@@ -7,12 +7,12 @@ It is not a gate and does not change any registered threshold.
 
 Specifications:
 
-- Original: [registration_v1.2.md](../../docs/registration_v1.2.md), section "Catalogue cross-check spec 2026-11-19" (tag `v1.2-xcheck-spec-2026-11-19`)
-- Amendment: [registration_v1.2.md](../../docs/registration_v1.2.md), section "Catalogue cross-check amendment 2026-11-20" (tag `v1.2-xcheck-amend-2026-11-20`, commit `e4f0f45`, written after the original result was seen; both results stay on record)
+- Original: [registration_v1.2.md](../../docs/registration_v1.2.md), section "Catalogue cross-check spec 2026-11-19" (tag `v1.2-xcheck-spec-2026-11-19`), also [xcheck_catalogue_v1.2_2026-11-19.md](../../docs/xcheck_catalogue_v1.2_2026-11-19.md)
+- Amendment: [registration_v1.2.md](../../docs/registration_v1.2.md), section "Catalogue cross-check amendment 2026-11-20" (tag `v1.2-xcheck-amend-2026-11-20`, commit `e4f0f45`, written after the original result was seen; both results stay on record), also [xcheck_catalogue_v1.2_amendment_2026-11-20.md](../../docs/xcheck_catalogue_v1.2_amendment_2026-11-20.md)
 
 ## Files committed here
 
-- `xcheck_v2.py`: amendment scoring script, committed unchanged so its SHA-256 below still matches; its docstring names the former amendment file, now the section above. It imports the original scoring module `xcheck.py`, which is not committed here; its SHA-256 is listed below.
+- `xcheck_v2.py`: amendment scoring script, committed unchanged so its SHA-256 below still matches; its docstring names the amendment file. It imports the original scoring module `xcheck.py`, which is not committed here; its SHA-256 is listed below.
 - `xcheck_summary_v2.json`: aggregate counts only.
 
 Per-planet CSVs are not committed because they contain star identifiers. They stay local and are pinned by SHA-256 below.

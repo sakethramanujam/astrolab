@@ -19,7 +19,7 @@ The sections further down describe earlier versions (v1.0 and v1.1) and are kept
 
 ### Registration
 
-The v1.2 registration is in [docs/registration_v1.2.md](docs/registration_v1.2.md) (tag `v1.2-registered`, code pinned at `bc05650`). The 2026-11-19 single-host h2 amendment and its Addendum A are dated sections of the same document (order of remaining steps; 18 workers at normal priority, speed only).
+The v1.2 registration is in [docs/registration_v1.2.md](docs/registration_v1.2.md) (tag `v1.2-registered`, code pinned at `bc05650`). The 2026-11-19 single-host h2 amendment and its Addendum A are dated sections of that document, and the original file is kept at [docs/registration_v1.2_amendment_2026-11-19_h2.md](docs/registration_v1.2_amendment_2026-11-19_h2.md) (order of remaining steps; 18 workers at normal priority, speed only).
 
 ### Run status
 
@@ -27,11 +27,11 @@ The h2 run over S59-S64 (real, invert, scramble) and S69 (invert and scramble on
 
 ### Catalogue cross-check
 
-This cross-check is a read-only diagnostic of the search against published ephemerides; it is not a gate. The original specification (section "Catalogue cross-check spec 2026-11-19" of [docs/registration_v1.2.md](docs/registration_v1.2.md)) gave 103 of 376 scored planets passing all criteria. The amendment (section "Catalogue cross-check amendment 2026-11-20", commit `e4f0f45`, made after the first result was seen; both results stay on record) gives 192 of 297. Tracing the 9 period misses with S >= 10 under the original specification showed: 5 returned a sibling planet on the same star instead, 2 showed eclipsing-binary signs on the reported peak, 1 was a momentum-dump artefact, and 1 was a detrending weakness on a fast variable star. No code bug was found.
+This cross-check is a read-only diagnostic of the search against published ephemerides; it is not a gate. The original specification (section "Catalogue cross-check spec 2026-11-19" of [docs/registration_v1.2.md](docs/registration_v1.2.md), also kept as [docs/xcheck_catalogue_v1.2_2026-11-19.md](docs/xcheck_catalogue_v1.2_2026-11-19.md)) gave 103 of 376 scored planets passing all criteria. The amendment (section "Catalogue cross-check amendment 2026-11-20", also [docs/xcheck_catalogue_v1.2_amendment_2026-11-20.md](docs/xcheck_catalogue_v1.2_amendment_2026-11-20.md), commit `e4f0f45`, made after the first result was seen; both results stay on record) gives 192 of 297. Tracing the 9 period misses with S >= 10 under the original specification showed: 5 returned a sibling planet on the same star instead, 2 showed eclipsing-binary signs on the reported peak, 1 was a momentum-dump artefact, and 1 was a detrending weakness on a fast variable star. No code bug was found.
 
 ### `S*_cal` rulings
 
-The section "S*_cal rulings 2026-11-20" of [docs/registration_v1.2.md](docs/registration_v1.2.md) (tag `v1.2-sstar-rulings-2026-11-20`) fills registration gaps (budget, pooling, null vetting, population, eligibility, record) before `S*_cal` is computed. The driver [exosearch/v12_sstar_cal.py](exosearch/v12_sstar_cal.py) is written but has not been run. Its dry-run stops because the rebuilt S59-S64 scramble exclusion (TOI hosts only) does not include the 29 Kostov et al. 2025 eclipsing-binary star-sectors named by the registered rule. This needs a ruling before `S*_cal`.
+The section "S*_cal rulings 2026-11-20" of [docs/registration_v1.2.md](docs/registration_v1.2.md) (tag `v1.2-sstar-rulings-2026-11-20`, also kept as [docs/sstar_cal_rulings_v1.2_2026-11-20.md](docs/sstar_cal_rulings_v1.2_2026-11-20.md)) fills registration gaps (budget, pooling, null vetting, population, eligibility, record) before `S*_cal` is computed. The driver [exosearch/v12_sstar_cal.py](exosearch/v12_sstar_cal.py) is written but has not been run. Its dry-run stops because the rebuilt S59-S64 scramble exclusion (TOI hosts only) does not include the 29 Kostov et al. 2025 eclipsing-binary star-sectors named by the registered rule. This needs a ruling before `S*_cal`.
 
 ### Open steps
 
