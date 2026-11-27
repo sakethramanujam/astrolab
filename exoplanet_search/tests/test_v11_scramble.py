@@ -12,9 +12,26 @@ from exosearch import lightcurve
 from exosearch.v11 import scramble, settings
 
 
+_VENDORED_CLARET = Path(__file__).resolve().parents[1] / "data" / "claret" / "claret2017_tess_quadratic.csv"
+
+
 @pytest.fixture
 def v11_cfg():
     return settings.cfg()
+
+
+@pytest.fixture
+def vendored_claret(monkeypatch):
+    """Serve the vendored Claret 2017 table. stellar.py is on the search-path hash and is not edited.
+    claret_table() already prefers catalogs/claret2017_tess_quadratic.csv and only calls VizieR when
+    that file is absent. This fixture returns the same cache bytes."""
+    from exosearch import stellar
+
+    def _claret_table():
+        return pd.read_csv(_VENDORED_CLARET)
+
+    monkeypatch.setattr(stellar, "claret_table", _claret_table)
+    monkeypatch.setattr(stellar, "_LD", None)
 
 
 def _make_two_orbit_lc(cadence_min=2.0, gap_start=113.0, gap_end=114.5, t_start=100.0, t_end=127.0):
@@ -253,7 +270,7 @@ def test_planted_signal_real_cadence_check(v11_cfg):
         assert r["n_seeds"] == 10
 
 
-def test_pipeline_scramble_mode_integration(v11_cfg, monkeypatch):
+def test_pipeline_scramble_mode_integration(v11_cfg, monkeypatch, vendored_claret):
     """Test pipeline run_job integration with mode 'scramble'."""
     from exosearch.v11 import pipeline
 
