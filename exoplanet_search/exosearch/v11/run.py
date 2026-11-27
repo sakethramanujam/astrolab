@@ -70,10 +70,11 @@ def star_params(sector, tics, log=print):
         g = str(x.GAIA)
         gr = gd.loc[int(g)] if g.isdigit() and int(g) in gd.index else None
         R = float(x.rad) if x.rad == x.rad else None
+        e_R = float(x.get("e_rad")) if pd.notna(x.get("e_rad")) else None   # TIC e_rad, R_Sun (as rad); never invented
         M = float(x.mass) if (x.mass == x.mass and x.mass > 0) else (
             float(10 ** (x.logg - 4.438) * R ** 2) if (x.logg == x.logg and R) else None)
         out[tic] = dict(rho=_nan(rho), rho_err=_nan(erho), teff=_nan(float(x.Teff)) if x.Teff == x.Teff else None,
-                        logg=float(x.logg) if x.logg == x.logg else None, rad_tic=R, mass_tic=M,
+                        logg=float(x.logg) if x.logg == x.logg else None, rad_tic=R, e_rad=e_R, mass_tic=M,
                         ruwe=None if gr is None or pd.isna(gr.ruwe) else float(gr.ruwe),
                         nss=None if gr is None or pd.isna(gr.non_single_star) else int(gr.non_single_star))
     return out

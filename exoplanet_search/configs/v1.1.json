@@ -44,7 +44,25 @@
     "odd_even_sigma": 3.0,
     "odd_even_rel": 0.1,
     "secondary_sigma": 3.0,
-    "secondary_rel": 0.1
+    "secondary_rel": 0.1,
+    "odd_even_mask": {
+      "enabled": false,
+      "min_coverage": 0.75,
+      "min_gap_dump_dist_d": 0.375,
+      "min_gap_dump_dist_h": 9.0,
+      "gap_d": 0.5,
+      "oot_baseline_t14": 1.0,
+      "oot_one_side": true
+    },
+    "rp_cap": {
+      "enabled": false,
+      "cap_rearth": 30.0,
+      "cap_rearth_candidates": [22, 25, 30]
+    },
+    "too_deep": {
+      "mode": "cut",
+      "max_depth": 0.05
+    }
   },
   "momentum_dump": {
     "quality_bit": 32,
@@ -52,6 +70,17 @@
     "reject_max_epochs": 2
   },
   "s_floor_checks": 6.0,
+  "sstar": {
+    "fine_grid_enabled": false,
+    "grid_min": 6.0,
+    "grid_max": 30.0,
+    "grid_step": 0.005,
+    "interpolate": false
+  },
+  "t14_retention": {
+    "bin_edges_h": [3.0, 6.0],
+    "tolerance": 0.5
+  },
   "scramble": {
     "gap_d": 0.5,
     "gap_trim_d": 0.3,

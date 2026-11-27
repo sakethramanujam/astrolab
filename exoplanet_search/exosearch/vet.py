@@ -12,6 +12,71 @@ THRESH = dict(min_transits=3, odd_even_sigma=3.0, secondary_sigma=3.0,
               max_depth=0.05, max_dur_ratio=1.5, max_rp_earth=25.0, variable_sigma=5.0,
               common_period_tol=0.005, common_period_min=4)
 
+# --- v1.2 step 5c: the 5% depth screen as a setting (configs/v1.1.json "vet"."too_deep") ---
+TOO_DEEP = "too_deep"
+TOO_DEEP_MODES = ("cut", "flag", "off")
+# Defaults reproduce v1.1 exactly: depth > 0.05 is a rejection (the strict comparison keeps depth == 0.05).
+DEFAULT_TOO_DEEP = dict(mode="cut", max_depth=THRESH["max_depth"])
+
+
+def too_deep_cfg(cfg=None, too_deep=None):
+    """Resolve the too_deep depth-screen settings from `cfg["vet"]["too_deep"]` (and optional override).
+
+    Keys:
+      mode:       'cut'  - depth > max_depth is a rejection (default; exactly v1.1);
+                  'flag' - the screen is evaluated and recorded, but it is never a rejection;
+                  'off'  - the screen is not applied (and a stored too_deep flag is not a rejection).
+      max_depth:  depth threshold (default 0.05, vet.THRESH["max_depth"], the v1.1 5% cap).
+
+    `too_deep` may be a mode string or a dict with `mode` / `max_depth`.  Configs that omit the keys
+    resolve to DEFAULT_TOO_DEEP ('cut', 0.05), so v1.1 rows and existing configs are unchanged.
+    The comparison is strict (`depth > max_depth`): depth == max_depth is kept.
+    """
+    out = dict(DEFAULT_TOO_DEEP)
+    v = cfg.get("vet") if isinstance(cfg, dict) else None
+    sources = []
+    if isinstance(v, dict) and v.get("too_deep") is not None:
+        sources.append(v["too_deep"])
+    if too_deep is not None:
+        sources.append(too_deep)
+    for src in sources:
+        if isinstance(src, str):
+            out["mode"] = src
+        elif isinstance(src, dict):
+            if src.get("mode") is not None:
+                out["mode"] = str(src["mode"])
+            if src.get("max_depth") is not None:
+                out["max_depth"] = float(src["max_depth"])
+        else:
+            raise ValueError(f"too_deep must be a mode string or a dict, got {src!r}")
+    out["mode"] = str(out["mode"]).strip().lower()
+    if out["mode"] not in TOO_DEEP_MODES:
+        raise ValueError(f"too_deep mode must be one of {TOO_DEEP_MODES}, got {out['mode']!r}")
+    if not np.isfinite(out["max_depth"]) or out["max_depth"] < 0:
+        raise ValueError(f"too_deep max_depth must be finite and >= 0, got {out['max_depth']!r}")
+    return out
+
+
+def too_deep(depth, cfg=None, too_deep=None):
+    """Evaluate the depth screen for one depth: -> dict(mode, max_depth, flagged, reject).
+
+    `flagged` is the strict `depth > max_depth` result (NaN / missing depth -> False); `reject` is
+    `flagged` only in mode 'cut'.  Mode 'flag' still reports `flagged` (so it can be recorded) but
+    never rejects; mode 'off' reports the screen as not applied through `mode` and sets both False.
+    This is the ONE implementation, shared by the search-time screen (vet11.screens) and the final
+    verdict (vet_final), which re-evaluates from the row's depth so a rescore may use another
+    threshold or mode than the search-time flag.
+    """
+    c = too_deep_cfg(cfg, too_deep)
+    try:
+        d = float(depth)
+    except (TypeError, ValueError):
+        d = np.nan
+    flagged = bool(np.isfinite(d) and d > c["max_depth"])
+    return dict(mode=c["mode"], max_depth=c["max_depth"],
+                flagged=bool(flagged and c["mode"] != "off"),
+                reject=bool(flagged and c["mode"] == "cut"))
+
 
 def expected_duration(period_d, radius_rsun):
     """Central-transit T14 (days) for a star of given radius; M ~ R on the main sequence."""
