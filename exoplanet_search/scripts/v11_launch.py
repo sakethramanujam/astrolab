@@ -15,7 +15,7 @@ Terminal states (gate_failed, launched) are never redone; the beta registration 
 
   scripts/v11_launch.py [--dry-run]
 """
-import argparse, datetime as dt, json, os, re, subprocess as sp, sys
+import argparse, datetime as dt, json, os, re, subprocess as sp
 from pathlib import Path
 
 BRANCH = "exoplanet-search"

@@ -38,7 +38,6 @@ from zoneinfo import ZoneInfo
 PT = ZoneInfo("America/Los_Angeles")
 SCHEMA_VERSION = "astrolab.v12_status.v1"
 DEFAULT_ROOT = Path("/media/nfs01/astro_data/tess")
-DEFAULT_PROD = DEFAULT_ROOT / "products" / "v1.2.0"
 DEFAULT_REPO = "sakethramanujam/astrolab"
 DEFAULT_BRANCH = "exoplanet-search"
 DEFAULT_PATH = "exoplanet_search/site/data/status_v12.json"

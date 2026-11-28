@@ -15,7 +15,6 @@ import argparse
 import json
 
 import numpy as np
-import pandas as pd
 
 from . import batch, config, holdout, nulltest, quality, stellar, store, targets
 from .version import stamp

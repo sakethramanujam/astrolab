@@ -15,7 +15,6 @@ import argparse
 import hashlib
 
 import numpy as np
-import pandas as pd
 
 from . import batch, bls, config, holdout, lightcurve, nulltest, stellar, store, targets, task
 from .version import stamp

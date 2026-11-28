@@ -1,6 +1,5 @@
 import json
 import numpy as np
-import pytest
 from scipy.signal import lfilter
 
 from exosearch.v11 import prewhiten, search, settings, validate

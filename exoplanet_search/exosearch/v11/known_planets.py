@@ -74,8 +74,6 @@ FROZEN_COLUMNS = ("tic", "name", "type", "disp", "period", "period_err", "t0", "
                   "cdpp_d", "t_span_d", "expected_S_raw", "expected_S", "base_ineligible_reason", "error", "eligibility",
                   "ineligible_reason", "required")
 
-STAGES = ("error", "masked", "detrending", "below_S*", "outranked", "vetting")
-
 
 def _sha256(p: Union[str, Path]) -> str:
     return hashlib.sha256(Path(p).read_bytes()).hexdigest()

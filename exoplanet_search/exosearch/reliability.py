@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 from . import config, deepvet, holdout, nulltest, store, vet
-from .version import PIPELINE_VERSION, config_hash, stamp
+from .version import PIPELINE_VERSION, stamp
 
 
 def _clean(o):

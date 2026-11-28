@@ -45,7 +45,7 @@ from scipy import stats
 
 from .. import batch, config, lightcurve, targets
 from .. import holdout
-from . import grid, pipeline, run, search, settings
+from . import pipeline, run, search, settings
 
 BASE_SEED = 20261112
 INJECTION_RUNS = [12, 13, 14, 15]
@@ -564,7 +564,6 @@ def evaluate_pw2_report(
 
     if not df_gaia_inj.empty and not df_quiet_pw.empty:
         # Check per-group descriptive status
-        any_group_evaluated = False
         all_groups_descriptive = True
 
         if "group" in df_gaia_inj.columns:
@@ -574,7 +573,6 @@ def evaluate_pw2_report(
                 descriptive_only = bool(n_stars_grp < 5)
                 if not descriptive_only:
                     all_groups_descriptive = False
-                    any_group_evaluated = True
 
                 # Calculate overall rate averaging per star first (Spec B2)
                 g_sub = sub_g[sub_g.expected_S >= s_star]

@@ -11,7 +11,6 @@ import argparse
 import json
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 NTR_BINS = [(0, 2.5, "<=2"), (2.5, 4.5, "3-4"), (4.5, 8.5, "5-8"), (8.5, 1e9, ">=9")]

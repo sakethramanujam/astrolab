@@ -79,7 +79,7 @@ def main():
     c = c.merge(df[["tic", "camera", "duration", "beta_d", "n_tr"]], on="tic", how="left")
     ev = events(a.sector, df)
     rng = np.random.default_rng(20261110)
-    rows, ctl = [], []
+    rows = []
     for r in c.itertuples():
         e = ev.get(int(r.camera))
         m = epoch_metrics(r.period, r.t0_btjd, e, r.duration) if e else None

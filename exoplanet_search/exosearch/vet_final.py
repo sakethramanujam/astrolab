@@ -302,22 +302,6 @@ def _unpack_lc(lc: Any, dumps: Optional[Any] = None):
     raise ValueError("lc must be (t, f, e[, dumps[, gap_edges]]) or a dict")
 
 
-def needs_lc_row(
-    row: Dict[str, Any],
-    scan: Optional[Dict[str, float]] = None,
-    *,
-    cfg: Optional[Dict[str, Any]] = None,
-    lc: Optional[Any] = None,
-    odd_even: Optional[Dict[str, Any]] = None,
-    odd_even_mask: Optional[Any] = None,
-) -> bool:
-    """True when the verdict needs a light curve that was not supplied (deep 'secondary_scan' without
-    `scan`, or the v1.2 odd-even transit mask enabled without `lc` or `odd_even`)."""
-    sec_nlc = scan is None and "secondary_scan" in _set(row.get("deep_flags"))
-    oe_nlc = odd_even_mask_enabled(cfg, odd_even_mask) and lc is None and odd_even is None
-    return bool(sec_nlc or oe_nlc)
-
-
 def check_scan_sigma(row: Dict[str, Any], scan: Dict[str, float]) -> None:
     """vet_amend.revet_one's consistency check for a supplied scan: the rebuilt secondary scan must
     reproduce the row's logged sec_scan_sigma (the rebuild runs at the row's own period and epoch), so
@@ -510,13 +494,3 @@ def final_verdict(
     )
     return Verdict((d["passed_final"], d["first_failing_rule"],
                     [x for x in d["all_failing"].split(",") if x], d["status_final"]))
-
-
-def bracket(verdicts_lower: List[Verdict], verdicts_upper: List[Verdict]) -> Dict[str, int]:
-    """Counts for a set of rows scored under both needs_lc bounds: survivors of each bound and the
-    rows whose verdict the two bounds separate (the needs_lc rows that pass everything else)."""
-    if len(verdicts_lower) != len(verdicts_upper):
-        raise ValueError("lower/upper verdict lists must have the same length")
-    lo = sum(1 for v in verdicts_lower if v.passed)
-    hi = sum(1 for v in verdicts_upper if v.passed)
-    return dict(survived_lower=lo, survived_upper=hi, needs_lc_gap=hi - lo)

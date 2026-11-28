@@ -30,7 +30,6 @@ RHO_SUN_KG_M3 = 1408.0
 LOO_SIGMA = deepvet.THRESH["sec_scan_sigma"]                         # (d): same 5 sigma as the scan itself
 DROPPED_DEEP = {"rp_gt_2rjup", "density_mismatch"}                  # (b) replaced, (c) flag only
 REJECT_V2 = (set(deepvet.REJECT) - DROPPED_DEEP) | {"rp_gt_30re"}
-SECONDARY = {"secondary", "secondary_scan"}
 
 
 def _f(x) -> float:
