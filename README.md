@@ -1,40 +1,36 @@
-# AstroCompute Lab: Networked Astronomical Data Processing
+# Astrolab
 
-This lab focuses on learning how to process astronomical data (FITS images, lightcurves, spectroscopy) and distribute the workload across your local network devices.
+TESS transit search. v1.2 searches sectors 59–64, with sector 69 nulls, using the code pinned at `bc05650`.
 
-## 🚀 Learning Path
-1. **FITS Data Handling**: Learn to read and manipulate Flexible Image Transport System (FITS) files.
-2. **Image Processing**: Basic reduction (bias, dark, flat-field correction).
-3. **Photometry**: Measuring the brightness of stars.
-4. **Distributed Computing**: Using Dask to parallelize star detection or pixel math across `<WORKER_HOSTNAME>`, `<MASTER_HOSTNAME>`, and other local nodes.
+## Install
 
-## 📡 Network Compute Resources
-- **Master**: `<MASTER_HOSTNAME>` (<MASTER_IP>)
-- **Workers**: `<WORKER_HOSTNAME>` (<WORKER_IP>), `.32` (potential node)
-- **Shared Storage**: `//<MASTER_IP>/shared` (Mounted at `/media/nfs01` on Master)
-
-### Mounting Shared Storage on Workers
-To ensure all nodes see the same data at the same path:
 ```bash
-sudo mkdir -p /mnt/astro_data
-sudo mount -t cifs -o username=spiceman //<MASTER_IP>/shared /mnt/astro_data
+cd exoplanet_search
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 ```
 
-## 🛠️ Getting Started
+## Run
+
 ```bash
-# Clone and enter the project
-git clone [repo_url] astro-compute-lab
-cd astro-compute-lab
-
-# Run the unified setup script (Installs dependencies and prepares the env)
-bash setup.sh
-
-# To start practicing in Jupyter:
-source venv/bin/activate
-jupyter lab
+cd exoplanet_search
+.venv/bin/python -m exosearch.v11.run --help
+.venv/bin/python -m exosearch.v12_sstar_cal --help
 ```
 
-## 🪐 Exoplanet transit search
-`exoplanet_search/` is a CPU-first TESS transit-search pipeline (wotan + BLS fanned out with
-Dask, vetting, TOI/planet cross-match) with CUDA and Apple MLX worker backends. See
-[exoplanet_search/README.md](exoplanet_search/README.md).
+`python -m exosearch.v11.run` is the search. `python -m exosearch.v12_sstar_cal` is the S*_cal driver. It has not been run.
+
+## Test
+
+```bash
+cd exoplanet_search
+.venv/bin/python -m pytest -q tests
+```
+
+## v1.2 result
+
+The registered h2 run (code pin `bc05650`) finished 83,130 of 83,130 star jobs and 235,168 ok rows out of 235,171 (3 errors) for S59–S64 real, invert, and scramble, plus S69 invert and scramble. The catalogue cross-check scored 297 of 420 planets in scope, and 192 passed every amended criterion.
+
+## Failed runs
+
+`failed_4` and `failed_5` are run outputs on the owner's machine and are not in this repository. They stay on record. No SHA-256 for either file is stored here; point at those two outputs by checksum when the hashes are copied in.
