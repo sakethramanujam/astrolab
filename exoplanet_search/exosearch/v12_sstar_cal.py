@@ -13,7 +13,7 @@ Exit codes:  # review: S7
   0: ok
   2: population / three-way mismatch
   3: gate fail
-  4: gate depth exceeded
+  4: gate depth exceeded or sstar_grid_overflow
   5: needs light curve
   6: light-curve rebuild error
   7: secondary-scan consistency failure
@@ -149,6 +149,14 @@ PINNED_QUALITY_SHA256: Dict[int, str] = {  # review: S5
     63: "1250055fad23b47f93d6112d5cdf41be6cdb67551321e9e88672c1ff0ae708e1",
     64: "92ef33f2204b03199c5b856c9278695efa8538487dcf1615f7c1d4745dfe4673",
 }
+# Amendment 2026-11-24 (star-level brightness cut, registration_v1.2.md; committed as ea3fa7c).
+BRIGHTNESS_TMAG_MAX = 16.0
+MEDIAN_PDCSAP_RELPATH = Path("results") / "sstar_cal_v1.2" / "median_pdcsap_s59-64.csv"
+PINNED_MEDIAN_PDCSAP_SHA256 = "a0729922b2e48364eccc41d40755af30a99f96089d3a8ed0da949d143dbc3561"
+SSTAR_GRID_MIN = 6.0
+SSTAR_GRID_STEP = 0.005
+SSTAR_GRID_DECIMALS = 3
+SSTAR_GRID_MAX_SOURCE = "max_null_S_pre_vet_both_modes"
 VETTED_CSV_COLS: Tuple[str, ...] = (
     "key",
     "sector",
@@ -158,6 +166,7 @@ VETTED_CSV_COLS: Tuple[str, ...] = (
     "all_failing",
     "status",
     "too_deep_v2",
+    "odd_even_too_few_flag",
 )
 _WORKER_FINISH: Optional[Any] = None
 
@@ -849,6 +858,135 @@ def check_three_way_match(
     if total_violations > 0:
         raise ThreeWayMismatch({"three_way_match": tw_report, "status_errors": err_report})
     return tw_report, err_report
+
+
+def _finite(val: Any) -> bool:
+    try:
+        return val is not None and math.isfinite(float(val))
+    except (TypeError, ValueError):
+        return False
+
+
+def brightness_cut(
+    jobs: Sequence[Mapping[str, Any]],
+    median_pdcsap_path: Union[str, Path],
+    sectors: Sequence[int] = CALIBRATION_SECTORS,
+    identity: Optional[pd.DataFrame] = None,
+) -> Tuple[Set[int], Dict[str, Any]]:
+    """Amendment 2026-11-24, star-level brightness cut (registration_v1.2.md; ea3fa7c).
+
+    A star (TIC) stays only if all hold, using its S59-S64 manifest jobs: manifest ``tmag`` finite and
+    <= 16.0; manifest ``radius`` finite and > 0; and median PDCSAP_FLUX > 0 in every S59-S64 sector it has
+    a job in. A sector whose median is undefined (no QUALITY==0 finite cadence, missing or unreadable light
+    curve) is not above zero, so the star is dropped. The cut never looks at S, a transit signal or vetting.
+
+    Medians come from the pinned table ``results/sstar_cal_v1.2/median_pdcsap_s59-64.csv`` (built by
+    ``results/sstar_cal_v1.2/make_median_pdcsap.py``: median of PDCSAP_FLUX over QUALITY==0, finite cadences
+    of each job's SPOC 2-min file). Undefined medians are split by the table's recorded cause
+    (``lc_not_found``, ``no_good_cadences``, ``read_error``; ``non_finite_median`` if a row has no cause but no
+    finite median). If ``identity`` is given, ``lc_not_found`` star-sectors that have search rows are counted.
+    Returns (removed TICs, counts-only report).
+    """
+    path = Path(median_pdcsap_path)
+    if not path.is_file():
+        raise MissingInput(f"missing median PDCSAP table: {path.name}")
+    got = _sha256_bytes(path.read_bytes())
+    if got != PINNED_MEDIAN_PDCSAP_SHA256:
+        raise SystemExit(f"median PDCSAP table sha256 mismatch: expected {PINNED_MEDIAN_PDCSAP_SHA256}, got {got}")
+    med = pd.read_csv(path, dtype={"error": str, "fname": str})
+    med_map: Dict[Tuple[int, int], float] = {}
+    cause_map: Dict[Tuple[int, int], str] = {}
+    for s_val, t_val, m_val, e_val in zip(med["sector"], med["tic"], med["median_pdcsap"], med["error"]):
+        pair = (int(s_val), int(t_val))
+        err = e_val.split(":", 1)[0] if isinstance(e_val, str) and e_val else ""
+        ok = not err and _finite(m_val)
+        med_map[pair] = float(m_val) if ok else float("nan")
+        if not ok:
+            cause_map[pair] = err or "non_finite_median"
+
+    sec_set = {int(s) for s in sectors}
+    reasons: Dict[int, Set[str]] = {}
+    star_secs: Dict[int, Set[int]] = {}
+    n_missing = 0
+    undef_pairs: Dict[str, Set[Tuple[int, int]]] = {}
+    for j in jobs:
+        s = int(j["sector"])
+        if s not in sec_set:
+            continue
+        tic = int(j["tic"])
+        star_secs.setdefault(tic, set()).add(s)
+        r = reasons.setdefault(tic, set())
+        tmag, radius = j.get("tmag"), j.get("radius")
+        if not _finite(tmag):
+            r.add("no_tmag")
+        elif float(tmag) > BRIGHTNESS_TMAG_MAX:
+            r.add("tmag_gt_16")
+        if not (_finite(radius) and float(radius) > 0):
+            r.add("no_valid_radius")
+        if (s, tic) not in med_map:
+            n_missing += 1
+            continue
+        m = med_map[(s, tic)]
+        if not math.isfinite(m):
+            r.add("flux_undefined")
+            undef_pairs.setdefault(cause_map[(s, tic)], set()).add((s, tic))
+        elif m <= 0:
+            r.add("flux_le0")
+    if n_missing:
+        raise MissingInput(f"median PDCSAP table lacks {n_missing} S59-S64 manifest job(s)")
+
+    removed = {t for t, r in reasons.items() if r}
+    by_any: Dict[str, int] = {}
+    by_combo: Dict[str, int] = {}
+    for t in removed:
+        for x in reasons[t]:
+            by_any[x] = by_any.get(x, 0) + 1
+        c = "+".join(sorted(reasons[t]))
+        by_combo[c] = by_combo.get(c, 0) + 1
+    undefined_by_cause: Dict[str, Dict[str, int]] = {}
+    for cause in sorted(set(undef_pairs) | {"lc_not_found", "no_good_cadences", "read_error"}):
+        pairs = undef_pairs.get(cause, set())
+        undefined_by_cause[cause] = {"stars": len({t for _, t in pairs}), "star_sectors": len(pairs)}
+    if identity is not None:
+        searched = set(zip(identity["sector"].astype(int), identity["tic"].astype(int)))
+        lnf = undef_pairs.get("lc_not_found", set()) & searched
+        undefined_by_cause["lc_not_found_with_search_rows"] = {
+            "stars": len({t for _, t in lnf}),
+            "star_sectors": len(lnf),
+        }
+    report = {
+        "rule": "amendment 2026-11-24: tmag <= 16.0, radius finite > 0, median PDCSAP > 0 in every S59-S64 sector",
+        "median_pdcsap_sha256": got,
+        "n_stars": len(reasons),
+        "n_removed": len(removed),
+        "n_kept": len(reasons) - len(removed),
+        "by_reason_any": dict(sorted(by_any.items())),
+        "by_reason_exact": dict(sorted(by_combo.items())),
+        "flux_undefined_by_cause": undefined_by_cause,
+        "per_sector_stars": {
+            str(s): {
+                "stars": sum(1 for v in star_secs.values() if s in v),
+                "removed": sum(1 for t in removed if s in star_secs[t]),
+            }
+            for s in sorted(sec_set)
+        },
+    }
+    return removed, report
+
+
+def apply_brightness_cut(identity: pd.DataFrame, removed: Set[int]) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """Drop every row (real, invert, scramble; holdout included) of removed stars; counts per mode and sector."""
+    keep = ~identity["tic"].astype(int).isin(removed)
+    cut = identity.loc[keep].reset_index(drop=True)
+    gone = identity.loc[~keep]
+    rows: Dict[str, Dict[str, int]] = {}
+    for mode in ALL_SEARCH_MODES:
+        sub = gone[gone["mode"].astype(str) == mode]
+        per = {str(int(s)): int((sub["sector"].astype(int) == int(s)).sum()) for s in CALIBRATION_SECTORS}
+        per["total"] = int(len(sub))
+        rows[mode] = per
+    return cut, {"identity_rows_before": int(len(identity)), "identity_rows_removed": int(len(gone)),
+                 "rows_removed_by_mode_sector": rows}
 
 
 def quality_drop(
@@ -1683,6 +1821,21 @@ def _stamp_and_write_vetted_csv(
     return stamped
 
 
+def _odd_even_too_few_flag_only(verdict: Any) -> Tuple[bool, str, List[str], bool]:
+    """Amendment 2026-11-25 (implementation deviation correction, odd_even_too_few; registration_v1.2.md).
+
+    Registration lines 84 and 341 (Section 5.3) say that when fewer than 2 odd or 2 even transits survive the
+    odd-even mask, the cut does not hard-reject and the row is only flagged ``odd_even_too_few``. The pinned
+    vetter at bc05650 (vet11.masked_odd_even, vet_final.final_verdict_row, vet_amend.amended) puts that flag
+    in the rejection set. The registered text governs: the flag is removed from the rejection list here, at
+    the walk's single verdict site, and recorded separately. Every other rule, and the pinned vetter code,
+    is unchanged. Returns (passed, first_failing_rule, all_failing, odd_even_too_few_flag).
+    """
+    failing = [r for r in verdict.all_failing if r != vet_final.ODD_EVEN_TOO_FEW]
+    flagged = len(failing) != len(verdict.all_failing)
+    return (not failing), (failing[0] if failing else ""), failing, flagged
+
+
 def _vet_mode_top_down(
     mode: str,
     mode_df: pd.DataFrame,
@@ -1825,17 +1978,18 @@ def _vet_mode_top_down(
 
         td_flag = bool(vet.too_deep(row.get("depth"), cfg)["flagged"])
         s_val = float(row["S"])
-        passed = bool(verdict.passed)
+        passed, first_rule, failing, oe_too_few_flag = _odd_even_too_few_flag_only(verdict)  # amendment 2026-11-25
         records.append(
             {
                 "key": key,
                 "sector": sec,
                 "S": s_val,
                 "passed": passed,
-                "first_failing_rule": verdict.first_failing_rule or "",
-                "all_failing": ",".join(verdict.all_failing),
+                "first_failing_rule": first_rule,
+                "all_failing": ",".join(failing),
                 "status": str(verdict.status),
                 "too_deep_v2": td_flag,
+                "odd_even_too_few_flag": oe_too_few_flag,
             }
         )
         n_vetted += 1
@@ -1856,11 +2010,103 @@ def _vet_mode_top_down(
     }
 
 
+
+def _ceil_to_grid_step(s: float, step: float = SSTAR_GRID_STEP, decimals: int = SSTAR_GRID_DECIMALS) -> float:
+    """Round *s* up onto the registered 0.005 grid; a value already on a step is unchanged."""
+    if not math.isfinite(s):
+        raise ValueError(f"non-finite S {s!r} for grid ceiling")
+    n = math.ceil(s / step - 1e-12)
+    return round(n * step, decimals)
+
+
+def _grid_max_from_null_s(s_values: Any) -> Dict[str, Any]:
+    """Amendment 2026-11-26: grid_max from all invert+scramble null-sample S, before vetting."""
+    s_arr = np.asarray(s_values, dtype=float).ravel()
+    s_arr = s_arr[np.isfinite(s_arr)]
+    if s_arr.size == 0:
+        raise MissingInput("no finite null-sample S values to set grid_max")
+    max_s = float(np.max(s_arr))
+    grid_max = max(_ceil_to_grid_step(max_s), SSTAR_GRID_MIN)
+    grid = sstar_grid.s_grid(SSTAR_GRID_MIN, grid_max, SSTAR_GRID_STEP)
+    return {
+        "grid_min": SSTAR_GRID_MIN,
+        "grid_step": SSTAR_GRID_STEP,
+        "grid_max": float(grid_max),
+        "grid_max_source": SSTAR_GRID_MAX_SOURCE,
+        "max_null_S_pre_vet": max_s,
+        "n_grid_points": int(len(grid)),
+        "n_null_S_finite": int(s_arr.size),
+    }
+
+
+def _calibrate_sstar_with_grid(
+    S_vetted: Any,
+    n_null: int,
+    p: float,
+    u: Any,
+    grid_max: float,
+    rows: Any = None,
+    cfg: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Same stamps as calibrate_sstar_v12, but pass grid_max into select_sstar (vetter untouched)."""
+    cfg_use: Mapping[str, Any] = cfg if cfg is not None else v12_settings.require_v12_settings()
+    digest, cap = v12_settings.stamp_values(cfg_use)
+    if rows is not None:
+        v12_settings.require_v12_stamps(rows, expected_hash=digest, cap_rearth=cap)
+    selected = sstar_grid.select_sstar(
+        S_vetted, n_null, p, u, cfg=cfg_use, sstar={"grid_max": float(grid_max)}
+    )
+    return v12_settings.stamp_v12(selected, digest, cap)
+
+
+def _merge_run_provenance(out_dir: Path, fields: Mapping[str, Any]) -> None:
+    """Merge fields into out_dir/run_provenance.json, creating the file if needed."""
+    path = Path(out_dir) / "run_provenance.json"
+    cur: Dict[str, Any]
+    if path.is_file():
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            cur = loaded if isinstance(loaded, dict) else {}
+        except json.JSONDecodeError:
+            cur = {}
+    else:
+        cur = {}
+    cur.update(dict(fields))
+    _write_json(path, cur)
+
+
+def _sstar_grid_overflow_report(
+    mode: str,
+    s_pass: Sequence[float],
+    vet_res: Mapping[str, Any],
+    grid_info: Mapping[str, Any],
+    exc: BaseException,
+) -> Dict[str, Any]:
+    return {
+        "error": "sstar_grid_overflow",
+        "mode": mode,
+        "s_vetted": [float(x) for x in s_pass],
+        "n_vetted_pass": int(len(s_pass)),
+        "last_vetted_S": vet_res.get("last_vetted_S"),
+        "last_vetted_rank": vet_res.get("last_vetted_rank"),
+        "need": None,
+        "grid_min": grid_info["grid_min"],
+        "grid_step": grid_info["grid_step"],
+        "grid_max": grid_info["grid_max"],
+        "grid_max_source": grid_info["grid_max_source"],
+        "max_null_S_pre_vet": grid_info["max_null_S_pre_vet"],
+        "n_grid_points": grid_info["n_grid_points"],
+        "exception_type": type(exc).__name__,
+        "exception": str(exc),
+    }
+
+
 def _per_sector_sstar_report(
     mode_df: pd.DataFrame,
     vet_res: Mapping[str, Any],
     alpha: Mapping[int, Mapping[str, Any]],
     cfg: Mapping[str, Any],
+    grid_max: float,
     sectors: Sequence[int] = CALIBRATION_SECTORS,
 ) -> Dict[str, Any]:
     """Per-sector report-only S* (with determined rule) and 2000-resample 68% bootstrap interval."""
@@ -1890,7 +2136,7 @@ def _per_sector_sstar_report(
         pt_error: Optional[str] = None
         if determined:
             try:
-                pt = v12_settings.calibrate_sstar_v12(s_pass, n_null=n_ms, p=p_s, u=None)
+                pt = _calibrate_sstar_with_grid(s_pass, n_null=n_ms, p=p_s, u=None, grid_max=grid_max, cfg=cfg)
             except sstar_grid.SStarGridError as exc:
                 pt_error = str(exc)
 
@@ -1906,7 +2152,7 @@ def _per_sector_sstar_report(
                     n_undeterminable += 1
                     continue
                 try:
-                    res = sstar_grid.select_sstar(s_arr[idx][bm], n_ms, p_s, None, cfg=cfg)
+                    res = sstar_grid.select_sstar(s_arr[idx][bm], n_ms, p_s, None, cfg=cfg, sstar={"grid_max": float(grid_max)})
                     boots.append(float(res["s_star"]))
                 except sstar_grid.SStarGridError:
                     n_grid_fail += 1
@@ -2028,6 +2274,8 @@ def run_compute(
         sectors=CALIBRATION_SECTORS,
     )
 
+    grid_info = _grid_max_from_null_s(sci["S"].to_numpy(dtype=float))  # amendment 2026-11-26, before vetting
+
     per_mode_report: Dict[str, Any] = {}
     per_sector_table: Dict[str, Any] = {}
     sstar_by_mode: Dict[str, Dict[str, Any]] = {}
@@ -2091,26 +2339,57 @@ def run_compute(
         vetted_df = vet_res["vetted_df"]
         vetted_dfs_by_mode[mode] = vetted_df
         s_pass = [float(r["S"]) for r in vet_res["records"] if r["passed"]]
-        sstar_m = v12_settings.calibrate_sstar_v12(  # review: B5
-            S_vetted=s_pass,
-            n_null=int(m_info["n_null"]),
-            p=float(m_info["p"]),
-            u=None,
-            rows=vetted_df,
-        )
+        try:
+            sstar_m = _calibrate_sstar_with_grid(  # review: B5; amendment 2026-11-26 grid_max
+                S_vetted=s_pass,
+                n_null=int(m_info["n_null"]),
+                p=float(m_info["p"]),
+                u=None,
+                grid_max=float(grid_info["grid_max"]),
+                rows=vetted_df,
+                cfg=cfg,
+            )
+        except sstar_grid.SStarGridError as exc:
+            fail = _sstar_grid_overflow_report(mode, s_pass, vet_res, grid_info, exc)
+            fail["need"] = int(m_info["need"])
+            err_rep = {
+                **base_report,
+                "common_period": common_period_report,
+                "sstar_grid": grid_info,
+                "status": "sstar_grid_overflow",
+                "failure": fail,
+            }
+            payload = _write_json(out_p / "report_compute.json", err_rep)
+            _merge_run_provenance(
+                out_p,
+                {
+                    "status": "sstar_grid_overflow",
+                    "grid_max": grid_info["grid_max"],
+                    "grid_max_source": grid_info["grid_max_source"],
+                    "max_null_S_pre_vet": grid_info["max_null_S_pre_vet"],
+                    "n_grid_points": grid_info["n_grid_points"],
+                    "sstar_grid_overflow": fail,
+                },
+            )
+            print(payload, end="")
+            return 4
         sstar_by_mode[mode] = sstar_m
 
         try:
-            unvetted_m: Dict[str, Any] = v12_settings.calibrate_sstar_v12(
+            unvetted_m: Dict[str, Any] = _calibrate_sstar_with_grid(
                 S_vetted=mode_df["S"].to_numpy(dtype=float),
                 n_null=int(m_info["n_null"]),
                 p=float(m_info["p"]),
                 u=None,
+                grid_max=float(grid_info["grid_max"]),
+                cfg=cfg,
             )
         except sstar_grid.SStarGridError as exc:
             unvetted_m = {"error": str(exc)}
 
-        per_sector_table[mode] = _per_sector_sstar_report(mode_df, vet_res, alpha, cfg, CALIBRATION_SECTORS)
+        per_sector_table[mode] = _per_sector_sstar_report(
+            mode_df, vet_res, alpha, cfg, float(grid_info["grid_max"]), CALIBRATION_SECTORS
+        )
         per_mode_report[mode] = {
             "n_null": int(m_info["n_null"]),
             "B": float(m_info["B"]),
@@ -2135,6 +2414,8 @@ def run_compute(
         "tie": s_inv == s_scr,
         "s_star_invert": s_inv,
         "s_star_scramble": s_scr,
+        "s_star_final": headline_s_star,
+        "s_star_set_by": headline_mode,
     }
     lock_res = v12_settings.lock_sstar_v12(  # review: B5
         rows=vetted_dfs_by_mode[headline_mode],
@@ -2177,6 +2458,10 @@ def run_compute(
         "common_period_mode": str(args.common_period_mode),
         "ruled_common_period_mode": args.ruled,
         "created_utc": datetime.now(timezone.utc).isoformat(),
+        "grid_max": grid_info["grid_max"],
+        "grid_max_source": grid_info["grid_max_source"],
+        "max_null_S_pre_vet": grid_info["max_null_S_pre_vet"],
+        "n_grid_points": grid_info["n_grid_points"],
     }
 
     result = {
@@ -2186,6 +2471,7 @@ def run_compute(
         "common_period": common_period_report,
         "by_mode": per_mode_report,
         "headline": headline,
+        "sstar_grid": grid_info,
         "lock": lock_res,
         "per_sector_report_only": per_sector_table,
         "provenance": provenance,
@@ -2198,6 +2484,15 @@ def run_compute(
     digest = _sha256_bytes(out_json.read_bytes())
     (out_p / "sstar_cal.json.sha256").write_text(f"{digest}  {out_json.name}\n", encoding="utf-8")
     _write_json(out_p / "report_compute.json", result)
+    _merge_run_provenance(
+        out_p,
+        {
+            "grid_max": grid_info["grid_max"],
+            "grid_max_source": grid_info["grid_max_source"],
+            "max_null_S_pre_vet": grid_info["max_null_S_pre_vet"],
+            "n_grid_points": grid_info["n_grid_points"],
+        },
+    )
     print(payload, end="")
     return 0
 
@@ -2216,6 +2511,12 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         required=True,
         type=Path,
         help="Pinned sha256 manifest file for star-quality tables and frozen inputs",
+    )
+    ap.add_argument(
+        "--median-pdcsap",
+        required=True,
+        type=Path,
+        help=f"Pinned per-job median PDCSAP table for the 2026-11-24 brightness cut ({MEDIAN_PDCSAP_RELPATH})",
     )
     ap.add_argument("--workers", type=int, default=16, help="Worker processes for --gate (default: 16)")
     ap.add_argument("--gate-top", type=int, default=300, help="Top-K null rows per mode in --gate (default: 300)")
@@ -2349,6 +2650,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     base_report["three_way_match"] = tw_report
     base_report["status_errors"] = status_err_report
 
+    # Amendment 2026-11-24: star-level cut before ranking; N_s, null sample and gate keys use the cut population.
+    removed_tics, bc_report = brightness_cut(jobs, args.median_pdcsap, CALIBRATION_SECTORS, identity=identity)
+    identity, bc_rows = apply_brightness_cut(identity, removed_tics)
+    base_report["brightness_cut"] = {**bc_report, **bc_rows}
+
     q = quality_drop(args.quality_dir, verified_quality_shas, CALIBRATION_SECTORS)
     alpha = alpha_n(identity, q)
     keys_by_mode, _, null_rep = null_sample(identity, q, ex_res["effective"], alpha)
@@ -2371,8 +2677,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "top_invert": min(int(args.gate_top), n_inv),
             "top_scramble": min(int(args.gate_top), n_scr),
             "random_null": min(GATE_RANDOM_N, n_union),
-            "known_planet_real": None,
-            "note": "known_planet_real is computed only in --gate",
+            "known_planet_real": len(select_known_planet_real_keys(identity, sectors=CALIBRATION_SECTORS)),
+            "note": "known_planet_real: identity and catalogue only (no vetting); same selection as --gate",
         }
         payload = _write_json(out_p / "report_dry_run.json", base_report)
         print(payload, end="")
